@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MSM - 管理システム</title>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Styles -->
+    <link rel="stylesheet" href="./css/styles.css">
+    <link rel="stylesheet" href="./css/components.css">
+</head>
+<body>
+    <!-- Login Screen -->
+    <div id="login-view" class="view active">
+        <div class="login-split">
+            <div class="login-left">
+                <div class="login-graphics">
+                    <div class="graphic-shape shape1"></div>
+                    <div class="graphic-shape shape2"></div>
+                </div>
+            </div>
+            <div class="login-right">
+                <div class="login-card">
+                    <div class="login-header">
+                        <h1 class="logo">MSM</h1>
+                        <h2>Welcome Back</h2>
+                        <p>IDとパスワードを入力してログインしてください。</p>
+                    </div>
+                    <form id="login-form">
+                        <div class="input-group">
+                            <label for="email">Email</label>
+                            <div class="input-wrapper">
+                                <i class="ph ph-envelope"></i>
+                                <input type="email" id="email" placeholder="Email address" required>
+                            </div>
+                        </div>
+                        <div class="input-group">
+                            <label for="password">Password</label>
+                            <div class="input-wrapper">
+                                <i class="ph ph-lock-key"></i>
+                                <input type="password" id="password" placeholder="Password" required>
+                            </div>
+                        </div>
+                        <div class="error-msg" id="login-error"></div>
+                        <button type="submit" class="btn-primary btn-block">Sign In</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- App Main Interface -->
+    <div id="app-view" class="view">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1 class="logo" style="cursor: pointer;" onclick="App.navigate('dashboard')">MSM</h1>
+            </div>
+            <nav class="sidebar-nav">
+                <ul id="nav-list">
+                    <li data-target="dashboard" class="active"><i class="ph ph-squares-four"></i><span>ダッシュボード</span></li>
+                    <li data-target="services"><i class="ph ph-stack"></i><span>サービス一覧</span></li>
+                    <li data-target="customers"><i class="ph ph-users"></i><span>顧客管理 / 案件管理</span></li>
+                    <li data-target="sales"><i class="ph ph-chart-line-up"></i><span>売上シミュレーション</span></li>
+                    <li data-target="finance"><i class="ph ph-wallet"></i><span>財務管理</span></li>
+                    <li data-target="payroll"><i class="ph ph-money"></i><span>給与計算</span></li>
+                    <li data-target="tasks"><i class="ph ph-check-square-offset"></i><span>タスク表</span></li>
+                </ul>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="user-profile">
+                    <div class="avatar"><i class="ph ph-user"></i></div>
+                    <div class="user-info">
+                        <span id="current-user-role">Role</span>
+                        <span id="current-user-email" class="sub-text">email</span>
+                    </div>
+                </div>
+                <button id="logout-btn" class="btn-icon" title="Logout"><i class="ph ph-sign-out"></i></button>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="topbar">
+                <div style="display:flex; align-items:center; gap:16px;">
+                    <button id="mobile-menu-btn" class="btn-icon mobile-only"><i class="ph ph-list"></i></button>
+                    <h2 id="page-title">ダッシュボード</h2>
+                </div>
+                <div class="topbar-actions">
+                    <div class="date-display" id="current-date"></div>
+                    <button class="btn-icon"><i class="ph ph-bell"></i></button>
+                </div>
+            </header>
+            
+            <div id="page-content" class="page-container">
+                <!-- Pages will be injected here by JS -->
+            </div>
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="./js/data.js"></script>
+    <script src="./js/state.js"></script>
+    <script src="./js/app.js"></script>
+    <script src="./js/pages/customers.js"></script>
+    <script src="./js/pages/sales.js"></script>
+    <script src="./js/pages/finance.js"></script>
+    <script src="./js/pages/tasks.js"></script>
+    <script src="./js/pages/services.js"></script>
+    <script src="./js/pages/payroll.js"></script>
+</body>
+</html>
