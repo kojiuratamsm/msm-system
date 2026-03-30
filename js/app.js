@@ -103,6 +103,26 @@ const App = {
             }
         });
 
+        // Apply visual settings
+        Store.getSettings().then(settings => {
+            if (settings && settings.logoUrl) {
+                document.querySelectorAll('.logo').forEach(el => {
+                    el.innerHTML = `<img src="${settings.logoUrl}" style="height: 48px; object-fit: contain;">`;
+                });
+            }
+            if (settings && settings.bgUrl) {
+                const viewEl = document.getElementById('login-view');
+                if (viewEl) {
+                    viewEl.style.backgroundImage = `url('${settings.bgUrl}')`;
+                    viewEl.style.backgroundSize = 'cover';
+                    viewEl.style.backgroundPosition = 'center';
+                    // ensure overlay has a slight dark shade so login box stands out
+                    const overlay = viewEl.querySelector('.login-container');
+                    if(overlay) overlay.style.background = 'rgba(255, 255, 255, 0.9)';
+                }
+            }
+        });
+
         this.checkAuth();
     },
     checkAuth() {
@@ -160,18 +180,30 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // App Dashboard Page
-App.Pages.dashboard = async function() {
+App.Pages.dashboard = async function(selectedYearText = null) {
     const user = Auth.getCurrentUser();
     const isAdmin = user && user.role === 'admin';
     const dept = Auth.getDepartment();
     
+    // Default to current year
+    const currentYear = new Date().getFullYear();
+    const selectedYear = selectedYearText ? parseInt(selectedYearText) : currentYear;
+    
     // Filter tasks if member
     let allTasks = await Store.getTasks();
-    let tasks = allTasks.filter(t => !t.done);
+    const todayStr = new Date().toISOString().split('T')[0];
+    let tasks = allTasks.filter(t => !t.done || t.date === todayStr); // Display incomplete OR today's
     if (!isAdmin && dept !== 'all') {
         const mapping = { 'plusOne': 'Plus One', 'meo': 'MEO対策チャンネル', 'telecom': '通信' };
         tasks = tasks.filter(t => t.service === mapping[dept]);
     }
+
+    // Sort tasks: today first, then others
+    tasks.sort((a,b) => {
+        if (a.date === todayStr && b.date !== todayStr) return -1;
+        if (a.date !== todayStr && b.date === todayStr) return 1;
+        return new Date(a.date) - new Date(b.date);
+    });
     
     const colors = {
         'Plus One': 'rgba(235, 177, 203, 0.5)',
@@ -180,37 +212,54 @@ App.Pages.dashboard = async function() {
     };
     
     let html = `
-        <div class="grid grid-2">
-            <div class="card">
-                <div class="card-header"><h3 class="card-title">本日のタスク (未完了)</h3></div>
-                ${tasks.length === 0 ? '<p>未完了のタスクはありません。</p>' : `
-                <table class="table-container">
-                    <tbody>
-                        ${tasks.slice(0, 5).map(t => `
-                            <tr style="background-color: ${colors[t.service] || 'transparent'}">
-                                <td style="width: 40px; text-align: center;">
-                                    <input type="checkbox" onchange="toggleTaskStatus(${t.id})" style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--success);" />
-                                </td>
-                                <td><span class="badge badge-neutral" style="background:#fff">${t.service}</span></td>
-                                <td>${t.customer}</td>
-                                <td>${t.text}</td>
-                                <td>${t.date ? new Date(t.date).toLocaleDateString('ja-JP', {month:'short', day:'numeric'}) : ''}</td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
+        <div class="grid grid-2" style="margin-bottom: 24px; gap: 24px;">
+            <div class="card" style="box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+                <div class="card-header" style="border-bottom: 1px solid var(--border-light); padding-bottom: 16px; margin-bottom: 16px;">
+                    <h3 class="card-title" style="font-size: 1.2rem; color: var(--primary-dark); display: flex; align-items: center; gap: 8px;">
+                        <i class="ph ph-check-square-offset"></i> 本日・未完了のタスク
+                    </h3>
+                </div>
+                ${tasks.length === 0 ? '<p style="color:var(--text-secondary); text-align:center; padding: 20px 0;">表示するタスクはありません 🎉</p>' : `
+                <div style="max-height: 250px; overflow-y: auto; padding-right: 8px;">
+                    ${tasks.slice(0, 10).map(t => `
+                        <div style="display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 8px; background: ${t.done ? '#f8f9fa' : 'var(--bg-color)'}; margin-bottom: 8px; border-left: 4px solid ${colors[t.service] || 'var(--border)'}; opacity: ${t.done ? '0.6' : '1'};">
+                            <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleTaskStatus(${t.id})" style="width: 20px; height: 20px; cursor: pointer; accent-color: var(--success);" />
+                            <div style="flex: 1;">
+                                <div style="font-weight: 600; margin-bottom: 4px; text-decoration: ${t.done ? 'line-through' : 'none'};">${t.text}</div>
+                                <div style="font-size: 0.85rem; color: var(--text-secondary); display: flex; gap: 8px;">
+                                    <span><i class="ph ph-buildings"></i> ${t.customer}</span>
+                                    ${t.date === todayStr ? '<span style="color:var(--error); font-weight:bold;">本日</span>' : `<span>${t.date ? new Date(t.date).toLocaleDateString('ja-JP', {month:'short', day:'numeric'}) : ''}</span>`}
+                                </div>
+                            </div>
+                            <span class="badge" style="background: ${colors[t.service] || '#ccc'}; color: #fff;">${t.service}</span>
+                        </div>
+                    `).join('')}
+                </div>
                 `}
-                <button class="btn-primary btn-sm" style="margin-top: 16px;" onclick="App.navigate('tasks')">タスク表へ</button>
+                <div style="text-align: right; margin-top: 16px;">
+                    <button class="btn-primary" onclick="App.navigate('tasks')" style="width: 100%;">タスク詳細画面へ <i class="ph ph-arrow-right"></i></button>
+                </div>
             </div>
-            <div class="card">
-                <div class="card-header"><h3 class="card-title">ショートカット</h3></div>
-                <div class="grid grid-2">
-                    <button class="btn-secondary" onclick="App.navigate('customers')">
-                        <i class="ph ph-users"></i> 顧客 / 案件を追加
+            
+            <div class="card" style="box-shadow: 0 4px 12px rgba(0,0,0,0.05); display: flex; flex-direction: column;">
+                <div class="card-header" style="border-bottom: 1px solid var(--border-light); padding-bottom: 16px; margin-bottom: 16px;">
+                    <h3 class="card-title" style="font-size: 1.2rem; color: var(--success-dark); display: flex; align-items: center; gap: 8px;">
+                        <i class="ph ph-lightning"></i> クイックアクセス
+                    </h3>
+                </div>
+                <div class="grid grid-2" style="gap: 16px; flex: 1; align-content: start;">
+                    <button class="btn-secondary" onclick="App.navigate('customers')" style="height: 100px; display: flex; flex-direction: column; justify-content: center; gap: 8px; font-size: 1.1rem; border: 2px solid var(--border-light); background: #fff; transition: all 0.2s;">
+                        <i class="ph ph-users" style="font-size: 2rem; color: var(--primary);"></i> 顧客/案件管理
                     </button>
                     ${isAdmin ? `
-                    <button class="btn-secondary" onclick="App.navigate('finance')">
-                        <i class="ph ph-wallet"></i> 経費を入力
+                    <button class="btn-secondary" onclick="App.navigate('finance')" style="height: 100px; display: flex; flex-direction: column; justify-content: center; gap: 8px; font-size: 1.1rem; border: 2px solid var(--border-light); background: #fff; transition: all 0.2s;">
+                        <i class="ph ph-wallet" style="font-size: 2rem; color: var(--success);"></i> 財務管理
+                    </button>
+                    <button class="btn-secondary" onclick="App.navigate('payroll')" style="height: 100px; display: flex; flex-direction: column; justify-content: center; gap: 8px; font-size: 1.1rem; border: 2px solid var(--border-light); background: #fff; transition: all 0.2s;">
+                        <i class="ph ph-calculator" style="font-size: 2rem; color: var(--warning);"></i> 給与計算
+                    </button>
+                    <button class="btn-secondary" onclick="App.navigate('services')" style="height: 100px; display: flex; flex-direction: column; justify-content: center; gap: 8px; font-size: 1.1rem; border: 2px solid var(--border-light); background: #fff; transition: all 0.2s;">
+                        <i class="ph ph-briefcase" style="font-size: 2rem; color: var(--info);"></i> サービス一覧
                     </button>
                     ` : ''}
                 </div>
@@ -219,38 +268,35 @@ App.Pages.dashboard = async function() {
     `;
 
     if (isAdmin) {
-        const fullLogs = await Store.getLogs();
-        const logs = fullLogs.slice(0, 5);
-        
-        html = `
-            <div class="grid grid-2" style="margin-bottom: 24px;">
-                <div class="card">
-                    <div class="card-header"><h3 class="card-title">システム通知 (最新5件)</h3></div>
-                    ${logs.length === 0 ? '<p style="color:var(--text-secondary)">通知はありません</p>' : `
-                    <div style="font-size: 0.85rem;">
-                        ${logs.map(l => `
-                            <div style="padding: 8px 0; border-bottom: 1px solid var(--border-light);">
-                                <div style="color:var(--text-secondary); margin-bottom: 4px;">${new Date(l.date).toLocaleString('ja-JP')}</div>
-                                <div>${l.desc}</div>
-                            </div>
-                        `).join('')}
+        let yearOptions = '';
+        for (let y = currentYear - 2; y <= currentYear + 1; y++) {
+            yearOptions += `<option value="${y}" ${y === selectedYear ? 'selected' : ''}>${y}年度</option>`;
+        }
+
+        html += `
+            <div class="card" style="margin-bottom: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-light); padding-bottom: 16px; margin-bottom: 16px;">
+                    <h3 class="card-title" style="font-size: 1.2rem; display: flex; align-items: center; gap: 8px;">
+                        <i class="ph ph-chart-bar"></i> 月間 売上・経費・利益推移
+                    </h3>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <label style="font-size: 0.9rem; color: var(--text-secondary);">表示年:</label>
+                        <select class="input-field" style="width: 120px; font-weight: bold;" onchange="App.navigate('dashboard', this.value)">
+                            ${yearOptions}
+                        </select>
                     </div>
-                    `}
                 </div>
-            </div>
-            <div class="card" style="margin-bottom: 24px;">
-                <div class="card-header"><h3 class="card-title">月間売上・経費・利益 推移</h3></div>
-                <div style="height: 300px;">
+                <div style="height: 400px; width: 100%;">
                     <canvas id="dashboardChart"></canvas>
                 </div>
             </div>
-        ` + html;
+        `;
     }
 
     App.mount(html, async () => {
         window.toggleTaskStatus = async (id) => {
             await Store.toggleTask(id);
-            App.navigate('dashboard');
+            App.navigate('dashboard', selectedYear);
         };
 
         if (!isAdmin) return;
@@ -258,14 +304,12 @@ App.Pages.dashboard = async function() {
         const ctx = document.getElementById('dashboardChart');
         if (!ctx) return;
         
-        // 直近6ヶ月の月ラベルを作成
+        // 1月〜12月のラベルを作成 (指定年の1月〜12月)
         const months = [];
         const monthDates = [];
-        for (let i = 5; i >= 0; i--) {
-            const d = new Date();
-            d.setMonth(d.getMonth() - i);
-            months.push((d.getMonth() + 1) + '月');
-            monthDates.push(new Date(d.getFullYear(), d.getMonth(), 1));
+        for (let i = 1; i <= 12; i++) {
+            months.push(`${selectedYear}年${i}月`);
+            monthDates.push(new Date(selectedYear, i - 1, 1));
         }
         
         const poCusts = await Store.getCustomers('plusOne');
@@ -317,7 +361,7 @@ App.Pages.dashboard = async function() {
                     if (isLump) {
                         if (mDate.getTime() === startD.getTime()) sum += pInfo.price;
                     } else {
-                        if (mDate.getTime() >= nextMonthD.getTime()) {
+                        if (mDate.getTime() >= nextMonthD.getTime() && (!c.endMonth || mDate.getTime() < new Date(c.endMonth + '-01').getTime())) {
                             sum += pInfo.price;
                         }
                     }
@@ -327,8 +371,17 @@ App.Pages.dashboard = async function() {
         });
         
         const expenses = await Store.getExpenses();
-        const totalExp = expenses.reduce((sum, e) => sum + e.amount, 0);
-        const eData = monthDates.map(() => Math.floor(totalExp / 6)); // Rough approx of monthly exp
+        const eData = monthDates.map((mDate) => {
+            let sum = 0;
+            expenses.forEach(e => {
+                if (!e.date) return;
+                const ed = new Date(e.date);
+                if (ed.getFullYear() === mDate.getFullYear() && ed.getMonth() === mDate.getMonth()) {
+                    sum += e.amount;
+                }
+            });
+            return sum;
+        });
         
         const pData = poDataChart.map((_, i) => (poDataChart[i] + meoDataChart[i] + tcDataChart[i]) - eData[i]);
 
@@ -356,14 +409,14 @@ App.Pages.dashboard = async function() {
                         stack: 'Stack 0'
                     },
                     {
-                        label: '経費',
+                        label: '月間入力済経費',
                         data: eData,
                         backgroundColor: 'rgba(240, 62, 62, 0.8)',
                         stack: 'Stack 1'
                     },
                     {
                         type: 'line',
-                        label: '利益',
+                        label: '利益実績',
                         data: pData,
                         borderColor: 'rgba(28, 126, 214, 1)',
                         backgroundColor: 'rgba(28, 126, 214, 0.1)',
@@ -377,7 +430,21 @@ App.Pages.dashboard = async function() {
                 responsive: true,
                 maintainAspectRatio: false,
                 interaction: { mode: 'index', intersect: false },
-                plugins: { legend: { position: 'top' } },
+                plugins: { 
+                    legend: { position: 'top' },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) label += ': ';
+                                if (context.parsed.y !== null) {
+                                    label += new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY', maximumFractionDigits: 0 }).format(context.parsed.y);
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                },
                 scales: { 
                     x: { stacked: true },
                     y: { stacked: true, beginAtZero: true } 

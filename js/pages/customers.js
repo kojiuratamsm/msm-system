@@ -19,7 +19,14 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
 
     const meoData = await Store.getCustomers('meo');
     let plusOneData = await Store.getCustomers('plusOne');
+    let plusOnePmData = await Store.getCustomers('plusOnePM');
     let telecomData = await Store.getCustomers('telecom');
+    window.currentPoSubTab = window.currentPoSubTab || 'manage';
+
+    window.switchPoSubTab = function(subTab) {
+        window.currentPoSubTab = subTab;
+        App.navigate('customers', 'plusOne', selectedMonth);
+    };
 
     if (selectedMonth !== 'all') {
         plusOneData = plusOneData.filter(c => {
@@ -75,6 +82,13 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
             </div>
         </div>
         ` : ''}
+        
+        ${activeTab === 'plusOne' ? `
+        <div class="tabs" style="margin-bottom: 24px; border-bottom: 2px solid var(--border-light); padding-bottom: 0;">
+            <div class="tab ${window.currentPoSubTab === 'manage' ? 'active' : ''}" style="margin-bottom: -2px; border-bottom: ${window.currentPoSubTab==='manage'?'2px solid var(--primary)':'none'};" onclick="switchPoSubTab('manage')">📝 案件管理</div>
+            <div class="tab ${window.currentPoSubTab === 'pm' ? 'active' : ''}" style="margin-bottom: -2px; border-bottom: ${window.currentPoSubTab==='pm'?'2px solid var(--primary)':'none'};" onclick="switchPoSubTab('pm')">📂 プロマネ</div>
+        </div>
+        ` : ''}
 
         <div class="card" style="margin-bottom: 32px">
             <div class="card-header">
@@ -83,6 +97,7 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
             </div>
             <div id="add-form-container" style="display: none;">
                 ${activeTab === 'plusOne' ? `
+                    ${window.currentPoSubTab === 'manage' ? `
                     <form id="add-plusone-form">
                         <div class="grid grid-2">
                             <div class="form-group"><label>クライアント名</label><input type="text" id="po-client" required></div>
@@ -109,9 +124,20 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                             <div class="form-group"><label>受単価 (円)</label><input type="number" id="po-price-receipt" placeholder="自動計算にする場合は空欄"></div>
                             <div class="form-group"><label>卸単価 (円)</label><input type="number" id="po-price-cost" placeholder="0"></div>
                             ` : ''}
-                            <div class="form-group"><button type="submit" class="btn-primary" style="margin-top: 24px;">登 録</button></div>
+                            <div class="form-group" style="grid-column: span 2;"><button type="submit" class="btn-primary" style="margin-top: 12px;">登 録</button></div>
                         </div>
                     </form>
+                    ` : `
+                    <form id="add-plusone-pm-form">
+                        <div class="grid grid-2">
+                            <div class="form-group"><label>クライアント名</label><input type="text" id="popm-client" required></div>
+                            <div class="form-group"><label>プロマネURL</label><input type="url" id="popm-pmurl" required></div>
+                            <div class="form-group"><label>サムネイルURL</label><input type="url" id="popm-thumb" placeholder="画像URL"></div>
+                            <div class="form-group" style="grid-column: span 2;"><label>メモ</label><textarea id="popm-memo" rows="3"></textarea></div>
+                            <div class="form-group" style="grid-column: span 2;"><button type="submit" class="btn-primary">プロマネを登録</button></div>
+                        </div>
+                    </form>
+                    `}
                 ` : ''}
 
                 ${activeTab === 'meo' ? `
@@ -181,10 +207,13 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                     <input type="text" id="customer-search" placeholder="顧客名で検索..." onkeyup="filterCustomers()" style="width:100%; border:1px solid var(--border-light); padding:8px 8px 8px 32px; border-radius:var(--radius-sm); font-size:0.9rem;">
                 </div>
             </div>
-            <div class="table-container">
+            <div class="table-container" style="${activeTab==='plusOne'?'max-height: 500px; overflow-y: auto; overflow-x: auto;':''}">
                 <table id="customer-table">
                     ${activeTab === 'plusOne' ? `
-                        ${renderTableHead(['顧客名', '案件', '担当者', 'ステータス', '受単価', '卸単価', 'Links'])}
+                        ${window.currentPoSubTab === 'manage' ? `
+                        <thead style="position: sticky; top: 0; background: var(--bg-color); z-index: 10;">
+                            <tr><th>顧客名</th><th>案件</th><th>担当者</th><th>ステータス</th><th>受単価</th><th>卸単価</th><th>Links</th><th>操作</th></tr>
+                        </thead>
                         <tbody>
                             ${plusOneData.map(d => `
                                 <tr>
@@ -206,6 +235,22 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                                 </tr>
                             `).join('')}
                         </tbody>
+                        ` : `
+                        <thead style="position: sticky; top: 0; background: var(--bg-color); z-index: 10;">
+                            <tr><th style="width: 100px;">サムネイル</th><th>クライアント名 / メモ</th><th>プロマネURL</th><th>操作</th></tr>
+                        </thead>
+                        <tbody>
+                            ${plusOnePmData.map(d => `
+                                <tr>
+                                    <td>${d.thumb ? `<img src="${d.thumb}" style="width: 80px; height: 45px; object-fit: cover; border-radius: 4px;">` : '<div style="width:80px; height:45px; background:#e0e0e0; border-radius:4px; display:flex; align-items:center; justify-content:center;"><i class="ph ph-image"></i></div>'}</td>
+                                    <td><strong style="color:var(--info);">${d.client}</strong><div style="font-size:0.8rem; color:var(--text-secondary); white-space:pre-wrap;">${d.memo||''}</div></td>
+                                    <td><a href="${d.pmurl}" target="_blank" class="btn-secondary btn-sm p-1" style="font-size:0.8rem;">プロマネを開く <i class="ph ph-arrow-square-out"></i></a></td>
+                                    <td><button class="btn-icon" onclick="deleteCustomer('plusOnePM', ${d.id})"><i class="ph ph-trash"></i></button></td>
+                                </tr>
+                            `).join('')}
+                            ${plusOnePmData.length === 0 ? '<tr><td colspan="4" style="text-align:center;">プロマネデータがありません</td></tr>' : ''}
+                        </tbody>
+                        `}
                     ` : ''}
 
                     ${activeTab === 'meo' ? `
@@ -251,10 +296,10 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                                         </div>
                                     </td>
                                     <td>
-                                        <select onchange="updateStatus('meo', ${d.id}, this.value, '${d.tag}')" style="padding:4px; font-size:0.75rem;">
-                                            <option value="契約中" ${d.tag === '契約中' ? 'selected' : ''}>契約中</option>
-                                            <option value="解約済み" ${d.tag === '解約済み' ? 'selected' : ''}>解約済み</option>
-                                        </select>
+                                        <div style="display:inline-flex; border:1px solid var(--border); border-radius:4px; overflow:hidden;">
+                                            <div onclick="updateStatus('meo', ${d.id}, '契約中', '${d.tag}')" style="cursor:pointer; padding:6px 10px; font-size:0.75rem; background:${d.tag==='契約中'?'var(--success)':'#f8f9fa'}; color:${d.tag==='契約中'?'#fff':'var(--text-secondary)'}; font-weight:${d.tag==='契約中'?'bold':'normal'}; transition:0.2s;">契約中</div>
+                                            <div onclick="updateStatus('meo', ${d.id}, '解約済み', '${d.tag}')" style="cursor:pointer; padding:6px 10px; font-size:0.75rem; background:${d.tag==='解約済み'?'var(--danger)':'#f8f9fa'}; color:${d.tag==='解約済み'?'#fff':'var(--text-secondary)'}; font-weight:${d.tag==='解約済み'?'bold':'normal'}; transition:0.2s;">解約済み</div>
+                                        </div>
                                     </td>
                                     <td><button class="btn-icon" onclick="deleteCustomer('meo', ${d.id})"><i class="ph ph-trash"></i></button></td>
                                 </tr>
@@ -354,7 +399,8 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
 
         // Adding logic
         if (activeTab === 'plusOne') {
-            document.getElementById('add-plusone-form').addEventListener('submit', async (e) => {
+            const poForm = document.getElementById('add-plusone-form');
+            if(poForm) poForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const pr = document.getElementById('po-price-receipt') ? document.getElementById('po-price-receipt').value : '';
                 const pc = document.getElementById('po-price-cost') ? document.getElementById('po-price-cost').value : '';
@@ -377,6 +423,19 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                     priceCost: pc ? parseInt(pc) : 0
                 });
                 await Store.logAction(user.email, `Plus Oneの案件管理に「${document.getElementById('po-client').value}」を新規追加しました`);
+                switchCustomerTab('plusOne');
+            });
+            
+            const popmForm = document.getElementById('add-plusone-pm-form');
+            if(popmForm) popmForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                await Store.addCustomer('plusOnePM', {
+                    client: document.getElementById('popm-client').value,
+                    pmurl: document.getElementById('popm-pmurl').value,
+                    thumb: document.getElementById('popm-thumb').value,
+                    memo: document.getElementById('popm-memo').value
+                });
+                await Store.logAction(user.email, `Plus Oneのプロマネに「${document.getElementById('popm-client').value}」を新規追加しました`);
                 switchCustomerTab('plusOne');
             });
         }

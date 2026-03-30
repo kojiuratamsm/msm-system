@@ -109,6 +109,30 @@ const Store = {
             user: row.user_email,
             desc: row.description
         }));
+    },
+    
+    async getSettings() {
+        try {
+            const { data, error } = await supabase.from('customers').select('*').eq('service_type', 'settings');
+            if(error) return { services: [], logoUrl: '', bgUrl: '' };
+            if(!data || data.length === 0) return { services: [], logoUrl: '', bgUrl: '' };
+            return data[0].data || { services: [], logoUrl: '', bgUrl: '' };
+        } catch(e) {
+            return { services: [], logoUrl: '', bgUrl: '' };
+        }
+    },
+    
+    async updateSettings(settingsData) {
+        try {
+            const { data, error } = await supabase.from('customers').select('id').eq('service_type', 'settings');
+            if(data && data.length > 0) {
+                await supabase.from('customers').update({ data: settingsData }).eq('id', data[0].id);
+            } else {
+                await supabase.from('customers').insert([{ id: Date.now(), service_type: 'settings', data: settingsData }]);
+            }
+        } catch(e) {
+            console.error('Error updating settings', e);
+        }
     }
 };
 

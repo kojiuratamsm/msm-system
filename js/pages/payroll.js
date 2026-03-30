@@ -41,9 +41,14 @@ App.Pages.payroll = async function(activeTab = 'plusOne') {
                     <h2 style="font-size: 1.5rem; margin-bottom: 8px;">給与計算 / 担当者振込管理</h2>
                     <input type="month" value="${selectedMonth}" class="form-group" style="margin: 0; padding: 4px 8px;" onchange="changePayrollMonth(this.value)">
                 </div>
-                <button class="btn-secondary btn-sm" onclick="document.getElementById('staff-manage-modal').classList.add('active')" style="height: fit-content;">
-                    <i class="ph ph-users"></i> 担当者詳細の管理
-                </button>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn-secondary btn-sm" onclick="document.getElementById('staff-add-modal').classList.add('active')" style="height: fit-content;">
+                        <i class="ph ph-user-plus"></i> 担当者追加
+                    </button>
+                    <button class="btn-secondary btn-sm" onclick="document.getElementById('staff-edit-modal').classList.add('active')" style="height: fit-content;">
+                        <i class="ph ph-pencil-simple"></i> 担当者編集
+                    </button>
+                </div>
             </div>
         </div>
     `;
@@ -276,42 +281,66 @@ App.Pages.payroll = async function(activeTab = 'plusOne') {
     const staffsDatalist = `<datalist id="staffs-list">${payrollData.staffs.map(s => `<option value="${s.name}">`).join('')}</datalist>`;
 
     const staffModalHtml = `
-        <!-- Staffs Manage Modal -->
-        <div class="modal-overlay" id="staff-manage-modal">
+        <!-- Staffs Add Modal -->
+        <div class="modal-overlay" id="staff-add-modal">
             <div class="modal-content" style="max-width: 600px;">
                 <div class="modal-header">
-                    <h3 class="modal-title">担当者詳細の管理</h3>
-                    <button class="modal-close" onclick="document.getElementById('staff-manage-modal').classList.remove('active')"><i class="ph ph-x"></i></button>
+                    <h3 class="modal-title">担当者追加</h3>
+                    <button class="modal-close" onclick="document.getElementById('staff-add-modal').classList.remove('active')"><i class="ph ph-x"></i></button>
                 </div>
                 
-                <form id="add-staff-form" style="margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border-light);">
-                    <h4 style="margin-bottom: 12px; font-size:0.95rem;">新規追加</h4>
+                <form id="add-staff-form" style="margin-bottom: 24px;">
                     <div class="grid grid-2">
-                        <input type="hidden" id="new-staff-id">
                         <div class="form-group"><label>氏名</label><input type="text" id="new-staff-name" required></div>
                         <div class="form-group"><label>住所</label><input type="text" id="new-staff-address"></div>
                         <div class="form-group" style="grid-column: span 2;"><label>振込先情報</label><input type="text" id="new-staff-bank" placeholder="〇〇銀行 〇〇支店 (普) 1234567 ヤマダタロウ"></div>
-                        <div class="form-group" style="grid-column: span 2; display:flex; gap:8px;">
-                            <button type="submit" class="btn-primary w-100" id="staff-submit-btn">担当者を保存する</button>
-                            <button type="button" class="btn-secondary w-100" style="display:none;" id="staff-cancel-btn" onclick="cancelEditStaff()">キャンセル</button>
+                        <button type="submit" class="btn-primary w-100" style="grid-column: span 2;">追加する</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Staffs Edit Modal -->
+        <div class="modal-overlay" id="staff-edit-modal">
+            <div class="modal-content" style="max-width: 600px;">
+                <div class="modal-header">
+                    <h3 class="modal-title">担当者編集</h3>
+                    <button class="modal-close" onclick="document.getElementById('staff-edit-modal').classList.remove('active'); cancelEditStaff();"><i class="ph ph-x"></i></button>
+                </div>
+                
+                <div id="staff-list-view">
+                    <div style="max-height: 400px; overflow-y:auto; line-height: 1.4;">
+                        ${payrollData.staffs.map(s => `
+                            <div style="border: 1px solid var(--border-light); padding: 12px; margin-bottom: 8px; border-radius: var(--radius-sm); position:relative; background: #fff;">
+                                <button class="btn-icon" style="position:absolute; right:12px; top:12px;" onclick="deleteStaff(${s.id})"><i class="ph ph-trash" style="font-size:1.1rem; color:var(--danger)"></i></button>
+                                <div style="font-weight:bold; margin-bottom:8px; color:var(--info); cursor:pointer; font-size: 1.1rem;" onclick="editStaff(${s.id})">
+                                    <i class="ph ph-pencil-simple" style="font-size: 1rem; margin-right:4px;"></i>${s.name}
+                                </div>
+                                <div style="font-size:0.85rem; color:var(--text-secondary);">
+                                    <div style="margin-bottom: 4px;"><i class="ph ph-map-pin"></i> ${s.address || '未登録'}</div>
+                                    <div><i class="ph ph-bank"></i> ${s.bank || '未登録'}</div>
+                                </div>
+                            </div>
+                        `).join('')}
+                        ${payrollData.staffs.length === 0 ? '<p style="font-size:0.85rem; color:var(--text-secondary);">担当者が登録されていません</p>' : ''}
+                    </div>
+                </div>
+
+                <form id="edit-staff-form" style="display: none; margin-top: 16px;">
+                    <div style="padding: 16px; border: 1px solid var(--primary); border-radius: var(--radius-md); background: #fefefe;">
+                        <h4 style="margin-bottom: 12px; font-size:1rem; color: var(--primary);">担当者情報を編集</h4>
+                        <div class="grid grid-2">
+                            <input type="hidden" id="edit-staff-id">
+                            <div class="form-group"><label>氏名</label><input type="text" id="edit-staff-name" required></div>
+                            <div class="form-group"><label>住所</label><input type="text" id="edit-staff-address"></div>
+                            <div class="form-group" style="grid-column: span 2;"><label>振込先情報</label><input type="text" id="edit-staff-bank"></div>
+                            <div class="form-group" style="grid-column: span 2; display:flex; gap:8px;">
+                                <button type="submit" class="btn-primary w-100">更新する</button>
+                                <button type="button" class="btn-secondary w-100" onclick="cancelEditStaff()">キャンセル</button>
+                            </div>
                         </div>
                     </div>
                 </form>
-
-                <h4 style="margin-bottom: 12px; font-size:0.95rem;">担当者一覧</h4>
-                <div style="max-height: 300px; overflow-y:auto; line-height: 1.4;">
-                    ${payrollData.staffs.map(s => `
-                        <div style="border: 1px solid var(--border-light); padding: 8px 12px; margin-bottom: 8px; border-radius: var(--radius-sm); position:relative;">
-                            <button class="btn-icon" style="position:absolute; right:8px; top:8px;" onclick="deleteStaff(${s.id})"><i class="ph ph-trash" style="font-size:0.8rem; color:var(--danger)"></i></button>
-                            <div style="font-weight:bold; margin-bottom:4px; color:var(--info); cursor:pointer;" onclick="editStaff(${s.id})"><i class="ph ph-pencil-simple" style="font-size: 0.8rem; margin-right:4px;"></i>${s.name}</div>
-                            <div style="font-size:0.8rem; color:var(--text-secondary);">
-                                <div><i class="ph ph-map-pin"></i> ${s.address || '-'}</div>
-                                <div><i class="ph ph-bank"></i> ${s.bank || '-'}</div>
-                            </div>
-                        </div>
-                    `).join('')}
-                    ${payrollData.staffs.length === 0 ? '<p style="font-size:0.85rem; color:var(--text-secondary);">担当者が登録されていません</p>' : ''}
-                </div>
             </div>
         </div>
     `;
@@ -330,47 +359,60 @@ App.Pages.payroll = async function(activeTab = 'plusOne') {
             const data = await Store.getPayroll();
             const staff = data.staffs.find(s => s.id === id);
             if (staff) {
-                document.getElementById('new-staff-id').value = staff.id;
-                document.getElementById('new-staff-name').value = staff.name;
-                document.getElementById('new-staff-address').value = staff.address || '';
-                document.getElementById('new-staff-bank').value = staff.bank || '';
-                document.getElementById('staff-submit-btn').textContent = '更新する';
-                document.getElementById('staff-cancel-btn').style.display = 'block';
-                document.getElementById('add-staff-form').scrollIntoView({ behavior: 'smooth' });
+                document.getElementById('edit-staff-id').value = staff.id;
+                document.getElementById('edit-staff-name').value = staff.name;
+                document.getElementById('edit-staff-address').value = staff.address || '';
+                document.getElementById('edit-staff-bank').value = staff.bank || '';
+                
+                document.getElementById('staff-list-view').style.display = 'none';
+                document.getElementById('edit-staff-form').style.display = 'block';
             }
         };
 
         window.cancelEditStaff = () => {
-            document.getElementById('new-staff-id').value = '';
-            document.getElementById('new-staff-name').value = '';
-            document.getElementById('new-staff-address').value = '';
-            document.getElementById('new-staff-bank').value = '';
-            document.getElementById('staff-submit-btn').textContent = '担当者を保存する';
-            document.getElementById('staff-cancel-btn').style.display = 'none';
+            document.getElementById('edit-staff-id').value = '';
+            document.getElementById('edit-staff-name').value = '';
+            document.getElementById('edit-staff-address').value = '';
+            document.getElementById('edit-staff-bank').value = '';
+            
+            document.getElementById('staff-list-view').style.display = 'block';
+            document.getElementById('edit-staff-form').style.display = 'none';
         };
 
-        const staffForm = document.getElementById('add-staff-form');
-        if(staffForm) {
-            staffForm.addEventListener('submit', async (e) => {
+        const staffAddForm = document.getElementById('add-staff-form');
+        if(staffAddForm) {
+            staffAddForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const data = await Store.getPayroll();
                 if(!data.staffs) data.staffs = [];
-                const editId = document.getElementById('new-staff-id').value;
+
+                data.staffs.push({
+                    id: Date.now(),
+                    name: document.getElementById('new-staff-name').value,
+                    address: document.getElementById('new-staff-address').value,
+                    bank: document.getElementById('new-staff-bank').value
+                });
+                
+                await Store.updatePayroll(data);
+                App.navigate('payroll', activeTab);
+            });
+        }
+        
+        const staffEditForm = document.getElementById('edit-staff-form');
+        if(staffEditForm) {
+            staffEditForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const data = await Store.getPayroll();
+                if(!data.staffs) data.staffs = [];
+                const editId = document.getElementById('edit-staff-id').value;
 
                 if (editId) {
                     const staff = data.staffs.find(s => s.id === parseInt(editId));
                     if (staff) {
-                        staff.name = document.getElementById('new-staff-name').value;
-                        staff.address = document.getElementById('new-staff-address').value;
-                        staff.bank = document.getElementById('new-staff-bank').value;
+                        staff.name = document.getElementById('edit-staff-name').value;
+                        staff.address = document.getElementById('edit-staff-address').value;
+                        staff.bank = document.getElementById('edit-staff-bank').value;
                     }
-                } else {
-                    data.staffs.push({
-                        id: Date.now(),
-                        name: document.getElementById('new-staff-name').value,
-                        address: document.getElementById('new-staff-address').value,
-                        bank: document.getElementById('new-staff-bank').value
-                    });
                 }
                 
                 await Store.updatePayroll(data);
