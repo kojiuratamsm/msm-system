@@ -1,7 +1,17 @@
 // Supabase Initialization
-const supabaseUrl = 'https://xztaacxjlluzqzehendp.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh6dGFhY3hqbGx1enF6ZWhlbmRwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyMzM4NzMsImV4cCI6MjA4OTgwOTg3M30.79wvIPepXjvPZwLHOPX7KullShvdvCB7LS2gZO5CtuQ';
-const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+let supabase;
+try {
+    const supabaseUrl = 'https://xztaacxjlluzqzehendp.supabase.co';
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh6dGFhY3hqbGx1enF6ZWhlbmRwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyMzM4NzMsImV4cCI6MjA4OTgwOTg3M30.79wvIPepXjvPZwLHOPX7KullShvdvCB7LS2gZO5CtuQ';
+    
+    if (typeof window.supabase === 'undefined') {
+        alert("CRITICAL ERROR: window.supabase is UNDEFINED. CDN did not load!");
+    } else {
+        supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+    }
+} catch (e) {
+    alert("STATE.JS INIT ERROR1: " + e.message);
+}
 
 // Data Interaction Helpers (Async)
 const Store = {
@@ -107,12 +117,23 @@ const Store = {
 // Auth
 const Auth = {
     async login(email, password) {
-        const { data } = await supabase.from('users').select('*').eq('email', email).eq('password', password).single();
-        if (data) {
-            localStorage.setItem('msm_current_user', JSON.stringify({ name: data.name, role: data.role, email: data.email }));
-            return true;
+        try {
+            const { data, error } = await supabase.from('users').select('*').eq('email', email).eq('password', password).single();
+            if (error && error.code !== 'PGRST116') {
+                console.error("Supabase Login Error:", error);
+                alert("ログインエラー詳細: " + error.message);
+                return false;
+            }
+            if (data) {
+                localStorage.setItem('msm_current_user', JSON.stringify({ name: data.name, role: data.role, email: data.email }));
+                return true;
+            }
+            return false;
+        } catch (err) {
+            console.error("Network/JS Error:", err);
+            alert("通信・予期しないエラー: " + err.message);
+            return false;
         }
-        return false;
     },
     logout() {
         localStorage.removeItem('msm_current_user');
@@ -137,9 +158,12 @@ async function initData() {
         const { data: users, error } = await supabase.from('users').select('id').limit(1);
         if (error) return;
         
-        if (!users || users.length === 0) {
+        const { data: customers } = await supabase.from('customers').select('id').limit(1);
+        
+        if (!customers || customers.length === 0) {
             console.log('Migrating local records to Supabase...');
-            const local = localStorage.getItem('msm_app_data');
+            const pKey = Object.keys(localStorage).find(k => k.includes('msm_state') || k.includes('msm_data') || k.includes('app_data') || k.includes('data'));
+            const local = pKey ? localStorage.getItem(pKey) : null;
             
             // Fixed default users if local didn't have any
             const defaultUsers = [

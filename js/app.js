@@ -86,12 +86,20 @@ const App = {
             const errorEl = document.getElementById('login-error');
             
             errorEl.textContent = '認証中...';
-            const success = await Auth.login(email, pass);
-            if (success) {
-                errorEl.textContent = '';
-                this.checkAuth();
-            } else {
-                errorEl.textContent = 'EmailまたはPasswordが間違っています。';
+            try {
+                if (typeof window.supabase === 'undefined') {
+                    throw new Error("Supabase CDNが読み込めていません。ネットワーク環境、またはセキュリティソフト等でcdn.jsdelivr.netがブロックされている可能性があります。");
+                }
+                const success = await Auth.login(email, pass);
+                if (success) {
+                    errorEl.textContent = '';
+                    this.checkAuth();
+                } else {
+                    errorEl.textContent = 'EmailまたはPasswordが間違っています。';
+                }
+            } catch (err) {
+                console.error("Critical Login Error:", err);
+                errorEl.textContent = 'エラー: ' + err.message;
             }
         });
 
