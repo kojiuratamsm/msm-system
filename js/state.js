@@ -1,17 +1,15 @@
 // Supabase Initialization
-let supabase;
+(async function() {
 try {
+    let supabase;
     const supabaseUrl = 'https://xztaacxjlluzqzehendp.supabase.co';
     const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh6dGFhY3hqbGx1enF6ZWhlbmRwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyMzM4NzMsImV4cCI6MjA4OTgwOTg3M30.79wvIPepXjvPZwLHOPX7KullShvdvCB7LS2gZO5CtuQ';
     
     if (typeof window.supabase === 'undefined') {
-        alert("CRITICAL ERROR: window.supabase is UNDEFINED. CDN did not load!");
+        const div = document.createElement('div'); div.style='background:red;color:white;position:fixed;top:0;z-index:99999;width:100%;'; div.textContent="CRITICAL ERROR: window.supabase is UNDEFINED. CDN did not load!"; document.body.appendChild(div);
     } else {
         supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
     }
-} catch (e) {
-    alert("STATE.JS INIT ERROR1: " + e.message);
-}
 
 // Data Interaction Helpers (Async)
 const Store = {
@@ -228,5 +226,14 @@ async function initData() {
     }
 }
 
-// Call init once quietly map data to supabase
+window.Store = Store;
+window.Auth = Auth;
 initData();
+
+} catch(e) {
+    const errDiv = document.createElement('div');
+    errDiv.style.cssText = 'position:fixed;top:50px;left:0;width:100%;background:purple;color:white;z-index:999999;padding:20px;font-size:16px;white-space:pre-wrap;box-sizing:border-box;';
+    errDiv.innerText = 'STATE.JS EXECUTION ERROR: ' + e.message + '\n' + e.stack;
+    document.body.appendChild(errDiv);
+}
+})();

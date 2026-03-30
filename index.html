@@ -15,6 +15,15 @@
     <!-- Styles -->
     <link rel="stylesheet" href="./css/styles.css">
     <link rel="stylesheet" href="./css/components.css">
+    <script>
+    window.onerror = function(msg, url, lineNo, columnNo, error) {
+        var errorDiv = document.createElement('div');
+        errorDiv.style.cssText = 'position:fixed;top:0;left:0;width:100%;background:red;color:white;z-index:999999;padding:20px;font-size:16px;white-space:pre-wrap;word-break:break-all;box-sizing:border-box;';
+        errorDiv.innerText = 'GLOBAL ERROR: ' + msg + '\nURL: ' + url + '\nLine: ' + lineNo + '\nStack: ' + (error ? error.stack : '');
+        document.body.appendChild(errorDiv);
+        return false;
+    };
+    </script>
 </head>
 <body>
     <!-- Login Screen -->
