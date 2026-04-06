@@ -48,7 +48,7 @@ App.Pages.tasks = async function() {
                         <div style="margin-top:8px;">
                             ${!t.done && !showCheckbox ? `<button class="btn-primary btn-sm p-1" onclick="toggleTaskStatus(${t.id})">完了にする</button>` : ''}
                             ${t.done ? `<button class="btn-secondary btn-sm p-1" onclick="toggleTaskStatus(${t.id})">未完了に戻す</button>` : ''}
-                            <button class="btn-icon p-1" style="color:var(--danger);" onclick="removeTask(${t.id})"><i class="ph ph-trash"></i> 削除</button>
+                            ${isAdmin ? `<button class="btn-icon p-1" style="color:var(--danger);" onclick="removeTask(${t.id})"><i class="ph ph-trash"></i> 削除</button>` : ''}
                         </div>
                     </div>
                 </div>

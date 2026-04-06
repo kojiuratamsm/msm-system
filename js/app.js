@@ -208,7 +208,7 @@ App.Pages.dashboard = async function(selectedYearText = null) {
     const renderKpiList = (list, deptKey) => list.map((k, idx) => `
         <div style="font-size:0.8rem; background:var(--bg-hover); padding:4px 8px; border-radius:4px; margin-top:4px; display:flex; justify-content:space-between; align-items:center;">
             <span><span style="color:var(--text-secondary); margin-right:8px;">${k.date}</span> ${k.text}</span>
-            <button class="btn-icon" style="padding:2px;" onclick="removeKpi('${activeKpiMonth}', '${deptKey}', ${idx})"><i class="ph ph-trash"></i></button>
+            ${isAdmin ? `<button class="btn-icon" style="padding:2px;" onclick="removeKpi('${activeKpiMonth}', '${deptKey}', ${idx})"><i class="ph ph-trash"></i></button>` : ''}
         </div>
     `).join('');
     
@@ -304,13 +304,13 @@ App.Pages.dashboard = async function(selectedYearText = null) {
                     <h4 style="margin-bottom:12px; color:var(--primary-dark);">MEO対策チャンネル</h4>
                     <div class="form-group" style="margin-bottom:8px;">
                         <label style="font-size:0.8rem;">目標売上 (円)</label>
-                        <input type="number" id="kpi-meo-rev" value="${targetsData.meo.rev}" onchange="saveTargetData()" class="input-field">
+                        <input type="number" id="kpi-meo-rev" value="${targetsData.meo.rev}" onchange="saveTargetData()" class="input-field" ${isAdmin ? '' : 'readonly'}>
                     </div>
                     <div class="form-group" style="margin-bottom:16px;">
                         <label style="font-size:0.8rem;">目標獲得件数</label>
-                        <input type="number" id="kpi-meo-count" value="${targetsData.meo.count}" onchange="saveTargetData()" class="input-field">
+                        <input type="number" id="kpi-meo-count" value="${targetsData.meo.count}" onchange="saveTargetData()" class="input-field" ${isAdmin ? '' : 'readonly'}>
                     </div>
-                    <div style="font-size:0.85rem; font-weight:bold; margin-bottom:8px; display:flex; justify-content:space-between;">行動指針 (KPI) <button class="btn-sm btn-secondary p-1" onclick="openKpiModal('meo')"><i class="ph ph-plus"></i> 追加</button></div>
+                    <div style="font-size:0.85rem; font-weight:bold; margin-bottom:8px; display:flex; justify-content:space-between;">行動指針 (KPI) ${isAdmin ? `<button class="btn-sm btn-secondary p-1" onclick="openKpiModal('meo')"><i class="ph ph-plus"></i> 追加</button>` : ''}</div>
                     <div style="max-height:100px; overflow-y:auto;">${renderKpiList(targetsData.meo.kpi, 'meo')}</div>
                 </div>
 
@@ -319,13 +319,13 @@ App.Pages.dashboard = async function(selectedYearText = null) {
                     <h4 style="margin-bottom:12px; color:var(--primary-dark);">Plus One</h4>
                     <div class="form-group" style="margin-bottom:8px;">
                         <label style="font-size:0.8rem;">YouTube 目標本数</label>
-                        <input type="number" id="kpi-po-yt" value="${targetsData.po.yt}" onchange="saveTargetData()" class="input-field">
+                        <input type="number" id="kpi-po-yt" value="${targetsData.po.yt}" onchange="saveTargetData()" class="input-field" ${isAdmin ? '' : 'readonly'}>
                     </div>
                     <div class="form-group" style="margin-bottom:16px;">
                         <label style="font-size:0.8rem;">ショート 目標本数</label>
-                        <input type="number" id="kpi-po-short" value="${targetsData.po.short}" onchange="saveTargetData()" class="input-field">
+                        <input type="number" id="kpi-po-short" value="${targetsData.po.short}" onchange="saveTargetData()" class="input-field" ${isAdmin ? '' : 'readonly'}>
                     </div>
-                    <div style="font-size:0.85rem; font-weight:bold; margin-bottom:8px; display:flex; justify-content:space-between;">行動指針 (KPI) <button class="btn-sm btn-secondary p-1" onclick="openKpiModal('po')"><i class="ph ph-plus"></i> 追加</button></div>
+                    <div style="font-size:0.85rem; font-weight:bold; margin-bottom:8px; display:flex; justify-content:space-between;">行動指針 (KPI) ${isAdmin ? `<button class="btn-sm btn-secondary p-1" onclick="openKpiModal('po')"><i class="ph ph-plus"></i> 追加</button>` : ''}</div>
                     <div style="max-height:100px; overflow-y:auto;">${renderKpiList(targetsData.po.kpi, 'po')}</div>
                 </div>
 
@@ -334,9 +334,9 @@ App.Pages.dashboard = async function(selectedYearText = null) {
                     <h4 style="margin-bottom:12px; color:var(--primary-dark);">通信</h4>
                     <div class="form-group" style="margin-bottom:16px;">
                         <label style="font-size:0.8rem;">目標現場数</label>
-                        <input type="number" id="kpi-telecom-count" value="${targetsData.telecom.count}" onchange="saveTargetData()" class="input-field">
+                        <input type="number" id="kpi-telecom-count" value="${targetsData.telecom.count}" onchange="saveTargetData()" class="input-field" ${isAdmin ? '' : 'readonly'}>
                     </div>
-                    <div style="font-size:0.85rem; font-weight:bold; margin-bottom:8px; display:flex; justify-content:space-between;">行動指針 (KPI) <button class="btn-sm btn-secondary p-1" onclick="openKpiModal('telecom')"><i class="ph ph-plus"></i> 追加</button></div>
+                    <div style="font-size:0.85rem; font-weight:bold; margin-bottom:8px; display:flex; justify-content:space-between;">行動指針 (KPI) ${isAdmin ? `<button class="btn-sm btn-secondary p-1" onclick="openKpiModal('telecom')"><i class="ph ph-plus"></i> 追加</button>` : ''}</div>
                     <div style="max-height:150px; overflow-y:auto;">${renderKpiList(targetsData.telecom.kpi, 'telecom')}</div>
                 </div>
             </div>

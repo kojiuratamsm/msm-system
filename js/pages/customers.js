@@ -232,7 +232,7 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                                             ${CONSTANTS.PLUS_ONE_STATUS.map(s => `<option value="${s}" ${d.status === s ? 'selected' : ''}>${s}</option>`).join('')}
                                         </select>
                                     </td>
-                                    <td>${isAdmin ? `¥${(d.priceReceipt || d.priceOverride || CONSTANTS.PLUS_ONE_PRICING[d.type]).toLocaleString()}` : '非公開'}</td>
+                                    <td>${isAdmin ? `¥${(d.priceReceipt || d.priceOverride || window.getPoBasePrice(d.type, d.month || (d.dates && d.dates[0] ? d.dates[0].substring(0,7) : null))).toLocaleString()}` : '非公開'}</td>
                                     <td>${isAdmin ? `¥${(d.priceCost || 0).toLocaleString()}` : '非公開'}</td>
                                     <td>
                                         ${d.videoUrl ? `<a href="${d.videoUrl}" target="_blank" title="動画データ"><i class="ph ph-video-camera"></i></a>` : ''}
@@ -303,14 +303,14 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                                         </div>
                                     </td>
                                     <td>
-                                        <div style="display:flex; align-items:center; cursor:pointer; user-select:none;" onclick="updateStatus('meo', ${d.id}, '${d.tag === '契約中' ? '解約済み' : '契約中'}', '${d.tag}')">
-                                            <div style="position:relative; width:44px; height:24px; background:${d.tag==='契約中'?'var(--success)':'#d2d2d2'}; border-radius:12px; transition:0.3s;">
+                                        <div style="display:flex; align-items:center; cursor:${isAdmin ? 'pointer' : 'default'}; user-select:none;" ${isAdmin ? `onclick="updateStatus('meo', ${d.id}, '${d.tag === '契約中' ? '解約済み' : '契約中'}', '${d.tag}')"` : ''}>
+                                            <div style="position:relative; width:44px; height:24px; background:${d.tag==='契約中'?'var(--success)':'#d2d2d2'}; border-radius:12px; transition:0.3s; opacity:${isAdmin ? '1' : '0.6'};">
                                                 <div style="position:absolute; top:2px; left:${d.tag==='契約中'?'22px':'2px'}; width:20px; height:20px; background:#fff; border-radius:50%; transition:0.3s; box-shadow:0 1px 3px rgba(0,0,0,0.2);"></div>
                                             </div>
                                             <span style="margin-left:8px; font-size:0.85rem; font-weight:${d.tag==='契約中'?'bold':'normal'}; color:${d.tag==='契約中'?'var(--success)':'var(--text-secondary)'};">${d.tag}</span>
                                         </div>
                                     </td>
-                                    <td><button class="btn-icon" onclick="deleteCustomer('meo', ${d.id})"><i class="ph ph-trash"></i></button></td>
+                                    <td>${isAdmin ? `<button class="btn-icon" onclick="deleteCustomer('meo', ${d.id})"><i class="ph ph-trash"></i></button>` : ''}</td>
                                 </tr>
                             `).join('')}
                         </tbody>

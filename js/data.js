@@ -31,6 +31,21 @@ const CONSTANTS = {
     }
 };
 
+window.getPoBasePrice = (type, monthStr) => {
+    if (type === 'ショート') return 4000;
+    if (type === 'YouTube') {
+        if (!monthStr) return 20000;
+        const [yyyy, mm] = monthStr.split('-');
+        const year = parseInt(yyyy);
+        const month = parseInt(mm);
+        if (year < 2026 || (year === 2026 && month <= 3)) {
+            return 18000;
+        }
+        return 20000;
+    }
+    return 0;
+};
+
 const DEFAULT_DATA = {
     users: [
         { email: 'urata@msm-jap.com', password: 'Koji2819', role: CONSTANTS.ROLES.ADMIN, name: '管理者' },
