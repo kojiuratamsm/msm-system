@@ -1,60 +1,75 @@
 App.Pages.services = async function() {
     const user = Auth.getCurrentUser();
     const isAdmin = user && user.role === 'admin';
-    const settings = await Store.getSettings();
-    const customServices = settings.services || [];
+    let settings = await Store.getSettings();
+    let allServices = settings.services || [];
 
-    const defaultServices = [
-        {
-            title: 'Plus One',
-            badge: '<div class="badge badge-info">映像制作</div>',
-            desc: 'ショート動画からYouTubeの長尺まで、質の高い動画制作サービスを提供します。',
-            buttons: `
-                <button class="btn-secondary" onclick="App.navigate('customers', 'plusOne')">顧客管理へ</button>
-                <button class="btn-primary btn-sm" onclick="App.navigate('sales', 'plusOne')">売上計算へ</button>
-            `
-        },
-        {
-            title: 'MEO対策チャンネル',
-            badge: '<div class="badge badge-success">MEO</div>',
-            desc: 'Googleビジネスプロフィールを活用した集客支援、ブログ投稿、定期運用を代行。',
-            buttons: `
-                <button class="btn-secondary" onclick="App.navigate('customers', 'meo')">顧客管理へ</button>
-                <button class="btn-primary btn-sm" onclick="App.navigate('sales', 'meo')">売上計算へ</button>
-            `
-        },
-        {
-            title: '通信',
-            badge: '<div class="badge badge-warning">人材派遣</div>',
-            desc: '現場ごとの通信インフラ整備、保守作業。単価ベースでの収益管理に対応。',
-            buttons: `
-                <button class="btn-secondary" onclick="App.navigate('customers', 'telecom')">顧客管理へ</button>
-                <button class="btn-primary btn-sm" onclick="App.navigate('sales', 'telecom')">売上計算へ</button>
-            `
+    // If first time, populate default services
+    if (allServices.length === 0) {
+        allServices = [
+            {
+                id: 'plusOne',
+                isDefault: true,
+                title: 'Plus One',
+                badge: '<div class="badge badge-info">映像制作</div>',
+                desc: 'ショート動画からYouTubeの長尺まで、質の高い動画制作サービスを提供します。',
+                buttons: `
+                    <button class="btn-secondary" onclick="App.navigate('customers', 'plusOne')">顧客管理へ</button>
+                    <button class="btn-primary btn-sm" onclick="App.navigate('sales', 'plusOne')">売上計算へ</button>
+                `
+            },
+            {
+                id: 'meo',
+                isDefault: true,
+                title: 'MEO対策チャンネル',
+                badge: '<div class="badge badge-success">MEO</div>',
+                desc: 'Googleビジネスプロフィールを活用した集客支援、ブログ投稿、定期運用を代行。',
+                buttons: `
+                    <button class="btn-secondary" onclick="App.navigate('customers', 'meo')">顧客管理へ</button>
+                    <button class="btn-primary btn-sm" onclick="App.navigate('sales', 'meo')">売上計算へ</button>
+                `
+            },
+            {
+                id: 'telecom',
+                isDefault: true,
+                title: '通信',
+                badge: '<div class="badge badge-warning">人材派遣</div>',
+                desc: '現場ごとの通信インフラ整備、保守作業。単価ベースでの収益管理に対応。',
+                buttons: `
+                    <button class="btn-secondary" onclick="App.navigate('customers', 'telecom')">顧客管理へ</button>
+                    <button class="btn-primary btn-sm" onclick="App.navigate('sales', 'telecom')">売上計算へ</button>
+                `
+            }
+        ];
+        settings.services = allServices;
+        await Store.updateSettings(settings);
+    }
+
+    const allServicesHtml = allServices.map(s => {
+        if (s.isDefault) {
+            return `
+            <div class="card" style="display: flex; flex-direction: column;">
+                <div class="card-header">
+                    <h3 class="card-title">${s.title}</h3>
+                    ${s.badge}
+                </div>
+                <p style="color: var(--text-secondary); margin-bottom: 24px; line-height: 1.6; flex: 1; white-space: pre-wrap;">${s.desc}</p>
+                <div class="grid grid-2" style="margin-top:auto;">${s.buttons}</div>
+            </div>`;
+        } else {
+            return `
+            <div class="card" style="position:relative; display: flex; flex-direction: column;">
+                ${s.thumb ? `<div style="height: 140px; border-radius: 4px; overflow: hidden; margin-bottom: 16px;"><img src="${s.thumb}" style="width: 100%; height: 100%; object-fit: cover;"></div>` : ''}
+                <div class="card-header" style="${s.thumb ? 'margin-bottom:8px;' : ''}">
+                    <h3 class="card-title" style="font-size: 1.1rem;">${s.title}</h3>
+                </div>
+                ${s.desc ? `<p style="color: var(--text-secondary); margin-bottom: 24px; line-height: 1.6; flex: 1; font-size: 0.9rem; white-space: pre-wrap;">${s.desc}</p>` : `<div style="flex:1;"></div>`}
+                <div class="grid grid-1" style="margin-top:auto;">
+                    <a href="${s.url}" target="_blank" class="btn-primary btn-sm p-1" style="text-align:center; text-decoration:none;">サイトを開く <i class="ph ph-arrow-square-out"></i></a>
+                </div>
+            </div>`;
         }
-    ];
-
-    const allServicesHtml = defaultServices.map(s => `
-        <div class="card">
-            <div class="card-header">
-                <h3 class="card-title">${s.title}</h3>
-                ${s.badge}
-            </div>
-            <p style="color: var(--text-secondary); margin-bottom: 24px; line-height: 1.6; flex: 1;">${s.desc}</p>
-            <div class="grid grid-2" style="margin-top:auto;">${s.buttons}</div>
-        </div>
-    `).join('') + customServices.map(s => `
-        <div class="card" style="position:relative; display: flex; flex-direction: column;">
-            ${s.thumb ? `<div style="height: 140px; border-radius: 4px; overflow: hidden; margin-bottom: 16px;"><img src="${s.thumb}" style="width: 100%; height: 100%; object-fit: cover;"></div>` : ''}
-            <div class="card-header" style="${s.thumb ? 'margin-bottom:8px;' : ''}">
-                <h3 class="card-title" style="font-size: 1.1rem;">${s.title}</h3>
-            </div>
-            ${s.desc ? `<p style="color: var(--text-secondary); margin-bottom: 24px; line-height: 1.6; flex: 1; font-size: 0.9rem; white-space: pre-wrap;">${s.desc}</p>` : `<div style="flex:1;"></div>`}
-            <div class="grid grid-1" style="margin-top:auto;">
-                <a href="${s.url}" target="_blank" class="btn-primary btn-sm p-1" style="text-align:center; text-decoration:none;">サイトを開く <i class="ph ph-arrow-square-out"></i></a>
-            </div>
-        </div>
-    `).join('');
+    }).join('');
 
     let html = `
         <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom: 24px;">
@@ -106,20 +121,20 @@ App.Pages.services = async function() {
                         <button class="modal-close" onclick="document.getElementById('service-edit-modal').classList.remove('active')"><i class="ph ph-x"></i></button>
                     </div>
 
-                    ${customServices.length > 0 ? `
+                    ${allServices.length > 0 ? `
                         <h4 style="margin-bottom: 12px; font-size:1rem; color: var(--primary);">追加済みサービスの編集</h4>
                         <div style="margin-bottom: 32px;">
-                            ${customServices.map(s => `
+                            ${allServices.map(s => `
                                 <div style="background: #fff; padding: 16px; border: 1px solid var(--border-light); border-radius: 8px; margin-bottom: 16px; position:relative;">
                                     <div class="grid grid-2" style="margin-bottom:12px;">
                                         <div class="form-group"><label>事業名</label><input type="text" id="edit-title-${s.id}" value="${s.title}"></div>
-                                        <div class="form-group"><label>リンクURL</label><input type="url" id="edit-url-${s.id}" value="${s.url}"></div>
+                                        ${!s.isDefault ? `<div class="form-group"><label>リンクURL</label><input type="url" id="edit-url-${s.id}" value="${s.url}"></div>` : ''}
                                         <div class="form-group" style="grid-column: span 2;"><label>サービス概要</label><textarea id="edit-desc-${s.id}" rows="2">${s.desc || ''}</textarea></div>
-                                        <div class="form-group" style="grid-column: span 2;"><label>サムネイルURL</label><input type="url" id="edit-thumb-${s.id}" value="${s.thumb || ''}"></div>
+                                        ${!s.isDefault ? `<div class="form-group" style="grid-column: span 2;"><label>サムネイルURL</label><input type="url" id="edit-thumb-${s.id}" value="${s.thumb || ''}"></div>` : ''}
                                     </div>
                                     <div style="display:flex; justify-content: space-between;">
-                                        <button class="btn-secondary btn-sm p-1" style="color:var(--danger); border-color:var(--danger);" onclick="deleteCustomService('${s.id}')"><i class="ph ph-trash"></i> 削除</button>
-                                        <button class="btn-primary btn-sm p-1" onclick="saveCustomService('${s.id}')">変更を保存</button>
+                                        ${!s.isDefault ? `<button class="btn-secondary btn-sm p-1" style="color:var(--danger); border-color:var(--danger);" onclick="deleteCustomService('${s.id}')"><i class="ph ph-trash"></i> 削除</button>` : `<div></div>`}
+                                        <button class="btn-primary btn-sm p-1" onclick="saveCustomService('${s.id}', ${s.isDefault})">変更を保存</button>
                                     </div>
                                 </div>
                             `).join('')}
@@ -151,19 +166,24 @@ App.Pages.services = async function() {
             App.navigate('services');
         };
 
-        window.saveCustomService = async (idStr) => {
+        window.saveCustomService = async (idStr, isDefault) => {
             const title = document.getElementById(`edit-title-${idStr}`).value;
             const desc = document.getElementById(`edit-desc-${idStr}`).value;
-            const thumb = document.getElementById(`edit-thumb-${idStr}`).value;
-            const url = document.getElementById(`edit-url-${idStr}`).value;
-
-            if(!title || !url) { alert('事業名とリンクURLは必須です'); return; }
 
             const settingsData = await Store.getSettings();
             const idx = settingsData.services.findIndex(s => String(s.id) === idStr);
             if(idx !== -1) {
-                settingsData.services[idx] = { ...settingsData.services[idx], title, desc, thumb, url };
+                if (isDefault) {
+                    settingsData.services[idx] = { ...settingsData.services[idx], title, desc };
+                } else {
+                    const thumb = document.getElementById(`edit-thumb-${idStr}`).value;
+                    const url = document.getElementById(`edit-url-${idStr}`).value;
+                    if(!title || !url) { alert('事業名とリンクURLは必須です'); return; }
+                    settingsData.services[idx] = { ...settingsData.services[idx], title, desc, thumb, url };
+                }
+                
                 await Store.updateSettings(settingsData);
+                alert('変更が保存されました');
                 App.navigate('services');
             }
         };

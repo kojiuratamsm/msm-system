@@ -202,9 +202,16 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                     <h3 class="card-title">${activeTab === 'meo' ? '顧客リスト' : '案件管理'} ${selectedMonth !== 'all' ? `(${selectedMonth}月)` : ''}</h3>
                     <p style="font-size:0.8rem; color:var(--text-secondary); margin-top:4px;">※顧客名をクリックすると編集できます</p>
                 </div>
-                <div style="position:relative; width:250px;">
-                    <i class="ph ph-magnifying-glass" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--text-secondary);"></i>
-                    <input type="text" id="customer-search" placeholder="顧客名で検索..." onkeyup="filterCustomers()" style="width:100%; border:1px solid var(--border-light); padding:8px 8px 8px 32px; border-radius:var(--radius-sm); font-size:0.9rem;">
+                <div style="display:flex; gap: 8px;">
+                    ${activeTab === 'plusOne' ? `
+                    <div style="position:relative; width: 140px;">
+                        <input type="text" id="person-search" placeholder="担当者検索..." onkeyup="filterCustomers()" style="width:100%; border:1px solid var(--border-light); padding:8px; border-radius:var(--radius-sm); font-size:0.9rem;">
+                    </div>
+                    ` : ''}
+                    <div style="position:relative; width:250px;">
+                        <i class="ph ph-magnifying-glass" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--text-secondary);"></i>
+                        <input type="text" id="customer-search" placeholder="顧客名で検索..." onkeyup="filterCustomers()" style="width:100%; border:1px solid var(--border-light); padding:8px 8px 8px 32px; border-radius:var(--radius-sm); font-size:0.9rem;">
+                    </div>
                 </div>
             </div>
             <div class="table-container" style="${activeTab==='plusOne'?'max-height: 500px; overflow-y: auto; overflow-x: auto;':''}">
@@ -296,9 +303,11 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                                         </div>
                                     </td>
                                     <td>
-                                        <div style="display:inline-flex; border:1px solid var(--border); border-radius:4px; overflow:hidden;">
-                                            <div onclick="updateStatus('meo', ${d.id}, '契約中', '${d.tag}')" style="cursor:pointer; padding:6px 10px; font-size:0.75rem; background:${d.tag==='契約中'?'var(--success)':'#f8f9fa'}; color:${d.tag==='契約中'?'#fff':'var(--text-secondary)'}; font-weight:${d.tag==='契約中'?'bold':'normal'}; transition:0.2s;">契約中</div>
-                                            <div onclick="updateStatus('meo', ${d.id}, '解約済み', '${d.tag}')" style="cursor:pointer; padding:6px 10px; font-size:0.75rem; background:${d.tag==='解約済み'?'var(--danger)':'#f8f9fa'}; color:${d.tag==='解約済み'?'#fff':'var(--text-secondary)'}; font-weight:${d.tag==='解約済み'?'bold':'normal'}; transition:0.2s;">解約済み</div>
+                                        <div style="display:flex; align-items:center; cursor:pointer; user-select:none;" onclick="updateStatus('meo', ${d.id}, '${d.tag === '契約中' ? '解約済み' : '契約中'}', '${d.tag}')">
+                                            <div style="position:relative; width:44px; height:24px; background:${d.tag==='契約中'?'var(--success)':'#d2d2d2'}; border-radius:12px; transition:0.3s;">
+                                                <div style="position:absolute; top:2px; left:${d.tag==='契約中'?'22px':'2px'}; width:20px; height:20px; background:#fff; border-radius:50%; transition:0.3s; box-shadow:0 1px 3px rgba(0,0,0,0.2);"></div>
+                                            </div>
+                                            <span style="margin-left:8px; font-size:0.85rem; font-weight:${d.tag==='契約中'?'bold':'normal'}; color:${d.tag==='契約中'?'var(--success)':'var(--text-secondary)'};">${d.tag}</span>
                                         </div>
                                     </td>
                                     <td><button class="btn-icon" onclick="deleteCustomer('meo', ${d.id})"><i class="ph ph-trash"></i></button></td>
@@ -371,13 +380,25 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
 
         window.filterCustomers = () => {
             const q = document.getElementById('customer-search').value.toLowerCase();
+            const personInput = document.getElementById('person-search');
+            const pq = personInput ? personInput.value.toLowerCase() : '';
+
             const rows = document.querySelectorAll('#customer-table tbody tr');
             rows.forEach(row => {
-                const nameCol = row.querySelector('td:first-child');
-                const secondCol = row.querySelector('td:nth-child(2)'); // To also catch Telecom place or PlusOne titles
+                const nameCol = row.querySelector('td:nth-child(1)');
+                const personCol = row.querySelector('td:nth-child(3)');
+                const secondCol = row.querySelector('td:nth-child(2)'); // For Telecom etc
+
                 if (nameCol) {
                     const txt = (nameCol.textContent + (secondCol ? secondCol.textContent : '')).toLowerCase();
-                    row.style.display = txt.includes(q) ? '' : 'none';
+                    const matchesQ = txt.includes(q);
+                    
+                    let matchesPerson = true;
+                    if (personInput && personCol) {
+                        matchesPerson = personCol.textContent.toLowerCase().includes(pq);
+                    }
+                    
+                    row.style.display = (matchesQ && matchesPerson) ? '' : 'none';
                 }
             });
         };
@@ -395,6 +416,8 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
             if (type === 'plusOne') await Store.updateCustomer('plusOne', id, { status: newVal });
             if (type === 'meo') await Store.updateCustomer('meo', id, { tag: newVal });
             if (type === 'telecom') await Store.updateCustomer('telecom', id, { status: newVal });
+            
+            App.navigate('customers', activeTab);
         };
 
         // Adding logic

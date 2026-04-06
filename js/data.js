@@ -27,7 +27,7 @@ const CONSTANTS = {
     ],
     PLUS_ONE_PRICING: {
         'ショート': 4000,
-        'YouTube': 18000
+        'YouTube': 20000
     }
 };
 

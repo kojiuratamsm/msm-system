@@ -188,6 +188,29 @@ App.Pages.dashboard = async function(selectedYearText = null) {
     // Default to current year
     const currentYear = new Date().getFullYear();
     const selectedYear = selectedYearText ? parseInt(selectedYearText) : currentYear;
+
+    const activeKpiMonth = window.dashKpiMonth || new Date().toISOString().slice(0, 7);
+    const targetsDataList = await Store.getTargetsKpis();
+    const targetsData = targetsDataList.find(t => t.month === activeKpiMonth) || {
+        month: activeKpiMonth,
+        meo: { rev: '', count: '', kpi: [] },
+        po: { yt: '', short: '', kpi: [] },
+        telecom: { count: '', kpi: [] }
+    };
+    targetsData.meo = targetsData.meo || { rev: '', count: '', kpi: [] };
+    targetsData.po = targetsData.po || { yt: '', short: '', kpi: [] };
+    targetsData.telecom = targetsData.telecom || { count: '', kpi: [] };
+    targetsData.meo.kpi = targetsData.meo.kpi || [];
+    targetsData.po.kpi = targetsData.po.kpi || [];
+    targetsData.telecom.kpi = targetsData.telecom.kpi || [];
+
+    // KPI Helper
+    const renderKpiList = (list, deptKey) => list.map((k, idx) => `
+        <div style="font-size:0.8rem; background:var(--bg-hover); padding:4px 8px; border-radius:4px; margin-top:4px; display:flex; justify-content:space-between; align-items:center;">
+            <span><span style="color:var(--text-secondary); margin-right:8px;">${k.date}</span> ${k.text}</span>
+            <button class="btn-icon" style="padding:2px;" onclick="removeKpi('${activeKpiMonth}', '${deptKey}', ${idx})"><i class="ph ph-trash"></i></button>
+        </div>
+    `).join('');
     
     // Filter tasks if member
     let allTasks = await Store.getTasks();
@@ -267,6 +290,74 @@ App.Pages.dashboard = async function(selectedYearText = null) {
         </div>
     `;
 
+    // KPI & Target Section
+    html += `
+        <div class="card" style="margin-bottom:24px;">
+            <div class="card-header" style="justify-content:space-between; align-items:center;">
+                <h3 class="card-title"><i class="ph ph-target"></i> 今月の目標・KPI設定</h3>
+                <input type="month" value="${activeKpiMonth}" onchange="window.dashKpiMonth=this.value; App.navigate('dashboard', ${selectedYear})" class="input-field" style="width: auto;">
+            </div>
+            
+            <div class="grid grid-3">
+                <!-- MEO -->
+                <div style="border:1px solid var(--border-light); padding:16px; border-radius:var(--radius-md);">
+                    <h4 style="margin-bottom:12px; color:var(--primary-dark);">MEO対策チャンネル</h4>
+                    <div class="form-group" style="margin-bottom:8px;">
+                        <label style="font-size:0.8rem;">目標売上 (円)</label>
+                        <input type="number" id="kpi-meo-rev" value="${targetsData.meo.rev}" onchange="saveTargetData()" class="input-field">
+                    </div>
+                    <div class="form-group" style="margin-bottom:16px;">
+                        <label style="font-size:0.8rem;">目標獲得件数</label>
+                        <input type="number" id="kpi-meo-count" value="${targetsData.meo.count}" onchange="saveTargetData()" class="input-field">
+                    </div>
+                    <div style="font-size:0.85rem; font-weight:bold; margin-bottom:8px; display:flex; justify-content:space-between;">行動指針 (KPI) <button class="btn-sm btn-secondary p-1" onclick="openKpiModal('meo')"><i class="ph ph-plus"></i> 追加</button></div>
+                    <div style="max-height:100px; overflow-y:auto;">${renderKpiList(targetsData.meo.kpi, 'meo')}</div>
+                </div>
+
+                <!-- Plus One -->
+                <div style="border:1px solid var(--border-light); padding:16px; border-radius:var(--radius-md);">
+                    <h4 style="margin-bottom:12px; color:var(--primary-dark);">Plus One</h4>
+                    <div class="form-group" style="margin-bottom:8px;">
+                        <label style="font-size:0.8rem;">YouTube 目標本数</label>
+                        <input type="number" id="kpi-po-yt" value="${targetsData.po.yt}" onchange="saveTargetData()" class="input-field">
+                    </div>
+                    <div class="form-group" style="margin-bottom:16px;">
+                        <label style="font-size:0.8rem;">ショート 目標本数</label>
+                        <input type="number" id="kpi-po-short" value="${targetsData.po.short}" onchange="saveTargetData()" class="input-field">
+                    </div>
+                    <div style="font-size:0.85rem; font-weight:bold; margin-bottom:8px; display:flex; justify-content:space-between;">行動指針 (KPI) <button class="btn-sm btn-secondary p-1" onclick="openKpiModal('po')"><i class="ph ph-plus"></i> 追加</button></div>
+                    <div style="max-height:100px; overflow-y:auto;">${renderKpiList(targetsData.po.kpi, 'po')}</div>
+                </div>
+
+                <!-- Telecom -->
+                <div style="border:1px solid var(--border-light); padding:16px; border-radius:var(--radius-md);">
+                    <h4 style="margin-bottom:12px; color:var(--primary-dark);">通信</h4>
+                    <div class="form-group" style="margin-bottom:16px;">
+                        <label style="font-size:0.8rem;">目標現場数</label>
+                        <input type="number" id="kpi-telecom-count" value="${targetsData.telecom.count}" onchange="saveTargetData()" class="input-field">
+                    </div>
+                    <div style="font-size:0.85rem; font-weight:bold; margin-bottom:8px; display:flex; justify-content:space-between;">行動指針 (KPI) <button class="btn-sm btn-secondary p-1" onclick="openKpiModal('telecom')"><i class="ph ph-plus"></i> 追加</button></div>
+                    <div style="max-height:150px; overflow-y:auto;">${renderKpiList(targetsData.telecom.kpi, 'telecom')}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-overlay" id="kpi-add-modal">
+            <div class="modal-content" style="max-width: 400px;">
+                <div class="modal-header">
+                    <h3 class="modal-title">行動指針 (KPI) 追加</h3>
+                    <button class="modal-close" onclick="document.getElementById('kpi-add-modal').classList.remove('active')"><i class="ph ph-x"></i></button>
+                </div>
+                <form id="kpi-add-form">
+                    <input type="hidden" id="kpi-deptKey">
+                    <div class="form-group"><label>日付 (Dead LINE)</label><input type="date" id="kpi-date" required value="${new Date().toISOString().slice(0,10)}"></div>
+                    <div class="form-group"><label>ToDo / 指針内容</label><input type="text" id="kpi-text" required placeholder="例: リストを30件作成する"></div>
+                    <button type="submit" class="btn-primary w-100">追加</button>
+                </form>
+            </div>
+        </div>
+    `;
+
     if (isAdmin) {
         let yearOptions = '';
         for (let y = currentYear - 2; y <= currentYear + 1; y++) {
@@ -298,6 +389,45 @@ App.Pages.dashboard = async function(selectedYearText = null) {
             await Store.toggleTask(id);
             App.navigate('dashboard', selectedYear);
         };
+
+        window.saveTargetData = async () => {
+            const newData = {
+                meo: { ...targetsData.meo, rev: document.getElementById('kpi-meo-rev').value, count: document.getElementById('kpi-meo-count').value },
+                po: { ...targetsData.po, yt: document.getElementById('kpi-po-yt').value, short: document.getElementById('kpi-po-short').value },
+                telecom: { ...targetsData.telecom, count: document.getElementById('kpi-telecom-count').value }
+            };
+            await Store.saveTargetsKpi(activeKpiMonth, newData);
+            targetsData.meo = newData.meo;
+            targetsData.po = newData.po;
+            targetsData.telecom = newData.telecom;
+        };
+
+        window.openKpiModal = (deptKey) => {
+            document.getElementById('kpi-deptKey').value = deptKey;
+            document.getElementById('kpi-text').value = '';
+            document.getElementById('kpi-add-modal').classList.add('active');
+        };
+
+        window.removeKpi = async (monthStr, deptKey, idx) => {
+            if(!confirm('このKPIを削除しますか？')) return;
+            targetsData[deptKey].kpi.splice(idx, 1);
+            await Store.saveTargetsKpi(activeKpiMonth, targetsData);
+            App.navigate('dashboard', selectedYear);
+        };
+
+        const kpiForm = document.getElementById('kpi-add-form');
+        if (kpiForm) kpiForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const deptKey = document.getElementById('kpi-deptKey').value;
+            const newKpi = {
+                date: document.getElementById('kpi-date').value,
+                text: document.getElementById('kpi-text').value
+            };
+            targetsData[deptKey].kpi.push(newKpi);
+            targetsData[deptKey].kpi.sort((a,b) => new Date(a.date) - new Date(b.date));
+            await Store.saveTargetsKpi(activeKpiMonth, targetsData);
+            App.navigate('dashboard', selectedYear);
+        });
 
         if (!isAdmin) return;
         

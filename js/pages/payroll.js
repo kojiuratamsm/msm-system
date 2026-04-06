@@ -67,7 +67,7 @@ App.Pages.payroll = async function(activeTab = 'plusOne') {
         const poCusts = await Store.getCustomers('plusOne');
         const allPOCustomers = poCusts.filter(c => {
             const mStr = c.month || (c.dates && c.dates[0] ? c.dates[0].substring(0,7) : null);
-            return mStr === selectedMonth;
+            return mStr === selectedMonth && c.status === '納品';
         });
 
         // Unique persons in this month's projects
@@ -83,7 +83,7 @@ App.Pages.payroll = async function(activeTab = 'plusOne') {
         contentHtml = `
             <div class="card">
                 <div class="card-header"><h3 class="card-title">Plus One 担当者別振込一覧 (${selectedMonth})</h3></div>
-                <div style="margin-bottom: 16px; font-size: 0.9rem; color: var(--text-secondary);">※案件管理に入力された「対象月」と「担当者」「卸単価」に基づき合計額を自動算出しています。</div>
+                <div style="margin-bottom: 16px; font-size: 0.9rem; color: var(--text-secondary);">※案件管理に入力された「対象月」と「担当者」「卸単価」に基づき、ステータスが「納品」の案件のみを合計しています。</div>
                 <div class="table-container">
                     <table>
                         <thead>

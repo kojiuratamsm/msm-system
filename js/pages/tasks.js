@@ -8,12 +8,15 @@ App.Pages.tasks = async function() {
         const mapping = { 'plusOne': 'Plus One', 'meo': 'MEO対策チャンネル', 'telecom': '通信' };
         tasks = tasks.filter(t => t.service === mapping[dept]);
     }
-    const today = new Date().toISOString().split('T')[0];
+    let selectedDate = window.taskSelectedDate || new Date().toISOString().split('T')[0];
     
     // Categorize tasks
-    const incompleteTasks = tasks.filter(t => !t.done && t.date > today);
-    const todayTasks = tasks.filter(t => !t.done && t.date <= today);
-    const doneTasks = tasks.filter(t => t.done);
+    const incompleteTasks = tasks.filter(t => !t.done && t.date > selectedDate);
+    // If selectedDate is strictly today, we might want to include past incomplete tasks so they aren't lost? 
+    // User requested: "今日やるものも入力した日付のものだけを表示するようにしてください"
+    // So we strictly use t.date === selectedDate
+    const todayTasks = tasks.filter(t => !t.done && t.date === selectedDate);
+    const doneTasks = tasks.filter(t => t.done && t.date === selectedDate);
     
     incompleteTasks.sort((a,b) => new Date(a.date) - new Date(b.date));
     todayTasks.sort((a,b) => new Date(a.date) - new Date(b.date));
@@ -25,12 +28,17 @@ App.Pages.tasks = async function() {
         if(el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
     };
 
+    window.changeTaskDate = (newDate) => {
+        window.taskSelectedDate = newDate;
+        App.navigate('tasks');
+    };
+
     const renderTaskCard = (t, showCheckbox = false) => `
         <div style="background: var(--bg-color); border: 1px solid var(--border-light); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); position:relative;">
             <div style="display:flex; gap:12px; align-items:flex-start;">
                 ${showCheckbox ? `<input type="checkbox" ${t.done?'checked':''} onchange="toggleTaskStatus(${t.id})" style="margin-top:4px; width:18px; height:18px; cursor:pointer;">` : ''}
                 <div style="flex:1;">
-                    <div style="font-weight:bold; cursor:pointer; color:var(--primary-dark);" onclick="toggleTaskDetails(${t.id})">
+                    <div style="font-weight:bold; cursor:pointer; color: ${t.done ? 'var(--text-secondary)' : 'var(--primary-dark)'}; text-decoration: ${t.done ? 'line-through' : 'none'};" onclick="toggleTaskDetails(${t.id})">
                         ${t.text}
                     </div>
                     <div id="task-details-${t.id}" style="display:none; margin-top:8px; padding-top:8px; border-top:1px dashed var(--border); font-size:0.85rem; color:var(--text-secondary);">
@@ -49,8 +57,11 @@ App.Pages.tasks = async function() {
     `;
 
     const html = `
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
-            <h2 style="font-size:1.5rem;">タスク表</h2>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; flex-wrap:wrap; gap:16px;">
+            <h2 style="font-size:1.5rem; display:flex; align-items:center; gap:12px;">
+                タスク表
+                <input type="date" value="${selectedDate}" onchange="changeTaskDate(this.value)" style="font-size:1rem; padding:4px 8px; border:1px solid var(--border); border-radius:4px;">
+            </h2>
             <button class="btn-primary" onclick="document.getElementById('task-add-modal').classList.add('active')"><i class="ph ph-plus"></i> 新規タスク</button>
         </div>
 
@@ -68,7 +79,7 @@ App.Pages.tasks = async function() {
             
             <div style="background:#fff3cd; border-radius:var(--radius-md); padding:16px; border: 1px solid #ffe69c;">
                 <h3 style="margin-bottom:16px; font-size:1.1rem; border-bottom:2px solid #ffc107; padding-bottom:8px; display:flex; justify-content:space-between;">
-                    <span>今日やるもの</span>
+                    <span>選択日のタスク</span>
                     <span class="badge badge-warning">${todayTasks.length}</span>
                 </h3>
                 <div style="max-height: 60vh; overflow-y:auto; padding-right:4px;">
@@ -115,7 +126,7 @@ App.Pages.tasks = async function() {
                     </div>
                     <div class="form-group">
                         <label>期日</label>
-                        <input type="date" id="task-date" required value="${today}">
+                        <input type="date" id="task-date" required value="${selectedDate}">
                     </div>
                     <button type="submit" class="btn-primary w-100" style="margin-top: 16px;">タスクを登録</button>
                 </form>

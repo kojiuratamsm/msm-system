@@ -177,7 +177,7 @@ App.Pages.finance = async function(selectedMonth = 'all') {
                     <tbody>
                         ${expenses.map(e => `
                             <tr>
-                                <td>${e.name}</td>
+                                <td><a href="#" onclick="openEditExpenseModal(${e.id}); return false;" style="color:var(--info); font-weight:bold; text-decoration:underline;">${e.name}</a></td>
                                 <td>${e.type === 'recurring' ? '<span class="badge badge-info">継続</span>' : '<span class="badge badge-neutral">ショット</span>'}</td>
                                 <td>¥${e.amount.toLocaleString()}</td>
                                 <td>${e.date ? new Date(e.date).toLocaleDateString('ja-JP') : '-'}</td>
@@ -215,6 +215,38 @@ App.Pages.finance = async function(selectedMonth = 'all') {
                 </form>
             </div>
         </div>
+
+        <div class="modal-overlay" id="expense-edit-modal">
+            <div class="modal-content" style="max-width: 500px;">
+                <div class="modal-header">
+                    <h3 class="modal-title">経費を編集</h3>
+                    <button class="modal-close" onclick="document.getElementById('expense-edit-modal').classList.remove('active')"><i class="ph ph-x"></i></button>
+                </div>
+                <form id="edit-expense-form">
+                    <input type="hidden" id="edit-exp-id">
+                    <div class="form-group">
+                        <label>項目名</label>
+                        <input type="text" id="edit-exp-name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>金額 (円)</label>
+                        <input type="number" id="edit-exp-amount" required>
+                    </div>
+                    <div class="form-group">
+                        <label>発生日</label>
+                        <input type="date" id="edit-exp-date" required>
+                    </div>
+                    <div class="form-group">
+                        <label>種類</label>
+                        <select id="edit-exp-type">
+                            <option value="shot">ショット (単発)</option>
+                            <option value="recurring">継続課金 (毎月)</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn-primary" style="margin-top: 16px;">更新を保存</button>
+                </form>
+            </div>
+        </div>
     `;
 
     App.mount(html, async () => {
@@ -237,5 +269,42 @@ App.Pages.finance = async function(selectedMonth = 'all') {
                 App.navigate('finance', selectedMonth);
             }
         };
+
+        window.openEditExpenseModal = (id) => {
+            const exp = expenses.find(e => e.id === id);
+            if (!exp) return;
+            document.getElementById('edit-exp-id').value = exp.id;
+            document.getElementById('edit-exp-name').value = exp.name;
+            document.getElementById('edit-exp-amount').value = exp.amount;
+            
+            // Reformat date string to YYYY-MM-DD if needed
+            let dStr = exp.date;
+            if (dStr && dStr.includes('T')) dStr = dStr.split('T')[0];
+            
+            document.getElementById('edit-exp-date').value = dStr;
+            document.getElementById('edit-exp-type').value = exp.type || 'shot';
+            document.getElementById('expense-edit-modal').classList.add('active');
+        };
+
+        document.getElementById('edit-expense-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = parseInt(document.getElementById('edit-exp-id').value);
+            const expName = document.getElementById('edit-exp-name').value;
+            const updatedData = {
+                name: expName,
+                amount: parseInt(document.getElementById('edit-exp-amount').value),
+                date: document.getElementById('edit-exp-date').value,
+                type: document.getElementById('edit-exp-type').value
+            };
+            
+            try {
+                // We need to implement updateExpense in Store, or just update directly via supabase
+                await Store.updateExpense(id, updatedData);
+                App.navigate('finance', selectedMonth);
+            } catch(err) {
+                console.error(err);
+                alert('エラーが発生しました');
+            }
+        });
     });
 };

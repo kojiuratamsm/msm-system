@@ -63,6 +63,56 @@ const Store = {
     async deleteExpense(id) {
         await supabase.from('expenses').delete().eq('id', id);
     },
+    async updateExpense(id, data) {
+        await supabase.from('expenses').update({ data }).eq('id', id);
+    },
+    
+    // YouTube (using customers table)
+    async getYTChannels() {
+        const { data } = await supabase.from('customers').select('*').eq('service_type', 'youtube_channel').order('id', { ascending: false });
+        return (data || []).map(r => ({ id: r.id, ...r.data }));
+    },
+    async addYTChannel(data) {
+        await supabase.from('customers').insert([{ id: Date.now(), service_type: 'youtube_channel', data }]);
+    },
+    async updateYTChannel(id, data) {
+        await supabase.from('customers').update({ data }).eq('id', id);
+    },
+    async getYTVideos(channelId) {
+        const { data } = await supabase.from('customers').select('*').eq('service_type', 'youtube_video').order('id', { ascending: false });
+        return (data || []).map(r => ({ id: r.id, ...r.data })).filter(v => v.channelId == channelId).sort((a,b) => new Date(b.date) - new Date(a.date));
+    },
+    async addYTVideo(data) {
+        await supabase.from('customers').insert([{ id: Date.now(), service_type: 'youtube_video', data }]);
+    },
+    async updateYTVideo(id, data) {
+        await supabase.from('customers').update({ data }).eq('id', id);
+    },
+    async getYTLines() {
+        const { data } = await supabase.from('customers').select('*').eq('service_type', 'youtube_line').order('id', { ascending: false });
+        return (data || []).map(r => ({ id: r.id, ...r.data }));
+    },
+    async addYTLine(data) {
+        await supabase.from('customers').insert([{ id: Date.now(), service_type: 'youtube_line', data }]);
+    },
+    async updateYTLine(id, data) {
+        await supabase.from('customers').update({ data }).eq('id', id);
+    },
+
+    // Targets and KPIs
+    async getTargetsKpis() {
+        const { data } = await supabase.from('customers').select('*').eq('service_type', 'targets_kpis');
+        return (data || []).map(r => ({ id: r.id, ...r.data }));
+    },
+    async saveTargetsKpi(monthStr, dataObj) {
+        const { data } = await supabase.from('customers').select('id, data').eq('service_type', 'targets_kpis');
+        const existingRow = (data || []).find(r => r.data.month === monthStr);
+        if (existingRow) {
+            await supabase.from('customers').update({ data: { ...existingRow.data, ...dataObj, month: monthStr } }).eq('id', existingRow.id);
+        } else {
+            await supabase.from('customers').insert([{ id: Date.now(), service_type: 'targets_kpis', data: { ...dataObj, month: monthStr } }]);
+        }
+    },
     
     async getPayroll() {
         const { data } = await supabase.from('payroll').select('*');
@@ -147,7 +197,12 @@ const Auth = {
                 return false;
             }
             if (data) {
-                localStorage.setItem('msm_current_user', JSON.stringify({ name: data.name, role: data.role, email: data.email }));
+                localStorage.setItem('msm_current_user', JSON.stringify({ 
+                    name: data.name, 
+                    role: data.role, 
+                    email: data.email, 
+                    loginTime: Date.now() 
+                }));
                 return true;
             }
             return false;
@@ -161,8 +216,20 @@ const Auth = {
         localStorage.removeItem('msm_current_user');
     },
     getCurrentUser() {
-        const u = localStorage.getItem('msm_current_user');
-        return u ? JSON.parse(u) : null;
+        const uStr = localStorage.getItem('msm_current_user');
+        if (!uStr) return null;
+        try {
+            const u = JSON.parse(uStr);
+            const HOUR_12 = 12 * 60 * 60 * 1000;
+            if (u.loginTime && (Date.now() - u.loginTime > HOUR_12)) {
+                this.logout();
+                return null;
+            }
+            return u;
+        } catch(e) {
+            this.logout();
+            return null;
+        }
     },
     getDepartment() {
         const u = this.getCurrentUser();
