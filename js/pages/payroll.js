@@ -75,7 +75,7 @@ App.Pages.payroll = async function(activeTab = 'plusOne') {
         
         let sumsByPerson = {};
         persons.forEach(p => {
-            sumsByPerson[p] = allPOCustomers.filter(c => c.person === p).reduce((acc, c) => acc + (c.priceCost || 0), 0);
+            sumsByPerson[p] = allPOCustomers.filter(c => c.person === p).reduce((acc, c) => acc + (c.priceCost || window.getPoBaseCost(c.type)), 0);
         });
 
         const totalUnpaid = persons.reduce((acc, p) => acc + sumsByPerson[p], 0);

@@ -34,7 +34,9 @@ App.Pages.finance = async function(selectedMonth = 'all') {
             const [yyyy, mm] = mStr.split('-');
             const salesMonthD = new Date(parseInt(yyyy), parseInt(mm), 1); // target + 1
             if (isTargetMonth(salesMonthD)) {
-                return sum + (c.priceReceipt || c.priceOverride || CONSTANTS.PLUS_ONE_PRICING[c.type]);
+                const basePrice = window.getPoBasePrice(c.type, mStr);
+                const price = (c.priceReceipt !== null && c.priceReceipt !== undefined) ? c.priceReceipt : (c.priceOverride || basePrice);
+                return sum + (price || 0);
             }
             return sum;
         }, 0);

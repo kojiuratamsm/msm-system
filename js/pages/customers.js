@@ -228,13 +228,18 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                 </div>
             </div>
             
-            ${activeTab === 'plusOne' && isAdmin ? `
+            ${activeTab === 'plusOne' ? `
             <div style="padding: 16px; background: var(--bg-tertiary); border-bottom: 1px solid var(--border-light);">
-                <label style="font-size: 0.85rem; font-weight: bold; color: var(--text-secondary); display: block; margin-bottom: 6px;">スプレッドシート連携（自動反映用）※管理者限定</label>
+                <label style="font-size: 0.85rem; font-weight: bold; color: var(--text-secondary); display: block; margin-bottom: 6px;">スプレッドシート連携（自動反映用）${isAdmin ? '※管理者限定' : '※閲覧のみ'}</label>
                 <div style="display: flex; gap: 8px;">
+                    ${isAdmin ? `
                     <input type="url" id="po-spreadsheet-url" class="input-field" placeholder="https://docs.google.com/spreadsheets/d/.../edit" value="${poSpreadsheetUrl}" style="flex: 1; padding: 8px;">
                     <button class="btn-secondary" onclick="savePoSpreadsheetUrl()">URLを保存</button>
                     <button class="btn-success" onclick="syncPoSpreadsheet()"><i class="ph ph-arrows-clockwise"></i> スプレッドシートから自動反映</button>
+                    ` : `
+                    <input type="text" class="input-field" value="https://docs.google.com/spreadsheets/d/*************************" style="flex: 1; padding: 8px;" readonly>
+                    <button class="btn-secondary" onclick="alert('管理者のみ操作可能です')" style="opacity:0.6;"><i class="ph ph-arrows-clockwise"></i> スプレッドシートから自動反映</button>
+                    `}
                 </div>
             </div>
             ` : ''}
@@ -252,9 +257,13 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                             ${plusOneData.map(d => {
                                 const basePrice = window.getPoBasePrice(d.type, d.month || (d.dates && d.dates[0] ? d.dates[0].substring(0,7) : null));
                                 const pRec = d.priceReceipt !== null && d.priceReceipt !== undefined ? d.priceReceipt : (d.priceOverride || basePrice);
-                                const pCost = d.priceCost || 0;
+                                const pCost = d.priceCost || window.getPoBaseCost(d.type);
+                                
+                                // 納品の場合は行の背景色を黄色っぽくする
+                                const bgStyle = d.status === '納品' ? 'background-color: #fff9c4;' : '';
+                                
                                 return `
-                                <tr>
+                                <tr style="${bgStyle}">
                                     <td><a href="#" onclick="openEditModal('plusOne', ${d.id}); return false;" style="font-weight:bold; color:var(--info); text-decoration:none;">${d.client}</a><br><small class="text-secondary">${d.title || ''}</small></td>
                                     <td><span class="badge badge-neutral">${d.type}</span></td>
                                     <td>${d.person || ''}</td>
@@ -555,7 +564,7 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                         // 既存のデータがあれば価格設定（受単価・卸単価）を引き継ぐ
                         const existingMatch = monthExisting.find(d => d.client === clientName && d.title === title);
                         const pRec = existingMatch ? existingMatch.priceReceipt : null;
-                        const pCost = existingMatch ? existingMatch.priceCost : 0;
+                        const pCost = existingMatch && existingMatch.priceCost ? existingMatch.priceCost : 0; // The explicit 0 or value
 
                         newRowsToInsert.push({
                             client: clientName,
@@ -766,8 +775,8 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                             <div class="form-group"><label>プロマネURL</label><input type="url" id="e-po-pm" value="${data.pmUrl || ''}"></div>
                             ${isAdmin ? `
                             <div class="form-group"><label>受単価 (円)</label><input type="number" id="e-po-price-receipt" value="${data.priceReceipt !== undefined ? (data.priceReceipt === null ? '' : data.priceReceipt) : ''}"></div>
-                            <div class="form-group"><label>卸単価 (円)</label><input type="number" id="e-po-price-cost" value="${data.priceCost || 0}"></div>
-                            ` : `<input type="hidden" id="e-po-price-receipt" value="${data.priceReceipt || ''}"><input type="hidden" id="e-po-price-cost" value="${data.priceCost || 0}">`}
+                            <div class="form-group"><label>卸単価 (円)</label><input type="number" id="e-po-price-cost" value="${data.priceCost || window.getPoBaseCost(data.type)}"></div>
+                            ` : `<input type="hidden" id="e-po-price-receipt" value="${data.priceReceipt || ''}"><input type="hidden" id="e-po-price-cost" value="${data.priceCost || window.getPoBaseCost(data.type)}">`}
                             <div class="form-group" style="grid-column:span 2;"><button type="submit" class="btn-primary w-100">更新を保存</button></div>
                         </div>
                     </form>

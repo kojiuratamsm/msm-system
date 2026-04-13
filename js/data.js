@@ -57,6 +57,12 @@ window.getPoBasePrice = (type, monthStr) => {
     return 0;
 };
 
+window.getPoBaseCost = (type) => {
+    if (type === 'ショート') return 2000;
+    if (type === 'YouTube') return 11000;
+    return 0;
+};
+
 const DEFAULT_DATA = {
     users: [
         { email: 'urata@msm-jap.com', password: 'Koji2819', role: CONSTANTS.ROLES.ADMIN, name: '管理者' },

@@ -82,10 +82,17 @@ App.Pages.sales = async function(activeTab = 'plusOne', selectedMonth = 'all') {
             const price = (c.priceReceipt !== null && c.priceReceipt !== undefined) ? c.priceReceipt : (c.priceOverride || basePrice);
             return acc + (price || 0);
         }, 0);
+        const ytCount = plusOneData.filter(c => c.type === 'YouTube').length;
+        const shortCount = plusOneData.filter(c => c.type === 'ショート').length;
+        
         html += `
             <div class="card" style="margin-bottom: 24px;">
                 <h3 class="card-title">Plus One 売上実績（ステータス：納品）</h3>
                 <h2 style="font-size: 2.5rem; margin-top: 16px; color: var(--success);">¥${total.toLocaleString()}</h2>
+                <div style="margin-top: 12px; font-size: 1rem; color: var(--text-secondary); display:flex; gap:16px;">
+                    <span class="badge badge-neutral"><i class="ph ph-youtube-logo"></i> YouTube: <strong>${ytCount}件</strong></span>
+                    <span class="badge badge-neutral"><i class="ph ph-film-strip"></i> ショート: <strong>${shortCount}件</strong></span>
+                </div>
             </div>
             <div class="card">
                 <table class="table-container">
