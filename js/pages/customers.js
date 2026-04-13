@@ -244,28 +244,36 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                     ${activeTab === 'plusOne' ? `
                         ${window.currentPoSubTab === 'manage' ? `
                         <thead style="position: sticky; top: 0; background: var(--bg-color); z-index: 10;">
-                            <tr><th>顧客名</th><th>案件</th><th>担当者</th><th>ステータス</th><th>受単価</th><th>卸単価</th><th>Links</th><th>操作</th></tr>
+                            <tr><th>顧客名</th><th>案件</th><th>担当者</th><th>ステータス</th>
+                            <th>受単価 ${isAdmin ? '<button id="bulk-save-btn" class="btn-primary btn-sm" onclick="bulkSavePrices()" style="margin-left:4px;">価格を一括保存</button>' : ''}</th>
+                            <th>卸単価</th><th>Links</th><th>操作</th></tr>
                         </thead>
                         <tbody>
-                            ${plusOneData.map(d => `
+                            ${plusOneData.map(d => {
+                                const basePrice = window.getPoBasePrice(d.type, d.month || (d.dates && d.dates[0] ? d.dates[0].substring(0,7) : null));
+                                const pRec = d.priceReceipt !== null && d.priceReceipt !== undefined ? d.priceReceipt : (d.priceOverride || basePrice);
+                                const pCost = d.priceCost || 0;
+                                return `
                                 <tr>
                                     <td><a href="#" onclick="openEditModal('plusOne', ${d.id}); return false;" style="font-weight:bold; color:var(--info); text-decoration:none;">${d.client}</a><br><small class="text-secondary">${d.title || ''}</small></td>
                                     <td><span class="badge badge-neutral">${d.type}</span></td>
                                     <td>${d.person || ''}</td>
                                     <td>
-                                        <select onchange="updateStatus('plusOne', ${d.id}, this.value, '${d.status}')" style="padding:4px; font-size:0.75rem;">
+                                        <select onchange="updateStatus('plusOne', ${d.id}, this.value, '${d.status}')" style="padding:4px; font-size:0.75rem; width:80px;">
+                                            <option value="${d.status}" selected style="display:none;">${d.status}</option>
                                             ${CONSTANTS.PLUS_ONE_STATUS.map(s => `<option value="${s}" ${d.status === s ? 'selected' : ''}>${s}</option>`).join('')}
                                         </select>
                                     </td>
-                                    <td>${isAdmin ? `¥${(d.priceReceipt || d.priceOverride || window.getPoBasePrice(d.type, d.month || (d.dates && d.dates[0] ? d.dates[0].substring(0,7) : null))).toLocaleString()}` : '非公開'}</td>
-                                    <td>${isAdmin ? `¥${(d.priceCost || 0).toLocaleString()}` : '非公開'}</td>
+                                    <td>${isAdmin ? `¥<input type="number" class="bulk-price-receipt input-field" data-id="${d.id}" value="${pRec}" style="width:70px; padding:2px; font-size:0.8rem; margin-left:4px;">` : '非公開'}</td>
+                                    <td>${isAdmin ? `¥<input type="number" class="bulk-price-cost input-field" data-id="${d.id}" value="${pCost}" style="width:70px; padding:2px; font-size:0.8rem; margin-left:4px;">` : '非公開'}</td>
                                     <td>
                                         ${d.videoUrl ? `<a href="${d.videoUrl}" target="_blank" title="動画データ"><i class="ph ph-video-camera"></i></a>` : ''}
                                         ${d.pmUrl ? `<a href="${d.pmUrl}" target="_blank" title="プロマネ"><i class="ph ph-folder"></i></a>` : ''}
                                     </td>
                                     <td><button class="btn-icon" onclick="deleteCustomer('plusOne', ${d.id})"><i class="ph ph-trash"></i></button></td>
                                 </tr>
-                            `).join('')}
+                                `;
+                            }).join('')}
                         </tbody>
                         ` : `
                         <thead style="position: sticky; top: 0; background: var(--bg-color); z-index: 10;">
@@ -445,6 +453,33 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
             App.navigate('customers', activeTab);
         };
 
+        window.bulkSavePrices = async () => {
+            if(!checkAdmin()) return;
+            const btn = document.getElementById('bulk-save-btn');
+            if(btn) { btn.textContent = '保存中...'; btn.disabled = true; }
+            
+            const costInputs = document.querySelectorAll('.bulk-price-cost');
+            const receiptInputs = document.querySelectorAll('.bulk-price-receipt');
+            const idMap = {};
+            
+            costInputs.forEach(inp => {
+                const id = parseInt(inp.getAttribute('data-id'));
+                if(!idMap[id]) idMap[id] = {};
+                idMap[id].priceCost = parseInt(inp.value) || 0;
+            });
+            receiptInputs.forEach(inp => {
+                const id = parseInt(inp.getAttribute('data-id'));
+                if(!idMap[id]) idMap[id] = {};
+                idMap[id].priceReceipt = parseInt(inp.value) || 0;
+            });
+            
+            for(const id in idMap) {
+                await Store.updateCustomer('plusOne', id, idMap[id]);
+            }
+            alert('価格の一括保存が完了しました！');
+            App.navigate('customers', activeTab);
+        };
+
         window.savePoSpreadsheetUrl = async () => {
             const url = document.getElementById('po-spreadsheet-url').value.trim();
             const existingAll = await Store.getCustomers('settings');
@@ -470,21 +505,16 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
 
             try {
                 let addedCount = 0;
-                let updatedCount = 0;
                 let processedTabs = 0;
                 const existingData = await Store.getCustomers('plusOne');
 
                 for (let m of targetMonths) {
                     const tabName = `${m}月`;
                     
-                    // Vercel本番環境でのみ動作する（ローカル起動時はエラーになる案内を出す）
                     const res = await fetch(`/api/sheets?id=${sheetId}&tab=${encodeURIComponent(tabName)}`);
                     if(!res.ok) {
                         const errTxt = await res.text();
-                        // タブ自体が存在しない場合はスキップ
-                        if (errTxt.includes('Unable to parse range') || errTxt.includes('BAD_REQUEST')) {
-                            continue;
-                        }
+                        if (errTxt.includes('Unable to parse range') || errTxt.includes('BAD_REQUEST')) continue;
                         throw new Error(errTxt);
                     }
                     
@@ -493,73 +523,69 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                     if(rows.length <= 1) continue;
 
                     processedTabs++;
+                    
+                    const mStr = `${new Date().getFullYear()}-${String(m).padStart(2, '0')}`;
+                    const monthExisting = existingData.filter(d => d.month === mStr);
+                    const newRowsToInsert = [];
 
-                    // 2行目(index 1)から読み取り開始
                     for(let i = 1; i < rows.length; i++) {
                         const row = rows[i];
                         if(!row || row.length < 3) continue;
 
-                        // B or C is Client Name
                         const clientName = row[1] || row[2] || '';
                         if(!clientName.trim()) continue;
 
-                        // D,E,F,G,H is Title
                         let title = '';
                         for(let c = 3; c <= 7; c++) {
                             if(row[c]) { title = row[c]; break; }
                         }
 
-                        // P is Status (15)
-                        const status = row[15] || '';
-                        if(status !== '納品') continue;
+                        // スプレッドシート側のステータスをそのまま全て取り込む（納品以外も）
+                        const status = row[15] || '未設定';
 
                         const person = row[8] || ''; // I
                         const type = row[9] || ''; // J
-                        const date0 = row[11] || ''; // L (初稿)
+                        const date0 = row[11] || ''; // L
                         const date1 = row[12] || ''; // M
                         const date2 = row[13] || ''; // N
                         const date3 = row[14] || ''; // O
                         const videoUrl = row[16] || ''; // Q
                         const pmUrl = row[17] || ''; // R
                         
-                        // 対象データが存在するシートの月として保存
-                        const mStr = `${new Date().getFullYear()}-${String(m).padStart(2, '0')}`;
-                        
-                        const existingRow = existingData.find(d => d.client === clientName && d.title === title && d.month === mStr);
+                        // 既存のデータがあれば価格設定（受単価・卸単価）を引き継ぐ
+                        const existingMatch = monthExisting.find(d => d.client === clientName && d.title === title);
+                        const pRec = existingMatch ? existingMatch.priceReceipt : null;
+                        const pCost = existingMatch ? existingMatch.priceCost : 0;
 
-                        if(existingRow) {
-                            // 既に存在する場合はURLと担当者のみ上書き更新
-                            if(existingRow.videoUrl !== videoUrl || existingRow.pmUrl !== pmUrl || existingRow.person !== person) {
-                                await Store.updateCustomer('plusOne', existingRow.id, {
-                                    status: '納品',
-                                    person: person || existingRow.person,
-                                    videoUrl: videoUrl || existingRow.videoUrl,
-                                    pmUrl: pmUrl || existingRow.pmUrl
-                                });
-                                updatedCount++;
-                            }
-                        } else {
-                            // 新規登録
-                            await Store.addCustomer('plusOne', {
-                                client: clientName,
-                                title: title,
-                                month: mStr,
-                                person: person,
-                                type: type,
-                                dates: [date0, date1, date2, date3].map(d => d ? d.replace(/\//g, '-') : ''),
-                                status: '納品',
-                                videoUrl: videoUrl,
-                                pmUrl: pmUrl,
-                                priceReceipt: null,
-                                priceCost: 0
-                            });
-                            addedCount++;
-                        }
+                        newRowsToInsert.push({
+                            client: clientName,
+                            title: title,
+                            month: mStr,
+                            person: person,
+                            type: type,
+                            dates: [date0, date1, date2, date3].map(d => d ? d.replace(/\//g, '-') : ''),
+                            status: status,
+                            videoUrl: videoUrl,
+                            pmUrl: pmUrl,
+                            priceReceipt: pRec,
+                            priceCost: pCost
+                        });
+                    }
+
+                    // この月の古い手動入力データやゴーストを全て削除（完全同期のため）
+                    for (const oldRow of monthExisting) {
+                        await Store.deleteCustomer('plusOne', oldRow.id);
+                    }
+                    
+                    // 新しいデータを全件追加
+                    for (const newRow of newRowsToInsert) {
+                        await Store.addCustomer('plusOne', newRow);
+                        addedCount++;
                     }
                 }
                 
                 const targetStr = selectedMonth === 'all' ? '全月タブ' : `${selectedMonth}月タブ`;
-                alert(`${targetStr}から「納品」ステータス案件の同期が完了しました！\n（${processedTabs}つのタブから対象データを取得）\n\n・新規追加: ${addedCount}件\n・URL等更新: ${updatedCount}件`);
+                alert(`${targetStr}の完全同期（上書きリセット更新）が完了しました！\n（${processedTabs}つのタブから ${addedCount}件 の最新データを反映）`);
                 switchCustomerTab('plusOne');
 
             } catch(e) {
