@@ -466,87 +466,100 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
             if(!match) return alert('スプレッドシートのURL形式が正しくありません。');
             const sheetId = match[1];
 
-            const currentMonthNum = new Date().getMonth() + 1;
-            const tabName = `${currentMonthNum}月`;
+            const targetMonths = selectedMonth === 'all' ? [1,2,3,4,5,6,7,8,9,10,11,12] : [parseInt(selectedMonth)];
 
             try {
-                // Vercel本番環境でのみ動作する（ローカル起動時はエラーになる案内を出す）
-                const res = await fetch(`/api/sheets?id=${sheetId}&tab=${encodeURIComponent(tabName)}`);
-                if(!res.ok) {
-                    const errTxt = await res.text();
-                    throw new Error(errTxt);
-                }
-                
-                const data = await res.json();
-                const rows = data.values || [];
-                if(rows.length <= 1) return alert(`${tabName}タブにデータが見つからないか、行がありません。`);
-
                 let addedCount = 0;
                 let updatedCount = 0;
+                let processedTabs = 0;
                 const existingData = await Store.getCustomers('plusOne');
 
-                // 2行目(index 1)から読み取り開始
-                for(let i = 1; i < rows.length; i++) {
-                    const row = rows[i];
-                    if(!row || row.length < 3) continue;
-
-                    // B or C is Client Name
-                    const clientName = row[1] || row[2] || '';
-                    if(!clientName.trim()) continue;
-
-                    // D,E,F,G,H is Title
-                    let title = '';
-                    for(let c = 3; c <= 7; c++) {
-                        if(row[c]) { title = row[c]; break; }
-                    }
-
-                    // P is Status (15)
-                    const status = row[15] || '';
-                    if(status !== '納品') continue;
-
-                    const person = row[8] || ''; // I
-                    const type = row[9] || ''; // J
-                    const date0 = row[11] || ''; // L (初稿)
-                    const date1 = row[12] || ''; // M
-                    const date2 = row[13] || ''; // N
-                    const date3 = row[14] || ''; // O
-                    const videoUrl = row[16] || ''; // Q
-                    const pmUrl = row[17] || ''; // R
+                for (let m of targetMonths) {
+                    const tabName = `${m}月`;
                     
-                    const mStr = `${new Date().getFullYear()}-${String(currentMonthNum).padStart(2, '0')}`;
-                    
-                    const existingRow = existingData.find(d => d.client === clientName && d.title === title && d.month === mStr);
-
-                    if(existingRow) {
-                        // 既に存在する場合はURLだけ上書き更新
-                        if(existingRow.videoUrl !== videoUrl || existingRow.pmUrl !== pmUrl) {
-                            await Store.updateCustomer('plusOne', existingRow.id, {
-                                status: '納品',
-                                videoUrl: videoUrl || existingRow.videoUrl,
-                                pmUrl: pmUrl || existingRow.pmUrl
-                            });
-                            updatedCount++;
+                    // Vercel本番環境でのみ動作する（ローカル起動時はエラーになる案内を出す）
+                    const res = await fetch(`/api/sheets?id=${sheetId}&tab=${encodeURIComponent(tabName)}`);
+                    if(!res.ok) {
+                        const errTxt = await res.text();
+                        // タブ自体が存在しない場合はスキップ
+                        if (errTxt.includes('Unable to parse range') || errTxt.includes('BAD_REQUEST')) {
+                            continue;
                         }
-                    } else {
-                        // 新規登録
-                        await Store.addCustomer('plusOne', {
-                            client: clientName,
-                            title: title,
-                            month: mStr,
-                            person: person,
-                            type: type,
-                            dates: [date0, date1, date2, date3].map(d => d ? d.replace(/\//g, '-') : ''),
-                            status: '納品',
-                            videoUrl: videoUrl,
-                            pmUrl: pmUrl,
-                            priceReceipt: null,
-                            priceCost: 0
-                        });
-                        addedCount++;
+                        throw new Error(errTxt);
+                    }
+                    
+                    const data = await res.json();
+                    const rows = data.values || [];
+                    if(rows.length <= 1) continue;
+
+                    processedTabs++;
+
+                    // 2行目(index 1)から読み取り開始
+                    for(let i = 1; i < rows.length; i++) {
+                        const row = rows[i];
+                        if(!row || row.length < 3) continue;
+
+                        // B or C is Client Name
+                        const clientName = row[1] || row[2] || '';
+                        if(!clientName.trim()) continue;
+
+                        // D,E,F,G,H is Title
+                        let title = '';
+                        for(let c = 3; c <= 7; c++) {
+                            if(row[c]) { title = row[c]; break; }
+                        }
+
+                        // P is Status (15)
+                        const status = row[15] || '';
+                        if(status !== '納品') continue;
+
+                        const person = row[8] || ''; // I
+                        const type = row[9] || ''; // J
+                        const date0 = row[11] || ''; // L (初稿)
+                        const date1 = row[12] || ''; // M
+                        const date2 = row[13] || ''; // N
+                        const date3 = row[14] || ''; // O
+                        const videoUrl = row[16] || ''; // Q
+                        const pmUrl = row[17] || ''; // R
+                        
+                        // 対象データが存在するシートの月として保存
+                        const mStr = `${new Date().getFullYear()}-${String(m).padStart(2, '0')}`;
+                        
+                        const existingRow = existingData.find(d => d.client === clientName && d.title === title && d.month === mStr);
+
+                        if(existingRow) {
+                            // 既に存在する場合はURLと担当者のみ上書き更新
+                            if(existingRow.videoUrl !== videoUrl || existingRow.pmUrl !== pmUrl || existingRow.person !== person) {
+                                await Store.updateCustomer('plusOne', existingRow.id, {
+                                    status: '納品',
+                                    person: person || existingRow.person,
+                                    videoUrl: videoUrl || existingRow.videoUrl,
+                                    pmUrl: pmUrl || existingRow.pmUrl
+                                });
+                                updatedCount++;
+                            }
+                        } else {
+                            // 新規登録
+                            await Store.addCustomer('plusOne', {
+                                client: clientName,
+                                title: title,
+                                month: mStr,
+                                person: person,
+                                type: type,
+                                dates: [date0, date1, date2, date3].map(d => d ? d.replace(/\//g, '-') : ''),
+                                status: '納品',
+                                videoUrl: videoUrl,
+                                pmUrl: pmUrl,
+                                priceReceipt: null,
+                                priceCost: 0
+                            });
+                            addedCount++;
+                        }
                     }
                 }
                 
-                alert(`${tabName}タブから「納品」ステータス案件の同期が完了しました！\n\n・新規追加: ${addedCount}件\n・URL等更新: ${updatedCount}件`);
+                const targetStr = selectedMonth === 'all' ? '全月タブ' : `${selectedMonth}月タブ`;
+                alert(`${targetStr}から「納品」ステータス案件の同期が完了しました！\n（${processedTabs}つのタブから対象データを取得）\n\n・新規追加: ${addedCount}件\n・URL等更新: ${updatedCount}件`);
                 switchCustomerTab('plusOne');
 
             } catch(e) {
