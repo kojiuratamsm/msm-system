@@ -32,12 +32,23 @@ const CONSTANTS = {
 };
 
 window.getPoBasePrice = (type, monthStr) => {
+    if (type !== 'ショート' && type !== 'YouTube') return 0; // Invalid or empty type returns 0
+
     if (type === 'ショート') return 4000;
+    
     if (type === 'YouTube') {
-        if (!monthStr) return 20000;
-        const [yyyy, mm] = monthStr.split('-');
-        const year = parseInt(yyyy);
-        const month = parseInt(mm);
+        if (!monthStr || monthStr === 'all') return 20000; // Default to newest if unknown
+
+        // Split "2026-04" or similar
+        const parts = monthStr.split('-');
+        if (parts.length < 2) return 20000;
+        
+        const year = parseInt(parts[0]);
+        const month = parseInt(parts[1]);
+
+        if (isNaN(year) || isNaN(month)) return 20000;
+
+        // 3月までは 18000円、4月以降は 20000円
         if (year < 2026 || (year === 2026 && month <= 3)) {
             return 18000;
         }

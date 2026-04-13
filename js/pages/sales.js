@@ -76,7 +76,12 @@ App.Pages.sales = async function(activeTab = 'plusOne', selectedMonth = 'all') {
     `;
 
     if (activeTab === 'plusOne') {
-        const total = plusOneData.reduce((acc, c) => acc + (c.priceReceipt || c.priceOverride || CONSTANTS.PLUS_ONE_PRICING[c.type]), 0);
+        const total = plusOneData.reduce((acc, c) => {
+            const mStr = c.month || (c.dates && c.dates[0] ? c.dates[0].substring(0,7) : null);
+            const basePrice = window.getPoBasePrice(c.type, mStr);
+            const price = (c.priceReceipt !== null && c.priceReceipt !== undefined) ? c.priceReceipt : (c.priceOverride || basePrice);
+            return acc + (price || 0);
+        }, 0);
         html += `
             <div class="card" style="margin-bottom: 24px;">
                 <h3 class="card-title">Plus One 売上実績（ステータス：納品）</h3>
@@ -88,7 +93,11 @@ App.Pages.sales = async function(activeTab = 'plusOne', selectedMonth = 'all') {
                         <tr><th>担当者</th><th>クライアント名</th><th>案件</th><th>受単価設定</th></tr>
                     </thead>
                     <tbody>
-                        ${plusOneData.length ? plusOneData.map(d => `
+                        ${plusOneData.length ? plusOneData.map(d => {
+                            const mStr = d.month || (d.dates && d.dates[0] ? d.dates[0].substring(0,7) : null);
+                            const basePrice = window.getPoBasePrice(d.type, mStr);
+                            const pval = (d.priceReceipt !== null && d.priceReceipt !== undefined) ? d.priceReceipt : (d.priceOverride || basePrice);
+                            return `
                             <tr>
                                 <td>${d.person || '-'}</td>
                                 <td>${d.client}</td>
@@ -96,13 +105,14 @@ App.Pages.sales = async function(activeTab = 'plusOne', selectedMonth = 'all') {
                                 <td>
                                     <div style="display:flex; align-items:center; gap:8px;">
                                         <span>¥</span>
-                                        <input type="number" value="${d.priceReceipt !== undefined ? (d.priceReceipt === null ? '' : d.priceReceipt) : d.priceOverride || CONSTANTS.PLUS_ONE_PRICING[d.type]}" 
+                                        <input type="number" value="${pval}" 
                                             onchange="updatePlusOnePrice(${d.id}, this.value)" 
                                             style="width: 120px; padding: 6px; font-size: 0.875rem;" placeholder="受単価" />
                                     </div>
                                 </td>
                             </tr>
-                        `).join('') : '<tr><td colspan="4">納品済みの案件がありません。</td></tr>'}
+                            `;
+                        }).join('') : '<tr><td colspan="4">納品済みの案件がありません。</td></tr>'}
                     </tbody>
                 </table>
             </div>
