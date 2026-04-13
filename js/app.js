@@ -292,8 +292,9 @@ App.Pages.dashboard = async function(selectedYearText = null) {
         </div>
     `;
 
-    // KPI & Target Section
-    html += `
+    // KPI & Target Section (Admin only)
+    if (isAdmin) {
+        html += `
         <div class="card" style="margin-bottom:24px;">
             <div class="card-header" style="justify-content:space-between; align-items:center;">
                 <h3 class="card-title"><i class="ph ph-target"></i> 今月の目標・KPI設定</h3>
@@ -359,6 +360,7 @@ App.Pages.dashboard = async function(selectedYearText = null) {
             </div>
         </div>
     `;
+    }
 
     if (isAdmin) {
         let yearOptions = '';
