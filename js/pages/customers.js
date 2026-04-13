@@ -17,10 +17,23 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
         activeTab = dept; 
     }
 
-    const meoData = await Store.getCustomers('meo');
+    const cMeo = await Store.getCustomers('meo');
+    let meoData = cMeo;
     let plusOneData = await Store.getCustomers('plusOne');
     let plusOnePmData = await Store.getCustomers('plusOnePM');
-    let telecomData = await Store.getCustomers('telecom');
+    const cTc = await Store.getCustomers('telecom');
+    let telecomData = cTc;
+
+    const settingsArr = await Store.getCustomers('settings');
+    const poUrlSetting = settingsArr.find(v => v.type === 'po_spreadsheet_url');
+    const poSpreadsheetUrl = poUrlSetting ? poUrlSetting.url : '';
+
+    window.savePoSpreadsheetUrl = async () => {
+        const url = document.getElementById('po-spreadsheet-url').value;
+        await Store.saveSetting('po_spreadsheet_url', { type: 'po_spreadsheet_url', url });
+        alert('保存しました');
+    };
+
     window.currentPoSubTab = window.currentPoSubTab || 'manage';
 
     window.switchPoSubTab = function(subTab) {
@@ -214,6 +227,18 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                     </div>
                 </div>
             </div>
+            
+            ${activeTab === 'plusOne' && isAdmin ? `
+            <div style="padding: 16px; background: var(--bg-tertiary); border-bottom: 1px solid var(--border-light);">
+                <label style="font-size: 0.85rem; font-weight: bold; color: var(--text-secondary); display: block; margin-bottom: 6px;">スプレッドシート連携（自動反映用）※管理者限定</label>
+                <div style="display: flex; gap: 8px;">
+                    <input type="url" id="po-spreadsheet-url" class="input-field" placeholder="https://docs.google.com/spreadsheets/d/.../edit" value="${poSpreadsheetUrl}" style="flex: 1; padding: 8px;">
+                    <button class="btn-secondary" onclick="savePoSpreadsheetUrl()">URLを保存</button>
+                    <button class="btn-success" onclick="syncPoSpreadsheet()"><i class="ph ph-arrows-clockwise"></i> スプレッドシートから自動反映</button>
+                </div>
+            </div>
+            ` : ''}
+
             <div class="table-container" style="${activeTab==='plusOne'?'max-height: 500px; overflow-y: auto; overflow-x: auto;':''}">
                 <table id="customer-table">
                     ${activeTab === 'plusOne' ? `
@@ -418,6 +443,116 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
             if (type === 'telecom') await Store.updateCustomer('telecom', id, { status: newVal });
             
             App.navigate('customers', activeTab);
+        };
+
+        window.savePoSpreadsheetUrl = async () => {
+            const url = document.getElementById('po-spreadsheet-url').value.trim();
+            const existingAll = await Store.getCustomers('settings');
+            const target = existingAll.find(v => v.type === 'po_spreadsheet_url');
+            if(target) {
+                await Store.updateCustomer('settings', target.id, { url });
+            } else {
+                await Store.addCustomer('settings', { type: 'po_spreadsheet_url', url });
+            }
+            alert('スプレッドシート連携URLを保存しました。');
+            switchCustomerTab('plusOne');
+        };
+
+        window.syncPoSpreadsheet = async () => {
+            const url = document.getElementById('po-spreadsheet-url').value.trim();
+            if(!url) return alert('まずはスプレッドシートのURLを入力して保存してください。');
+            
+            const match = url.match(/\/d\/(.*?)(\/|$)/);
+            if(!match) return alert('スプレッドシートのURL形式が正しくありません。');
+            const sheetId = match[1];
+
+            const currentMonthNum = new Date().getMonth() + 1;
+            const tabName = `${currentMonthNum}月`;
+
+            try {
+                // Vercel本番環境でのみ動作する（ローカル起動時はエラーになる案内を出す）
+                const res = await fetch(`/api/sheets?id=${sheetId}&tab=${encodeURIComponent(tabName)}`);
+                if(!res.ok) {
+                    const errTxt = await res.text();
+                    throw new Error(errTxt);
+                }
+                
+                const data = await res.json();
+                const rows = data.values || [];
+                if(rows.length <= 1) return alert(`${tabName}タブにデータが見つからないか、行がありません。`);
+
+                let addedCount = 0;
+                let updatedCount = 0;
+                const existingData = await Store.getCustomers('plusOne');
+
+                // 2行目(index 1)から読み取り開始
+                for(let i = 1; i < rows.length; i++) {
+                    const row = rows[i];
+                    if(!row || row.length < 3) continue;
+
+                    // B or C is Client Name
+                    const clientName = row[1] || row[2] || '';
+                    if(!clientName.trim()) continue;
+
+                    // D,E,F,G,H is Title
+                    let title = '';
+                    for(let c = 3; c <= 7; c++) {
+                        if(row[c]) { title = row[c]; break; }
+                    }
+
+                    // P is Status (15)
+                    const status = row[15] || '';
+                    if(status !== '納品') continue;
+
+                    const person = row[8] || ''; // I
+                    const type = row[9] || ''; // J
+                    const date0 = row[11] || ''; // L (初稿)
+                    const date1 = row[12] || ''; // M
+                    const date2 = row[13] || ''; // N
+                    const date3 = row[14] || ''; // O
+                    const videoUrl = row[16] || ''; // Q
+                    const pmUrl = row[17] || ''; // R
+                    
+                    const mStr = `${new Date().getFullYear()}-${String(currentMonthNum).padStart(2, '0')}`;
+                    
+                    const existingRow = existingData.find(d => d.client === clientName && d.title === title && d.month === mStr);
+
+                    if(existingRow) {
+                        // 既に存在する場合はURLだけ上書き更新
+                        if(existingRow.videoUrl !== videoUrl || existingRow.pmUrl !== pmUrl) {
+                            await Store.updateCustomer('plusOne', existingRow.id, {
+                                status: '納品',
+                                videoUrl: videoUrl || existingRow.videoUrl,
+                                pmUrl: pmUrl || existingRow.pmUrl
+                            });
+                            updatedCount++;
+                        }
+                    } else {
+                        // 新規登録
+                        await Store.addCustomer('plusOne', {
+                            client: clientName,
+                            title: title,
+                            month: mStr,
+                            person: person,
+                            type: type,
+                            dates: [date0, date1, date2, date3].map(d => d ? d.replace(/\//g, '-') : ''),
+                            status: '納品',
+                            videoUrl: videoUrl,
+                            pmUrl: pmUrl,
+                            priceReceipt: null,
+                            priceCost: 0
+                        });
+                        addedCount++;
+                    }
+                }
+                
+                alert(`${tabName}タブから「納品」ステータス案件の同期が完了しました！\n\n・新規追加: ${addedCount}件\n・URL等更新: ${updatedCount}件`);
+                switchCustomerTab('plusOne');
+
+            } catch(e) {
+                console.error(e);
+                alert('【エラー】\nデスクトップからファイルを開いている場合、セキュリティ上自動反映は動きません！一度Vercel（本番環境）にアップロードしてから、VercelのURL上でお試しください。\n\n詳細: ' + e.message);
+            }
         };
 
         // Adding logic

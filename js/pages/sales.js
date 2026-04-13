@@ -22,19 +22,14 @@ App.Pages.sales = async function(activeTab = 'plusOne', selectedMonth = 'all') {
         plusOneData = plusOneData.filter(c => {
             const mStr = c.month || (c.dates && c.dates[0] ? c.dates[0].substring(0,7) : null);
             if (!mStr) return false;
-            // Shift PlusOne logic matching dashboard behavior: Contract Month + 1 = Sales Month.
-            // If user selects "Month 4", it means we want the ones that became Sales in Month 4.
-            // i.e., Contract Month + 1 == 4.
             const [yyyy, mm] = mStr.split('-');
-            const salesMonthD = new Date(parseInt(yyyy), parseInt(mm), 1);
-            return (salesMonthD.getMonth() + 1) === parseInt(selectedMonth);
+            return parseInt(mm) === parseInt(selectedMonth);
         });
             telecomData = telecomData.filter(c => {
             const mStr = c.month || (c.date ? c.date.substring(0,7) : null);
             if (!mStr) return false;
             const [yyyy, mm] = mStr.split('-');
-            const salesMonthD = new Date(parseInt(yyyy), parseInt(mm), 1);
-            return (salesMonthD.getMonth() + 1) === parseInt(selectedMonth);
+            return parseInt(mm) === parseInt(selectedMonth);
         });
         
         meoData = meoData.filter(c => {

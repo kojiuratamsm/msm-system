@@ -133,7 +133,7 @@ const App = {
             document.getElementById('current-user-role').textContent = user.name;
             document.getElementById('current-user-email').textContent = user.email;
             
-            const adminNavs = ['finance', 'payroll'];
+            const adminNavs = ['finance', 'payroll', 'meo_users'];
             adminNavs.forEach(nav => {
                 const el = document.querySelector(`li[data-target="${nav}"]`);
                 if (el) el.style.display = user.role === 'admin' ? 'flex' : 'none';
