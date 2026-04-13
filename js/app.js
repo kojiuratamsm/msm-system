@@ -133,10 +133,12 @@ const App = {
             document.getElementById('current-user-role').textContent = user.name;
             document.getElementById('current-user-email').textContent = user.email;
             
-            const adminNavs = ['finance', 'payroll', 'meo_users'];
-            adminNavs.forEach(nav => {
+            // Sidebar will explicitly show all items to all users now.
+            // When clicked, non-admins will see a rejection screen for restricted pages.
+            const allNavs = ['dashboard', 'services', 'customers', 'sales', 'finance', 'payroll', 'tasks', 'research', 'youtube', 'meo_users', 'settings'];
+            allNavs.forEach(nav => {
                 const el = document.querySelector(`li[data-target="${nav}"]`);
-                if (el) el.style.display = user.role === 'admin' ? 'flex' : 'none';
+                if (el) el.style.display = 'flex';
             });
             
             this.navigate('dashboard');

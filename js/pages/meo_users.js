@@ -24,9 +24,17 @@ App.Pages.meo_users = function() {
                     <pre style="background: var(--bg-color); padding: 12px; border-radius: 4px; font-family: monospace; font-size: 1rem;">ID: test@gmail.com\nPW: test12345</pre>
                 </div>
 
-                <a href="https://meo-dashboard-system.vercel.app/" target="_blank" class="btn-primary" style="display: block; text-align: center; font-size: 1.1rem; padding: 16px; text-decoration: none;">
-                    ログイン画面を開く <i class="ph ph-arrow-square-out"></i>
-                </a>
+                <div style="display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;">
+                    <a href="https://meo-dashboard-system.vercel.app/" target="_blank" class="btn-primary" style="flex: 1; min-width: 200px; text-align: center; text-decoration: none; padding: 12px;">
+                        ログイン画面を開く <i class="ph ph-arrow-square-out"></i>
+                    </a>
+                    <a href="https://meo-dashboard-system.vercel.app/master-dashboard.html" target="_blank" class="btn-secondary" style="flex: 1; min-width: 200px; text-align: center; text-decoration: none; padding: 12px;">
+                        マスター画面を開く <i class="ph ph-arrow-square-out"></i>
+                    </a>
+                    <a href="https://meo-dashboard-system.vercel.app/index.html" target="_blank" class="btn-secondary" style="flex: 1; min-width: 200px; text-align: center; text-decoration: none; padding: 12px;">
+                        テスト画面を開く <i class="ph ph-arrow-square-out"></i>
+                    </a>
+                </div>
             </div>
         </div>
     `;

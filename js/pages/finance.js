@@ -100,9 +100,48 @@ App.Pages.finance = async function(selectedMonth = 'all') {
     
     const totalSales = poSales + tcSales + meoSales;
 
+    // Payroll Expenses (Staff Payments)
+    let payrollExp = 0;
+    try {
+        const payrollData = await Store.getPayroll();
+        if (payrollData) {
+            const pMeo = payrollData.meo || [];
+            const pTelecom = payrollData.telecom || [];
+            
+            const poStaffPay = custsPo.filter(c => {
+                if (c.status !== '納品') return false;
+                const mStr = c.month || (c.dates && c.dates[0] ? c.dates[0].substring(0,7) : null);
+                if (!mStr) return false;
+                const [yyyy, mm] = mStr.split('-');
+                const workMonthD = new Date(parseInt(yyyy), parseInt(mm) - 1, 1);
+                return isTargetMonth(workMonthD);
+            }).reduce((acc, c) => acc + (c.priceCost || window.getPoBaseCost(c.type) || 0), 0);
+            
+            const meoStaffPay = pMeo.reduce((acc, r) => {
+                if (!r.month) return acc;
+                const [yyyy, mm] = r.month.split('-');
+                const workMonthD = new Date(parseInt(yyyy), parseInt(mm) - 1, 1);
+                if (isTargetMonth(workMonthD)) return acc + (r.amount || 0);
+                return acc;
+            }, 0);
+
+            const tcStaffPay = pTelecom.reduce((acc, r) => {
+                if (!r.month) return acc;
+                const [yyyy, mm] = r.month.split('-');
+                const workMonthD = new Date(parseInt(yyyy), parseInt(mm) - 1, 1);
+                if (isTargetMonth(workMonthD)) return acc + (r.cost || 0) + (r.transport || 0);
+                return acc;
+            }, 0);
+
+            payrollExp = poStaffPay + meoStaffPay + tcStaffPay;
+        }
+    } catch(err) {
+        console.error("Payroll integration error", err);
+    }
+
     // Expenses
     const expenses = await Store.getExpenses();
-    const totalExp = expenses.reduce((sum, e) => {
+    let totalExp = expenses.reduce((sum, e) => {
         if (!e.date) return sum;
         const eDate = new Date(e.date);
         
@@ -134,6 +173,8 @@ App.Pages.finance = async function(selectedMonth = 'all') {
         return sum;
     }, 0);
 
+    totalExp += payrollExp;
+
     // Profit
     const profit = totalSales - totalExp;
 
@@ -163,6 +204,10 @@ App.Pages.finance = async function(selectedMonth = 'all') {
             <div class="card" style="border-top: 4px solid var(--danger);">
                 <div class="card-header"><h3 class="card-title">総経費</h3></div>
                 <h2 style="font-size: 2.5rem; color: var(--danger);">¥${totalExp.toLocaleString()}</h2>
+                <div style="margin-top: 16px; font-size: 0.875rem; color: var(--text-secondary);">
+                    <p>一般経費: ¥${(totalExp - payrollExp).toLocaleString()}</p>
+                    <p>スタッフ給与（外注費等）: ¥${payrollExp.toLocaleString()}</p>
+                </div>
             </div>
             
             <div class="card" style="border-top: 4px solid var(--info);">
