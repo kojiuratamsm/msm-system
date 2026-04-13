@@ -68,7 +68,7 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
         document.getElementById('meo-end-month').value = window.calcMeoEndMonth(e.target.value);
     };
 
-    const checkAdmin = () => {
+    window.checkAdmin = () => {
         const u = Auth.getCurrentUser();
         if (!u || u.role !== 'admin') {
             alert('管理者以外操作できません。');
