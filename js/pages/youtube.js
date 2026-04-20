@@ -149,6 +149,21 @@ App.Pages.youtube = async function() {
                     </div>
                 </div>
                 
+                <script>
+                    // 自動更新：最後に更新された日付をチェックし、今日まだなら自動で同期を実行
+                    (async () => {
+                        const channelId = "${channel.id}";
+                        const lastSyncKey = "yt_sync_" + channelId;
+                        const today = new Date().toISOString().slice(0, 10);
+                        if (localStorage.getItem(lastSyncKey) !== today) {
+                            console.log("YouTube自動同期を開始します...");
+                            await window.syncChannelVideos(channelId, true);
+                            localStorage.setItem(lastSyncKey, today);
+                            // 同期完了後に画面をリフレッシュ（数値反映のため）
+                            App.navigate('youtube');
+                        }
+                    })();
+                </script>
             `;
         }
 
@@ -288,16 +303,20 @@ App.Pages.youtube = async function() {
                         <button class="btn-secondary btn-sm p-1" style="height:fit-content;" onclick="updateLine(${line.id})">設定</button>
                     </div>
                     
-                    <div style="display:flex; gap:16px; margin-bottom:24px;">
-                        <div style="flex:1; background:var(--bg-tertiary); padding:16px; border-radius:8px; text-align:center;">
+                    <div style="display:flex; gap:12px; margin-bottom:24px; flex-wrap:wrap;">
+                        <div style="flex:1; min-width:140px; background:var(--bg-tertiary); padding:16px; border-radius:8px; text-align:center;">
                             <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:4px;">YouTube登録者</div>
                             <div style="font-weight:bold; font-size:1.8rem; color:var(--danger);">${channelSubs.toLocaleString()}</div>
                         </div>
-                        <div style="flex:1; background:var(--bg-tertiary); padding:16px; border-radius:8px; text-align:center; border:2px solid var(--success);">
-                            <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:4px;">最新LINE友だち数</div>
-                            <div style="font-weight:bold; font-size:1.8rem; color:var(--success);">${latestInfo.subs.toLocaleString()}</div>
+                        <div style="flex:1; min-width:140px; background:var(--bg-tertiary); padding:16px; border-radius:8px; text-align:center; border:1px solid var(--border-light);">
+                            <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:4px;">LINE友だち総数</div>
+                            <div style="font-weight:bold; font-size:1.8rem; color:var(--text-primary);">${(latestInfo.subs || 0).toLocaleString()}</div>
                         </div>
-                         <div style="flex:1; background:var(--bg-tertiary); padding:16px; border-radius:8px; text-align:center; border:1px solid var(--border-light);">
+                        <div style="flex:1; min-width:140px; background:var(--bg-tertiary); padding:16px; border-radius:8px; text-align:center; border:2px solid var(--success);">
+                            <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:4px;">実質友だち数</div>
+                            <div style="font-weight:bold; font-size:1.8rem; color:var(--success);">${(latestInfo.targetedReaches || 0).toLocaleString()}</div>
+                        </div>
+                         <div style="flex:1; min-width:140px; background:var(--bg-tertiary); padding:16px; border-radius:8px; text-align:center; border:1px solid var(--border-light);">
                             <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:4px;">ブロック数</div>
                             <div style="font-weight:bold; font-size:1.8rem; color:var(--text-secondary);">${(latestInfo.blocks || 0).toLocaleString()}</div>
                         </div>
@@ -781,18 +800,24 @@ App.Pages.youtube = async function() {
                 // 取得できた数字（前日時点の確定値）
                 const followers = data.followers;
                 const blocks = data.blocks;
+                const targetedReaches = data.targetedReaches;
                 const dateRaw = data.date; // 20240420
                 const formattedDate = `${dateRaw.slice(0,4)}-${dateRaw.slice(4,6)}-${dateRaw.slice(6,8)}`;
 
                 let h = line.history || [];
                 // 同じ日付のデータがあれば上書き、なければ追加
                 h = h.filter(x => x.date !== formattedDate);
-                h.push({ date: formattedDate, subs: followers, blocks: blocks });
+                h.push({ 
+                    date: formattedDate, 
+                    subs: followers, 
+                    blocks: blocks,
+                    targetedReaches: targetedReaches
+                });
                 h.sort((a,b) => new Date(a.date) - new Date(b.date));
 
                 await Store.updateYTLine(line.id, { ...line, history: h });
                 
-                alert(`LINE APIから同期完了！\n日付: ${formattedDate}\n友だち数: ${followers}\nブロック数: ${blocks}`);
+                alert(`LINE APIから同期完了！\n日付: ${formattedDate}\n友だち総数: ${followers}\n実質友だち数: ${targetedReaches}\nブロック数: ${blocks}`);
                 App.navigate('youtube');
             } catch(e) {
                 alert('同期エラー: ' + e.message);
