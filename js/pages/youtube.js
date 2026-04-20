@@ -206,21 +206,21 @@ App.Pages.youtube = async function() {
                                 </div>
                             </div>
                             
-                            <div class="grid" style="grid-template-columns: repeat(3, 1fr); gap:8px; margin-bottom: 24px;">
-                                <div style="background:var(--bg-tertiary); padding:8px; border-radius:4px; text-align:center;">
-                                    <div style="font-size:0.7rem; color:var(--text-secondary);">最新再生数</div>
-                                    <div style="font-weight:bold; font-size:1.1rem;">${latest.views.toLocaleString()}</div>
-                                    <div style="font-size:0.7rem; color:${viewsDiff >= 0 ? 'var(--success)':'var(--danger)'};">${viewsDiff >= 0 ? '+' : ''}${viewsDiff.toLocaleString()}</div>
+                            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap:8px; margin-bottom: 24px;">
+                                <div style="background:var(--bg-tertiary); padding:12px 4px; border-radius:4px; text-align:center;">
+                                    <div style="font-size:0.75rem; color:var(--text-secondary); white-space:nowrap;">最新再生数</div>
+                                    <div style="font-weight:bold; font-size:1.1rem; margin: 4px 0;">${latest.views.toLocaleString()}</div>
+                                    <div style="font-size:0.75rem; color:${viewsDiff >= 0 ? 'var(--success)':'var(--danger)'};">${viewsDiff >= 0 ? '+' : ''}${viewsDiff.toLocaleString()}</div>
                                 </div>
-                                <div style="background:var(--bg-tertiary); padding:8px; border-radius:4px; text-align:center;">
-                                    <div style="font-size:0.7rem; color:var(--text-secondary);">最新インプレッション</div>
-                                    <div style="font-weight:bold; font-size:1.1rem;">${latest.imps.toLocaleString()}</div>
-                                    <div style="font-size:0.7rem; color:${impsDiff >= 0 ? 'var(--success)':'var(--danger)'};">${impsDiff >= 0 ? '+' : ''}${impsDiff.toLocaleString()}</div>
+                                <div style="background:var(--bg-tertiary); padding:12px 4px; border-radius:4px; text-align:center;">
+                                    <div style="font-size:0.75rem; color:var(--text-secondary); white-space:nowrap;">インプレッション</div>
+                                    <div style="font-weight:bold; font-size:1.1rem; margin: 4px 0;">${latest.imps.toLocaleString()}</div>
+                                    <div style="font-size:0.75rem; color:${impsDiff >= 0 ? 'var(--success)':'var(--danger)'};">${impsDiff >= 0 ? '+' : ''}${impsDiff.toLocaleString()}</div>
                                 </div>
-                                <div style="background:var(--bg-tertiary); padding:8px; border-radius:4px; text-align:center;">
-                                    <div style="font-size:0.7rem; color:var(--text-secondary);">最新CTR</div>
-                                    <div style="font-weight:bold; font-size:1.1rem;">${latest.ctr}%</div>
-                                    <div style="font-size:0.7rem; color:${ctrDiff >= 0 ? 'var(--success)':'var(--danger)'};">${ctrDiff >= 0 ? '+' : ''}${ctrDiff}%</div>
+                                <div style="background:var(--bg-tertiary); padding:12px 4px; border-radius:4px; text-align:center;">
+                                    <div style="font-size:0.75rem; color:var(--text-secondary); white-space:nowrap;">最新CTR</div>
+                                    <div style="font-weight:bold; font-size:1.1rem; margin: 4px 0;">${latest.ctr}%</div>
+                                    <div style="font-size:0.75rem; color:${ctrDiff >= 0 ? 'var(--success)':'var(--danger)'};">${ctrDiff >= 0 ? '+' : ''}${ctrDiff}%</div>
                                 </div>
                             </div>
 
@@ -303,22 +303,22 @@ App.Pages.youtube = async function() {
                         <button class="btn-secondary btn-sm p-1" style="height:fit-content;" onclick="updateLine(${line.id})">設定</button>
                     </div>
                     
-                    <div style="display:flex; gap:12px; margin-bottom:24px; flex-wrap:wrap;">
-                        <div style="flex:1; min-width:140px; background:var(--bg-tertiary); padding:16px; border-radius:8px; text-align:center;">
-                            <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:4px;">YouTube登録者</div>
-                            <div style="font-weight:bold; font-size:1.8rem; color:var(--danger);">${channelSubs.toLocaleString()}</div>
+                    <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:12px; margin-bottom:24px;">
+                        <div style="background:var(--bg-tertiary); padding:16px 8px; border-radius:8px; text-align:center; display:flex; flex-direction:column; justify-content:center;">
+                            <div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:4px; white-space:nowrap; overflow:hidden;">YouTube登録者</div>
+                            <div style="font-weight:bold; font-size:1.6rem; color:var(--danger);">${channelSubs.toLocaleString()}</div>
                         </div>
-                        <div style="flex:1; min-width:140px; background:var(--bg-tertiary); padding:16px; border-radius:8px; text-align:center; border:1px solid var(--border-light);">
-                            <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:4px;">LINE友だち総数</div>
-                            <div style="font-weight:bold; font-size:1.8rem; color:var(--text-primary);">${(latestInfo.subs || 0).toLocaleString()}</div>
+                        <div style="background:var(--bg-tertiary); padding:16px 8px; border-radius:8px; text-align:center; border:1px solid var(--border-light); display:flex; flex-direction:column; justify-content:center;">
+                            <div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:4px; white-space:nowrap; overflow:hidden;">LINE総友だち数</div>
+                            <div style="font-weight:bold; font-size:1.6rem; color:var(--text-primary);">${(latestInfo.subs || 0).toLocaleString()}</div>
                         </div>
-                        <div style="flex:1; min-width:140px; background:var(--bg-tertiary); padding:16px; border-radius:8px; text-align:center; border:2px solid var(--success);">
-                            <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:4px;">実質友だち数</div>
-                            <div style="font-weight:bold; font-size:1.8rem; color:var(--success);">${(latestInfo.targetedReaches || 0).toLocaleString()}</div>
+                        <div style="background:var(--bg-tertiary); padding:16px 8px; border-radius:8px; text-align:center; border:2px solid var(--success); display:flex; flex-direction:column; justify-content:center;">
+                            <div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:4px; white-space:nowrap; overflow:hidden;">実質友だち数</div>
+                            <div style="font-weight:bold; font-size:1.6rem; color:var(--success);">${(latestInfo.targetedReaches || 0).toLocaleString()}</div>
                         </div>
-                         <div style="flex:1; min-width:140px; background:var(--bg-tertiary); padding:16px; border-radius:8px; text-align:center; border:1px solid var(--border-light);">
-                            <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:4px;">ブロック数</div>
-                            <div style="font-weight:bold; font-size:1.8rem; color:var(--text-secondary);">${(latestInfo.blocks || 0).toLocaleString()}</div>
+                         <div style="background:var(--bg-tertiary); padding:16px 8px; border-radius:8px; text-align:center; border:1px solid var(--border-light); display:flex; flex-direction:column; justify-content:center;">
+                            <div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:4px; white-space:nowrap; overflow:hidden;">ブロック数</div>
+                            <div style="font-weight:bold; font-size:1.6rem; color:var(--text-secondary);">${(latestInfo.blocks || 0).toLocaleString()}</div>
                         </div>
                     </div>
 
