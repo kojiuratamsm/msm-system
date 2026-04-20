@@ -7,25 +7,14 @@ module.exports = async (req, res) => {
     }
 
     try {
-        const clientId = '2007953797';
-        const clientSecret = 'e37838b88a6c7ef0c0bf3176171da27d';
+        // セキュリティのため、アクセストークンはVercelの環境変数から取得します
+        const token = process.env.LINE_ACCESS_TOKEN;
+        if (!token) throw new Error('サーバーにLINE_ACCESS_TOKENが設定されていません');
 
-        // 1. Get access token
-        const tokenRes = await fetch('https://api.line.me/v2/oauth/accessToken', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: `grant_type=client_credentials&client_id=${clientId}&client_secret=${clientSecret}`
-        });
-        const tokenData = await tokenRes.json();
-        const token = tokenData.access_token;
-        
-        if (!token) throw new Error('Failed to retrieve token');
-
-        // 2. Fetch yesterday's stats
-        const offset = new Date().getTimezoneOffset() * 60000;
-        const now = new Date(Date.now() - offset);
-        now.setDate(now.getDate() - 1); 
-        const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
+        // LINE API規定により、統計データは「前日」のものを取得します
+        const offset = 9 * 60 * 60000; // JST (UTC+9)
+        const yesterday = new Date(Date.now() - offset - 24 * 60 * 60000);
+        const dateStr = yesterday.toISOString().slice(0, 10).replace(/-/g, '');
 
         const insightRes = await fetch(`https://api.line.me/v2/bot/insight/followers?date=${dateStr}`, {
             headers: { 'Authorization': `Bearer ${token}` }
@@ -33,7 +22,18 @@ module.exports = async (req, res) => {
         
         const insightData = await insightRes.json();
 
-        res.status(200).json(insightData);
+        // エラーレスポンスの処理
+        if (insightData.message && insightData.details) {
+             return res.status(400).json({ error: insightData.message, detail: insightData.details[0]?.message });
+        }
+
+        res.status(200).json({
+            status: insightData.status,
+            followers: insightData.followers,
+            targetedReaches: insightData.targetedReaches,
+            blocks: insightData.blocks,
+            date: dateStr
+        });
     } catch (e) {
         console.error(e);
         res.status(500).json({ error: e.message });

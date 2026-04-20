@@ -248,7 +248,7 @@ App.Pages.youtube = async function() {
                     </select>
                 </div>
                 <div style="display:flex; gap:8px;">
-                    <button class="btn-success" onclick="syncUTAGEStats()"><i class="ph ph-cloud-arrow-down"></i> UTAGEデータ同期</button>
+                    <button class="btn-success" onclick="syncLINERealtime()"><i class="ph ph-arrows-clockwise"></i> LINEから最新情報を同期</button>
                     <button class="btn-secondary" onclick="addLine()"><i class="ph ph-plus"></i> 手動追加</button>
                 </div>
             </div>
@@ -294,8 +294,12 @@ App.Pages.youtube = async function() {
                             <div style="font-weight:bold; font-size:1.8rem; color:var(--danger);">${channelSubs.toLocaleString()}</div>
                         </div>
                         <div style="flex:1; background:var(--bg-tertiary); padding:16px; border-radius:8px; text-align:center; border:2px solid var(--success);">
-                            <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:4px;">UTAGE LINE友だち数</div>
+                            <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:4px;">最新LINE友だち数</div>
                             <div style="font-weight:bold; font-size:1.8rem; color:var(--success);">${latestInfo.subs.toLocaleString()}</div>
+                        </div>
+                         <div style="flex:1; background:var(--bg-tertiary); padding:16px; border-radius:8px; text-align:center; border:1px solid var(--border-light);">
+                            <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:4px;">ブロック数</div>
+                            <div style="font-weight:bold; font-size:1.8rem; color:var(--text-secondary);">${(latestInfo.blocks || 0).toLocaleString()}</div>
                         </div>
                     </div>
 
@@ -726,9 +730,45 @@ App.Pages.youtube = async function() {
             App.navigate('youtube');
         });
 
-        // LINE
-        window.syncUTAGEStats = async () => {
-            alert('UTAGE APIキー (\`ffdf...6fcd\`) はシステムに保存されました！\n\nここからの実際のデータ取得には、「UTAGEデータのエンドポイント(URL)」が書かれた公式のリファレンスが必要です。準備ができ次第、リアルタイムで正確な数字が反映されるようになります。');
+        // LINE API Realtime Sync
+        window.syncLINERealtime = async () => {
+            if(!selectedLineId) return;
+            const line = lines.find(x => x.id == selectedLineId);
+            if(!line) return;
+
+            try {
+                const btn = event.target.closest('button');
+                const originalHtml = btn.innerHTML;
+                btn.innerHTML = '<i class="ph ph-spinner-gap spinning"></i> 同期中...';
+                btn.disabled = true;
+
+                const res = await fetch('/api/line');
+                const data = await res.json();
+
+                if(!res.ok) throw new Error(data.error || 'LINE API通信エラー');
+
+                // 取得できた数字（前日時点の確定値）
+                const followers = data.followers;
+                const blocks = data.blocks;
+                const dateRaw = data.date; // 20240420
+                const formattedDate = `${dateRaw.slice(0,4)}-${dateRaw.slice(4,6)}-${dateRaw.slice(6,8)}`;
+
+                let h = line.history || [];
+                // 同じ日付のデータがあれば上書き、なければ追加
+                h = h.filter(x => x.date !== formattedDate);
+                h.push({ date: formattedDate, subs: followers, blocks: blocks });
+                h.sort((a,b) => new Date(a.date) - new Date(b.date));
+
+                await Store.updateYTLine(line.id, { ...line, history: h });
+                
+                alert(`LINE APIから同期完了！\n日付: ${formattedDate}\n友だち数: ${followers}\nブロック数: ${blocks}`);
+                App.navigate('youtube');
+            } catch(e) {
+                alert('同期エラー: ' + e.message);
+                console.error(e);
+            } finally {
+                // Re-rendering happens with Navigate, no need to reset button state manually if everything ok
+            }
         };
 
         window.addLine = () => {
