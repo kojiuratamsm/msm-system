@@ -18,11 +18,12 @@ const App = {
             'sales': '売上シミュレーション',
             'finance': '財務管理',
             'payroll': '給与計算',
-            'tasks': 'タスク表'
+            'tasks': 'タスク表',
+            'invites': 'メンバー招待・登録情報'
         };
         document.getElementById('page-title').textContent = titleMap[target] || '';
 
-        if (target === 'finance' || target === 'payroll') {
+        if (target === 'finance' || target === 'payroll' || target === 'invites' || target === 'meo_users') {
             const user = Auth.getCurrentUser();
             if (!user || user.role !== 'admin') {
                 alert('管理者以外閲覧できません');
@@ -161,7 +162,7 @@ const App = {
             
             // Sidebar will explicitly show all items to all users now.
             // When clicked, non-admins will see a rejection screen for restricted pages.
-            const allNavs = ['dashboard', 'services', 'customers', 'sales', 'finance', 'payroll', 'tasks', 'research', 'youtube', 'meo_users', 'settings'];
+            const allNavs = ['dashboard', 'services', 'customers', 'sales', 'finance', 'payroll', 'tasks', 'research', 'youtube', 'meo_users', 'invites', 'settings'];
             allNavs.forEach(nav => {
                 const el = document.querySelector(`li[data-target="${nav}"]`);
                 if (el) el.style.display = 'flex';

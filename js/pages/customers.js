@@ -339,7 +339,7 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                                     </td>
                                     <td>
                                         <div style="font-size:0.8rem; line-height:1.4;">
-                                            <div><strong>予約:</strong> ${d.reserveUrl ? `<a href="#" onclick="navigator.clipboard.writeText('${d.reserveUrl}').then(() => alert('リンクをコピーしました')); return false;" style="color:var(--info);">リンクをコピー <i class="ph ph-copy"></i></a>` : '-'}</div>
+                                            <div><strong>予約:</strong> ${d.reserveUrl ? `<div style="display:inline-flex; align-items:center; gap:6px; margin-top:2px;"><a href="${d.reserveUrl}" target="_blank" style="color:var(--info); font-weight:500; font-size:0.85rem; text-decoration:none;"><i class="ph ph-arrow-square-out"></i> 開く</a> <button class="btn-icon" style="padding:4px 8px; font-size:0.75rem; background:var(--bg-tertiary); border:1px solid var(--border-light); border-radius:4px; display:inline-flex; align-items:center; gap:4px; color:var(--text-secondary);" onclick="navigator.clipboard.writeText('${d.reserveUrl}').then(()=>alert('リンクをコピーしました'));"><i class="ph ph-copy"></i>コピー</button></div>` : '-'}</div>
                                             <div><strong>カテゴリ:</strong> ${d.gbpCategory || '-'}</div>
                                             <div><strong>その他:</strong> ${d.gbpOther || '-'}</div>
                                         </div>
