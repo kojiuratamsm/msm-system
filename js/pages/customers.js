@@ -327,7 +327,7 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                                     </td>
                                     <td>
                                         <div style="font-size:0.8rem; margin-bottom: 8px; max-height:100px; overflow-y:auto; line-height: 1.4;">
-                                            ${(d.blogs || []).map(b => `
+                                            ${(d.blogs || []).sort((a, b) => new Date(b.date) - new Date(a.date)).map(b => `
                                                 <div style="border-bottom: 1px solid var(--border-light); padding-bottom:4px; margin-bottom:4px;">
                                                     <div><strong>${b.date}</strong> <span class="badge badge-success" style="font-size:0.6rem;">${b.person || '未担当'}</span></div>
                                                     <div><a href="${b.url || '#'}" target="_blank" style="color:var(--info); font-weight:bold;">${b.name || '-'}</a></div>
@@ -719,6 +719,8 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                 if (!c) return;
                 if (!c.blogs) c.blogs = [];
                 c.blogs.push({ name: blogName, date: blogDate, url: blogUrl, person: blogPerson });
+                // 投稿日の新しい順に並び替え
+                c.blogs.sort((a, b) => new Date(b.date) - new Date(a.date));
                 await Store.updateCustomer('meo', id, { blogs: c.blogs });
                 
                 closeBlogModal();
