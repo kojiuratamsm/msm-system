@@ -9,8 +9,8 @@ App.Pages.invites = async function() {
             </div>
             
             <p style="color: var(--text-secondary); margin-bottom: 24px; line-height: 1.6;">
-                新しく入社した方や、アカウントを発行したい方へ、下記のURLと合言葉（パスワードのようなもの）をお伝えください。<br>
-                メンバー自身でアカウント登録を行うと、指定した部署の権限が自動的に付与されます。
+                新しく入社した方や、アカウントを発行したい方へ、下記のURLを送信してください。<br>
+                指定した部署の権限が自動的に付与されます。
             </p>
 
             <h4 style="margin-bottom: 16px; color: var(--text-primary); font-size: 1rem;">各部署の専用登録フォームリンク</h4>
