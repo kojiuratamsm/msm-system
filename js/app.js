@@ -19,7 +19,7 @@ const App = {
             'finance': '財務管理',
             'payroll': '給与計算',
             'tasks': 'タスク表',
-            'invites': 'メンバー招待・登録情報'
+            'invites': 'リンク'
         };
         document.getElementById('page-title').textContent = titleMap[target] || '';
 
@@ -63,6 +63,27 @@ const App = {
     init() {
         this.updateDate();
         setInterval(() => this.updateDate(), 60000);
+
+        // URLに特定の招待パラメータがある場合の処理
+        const urlParams = new URLSearchParams(window.location.search);
+        const inviteParam = urlParams.get('invite');
+        if (inviteParam) {
+            const codeMap = {
+                'plus_one': 'Plus One',
+                'meo': 'MEO Taisaku',
+                'tsushin': 'MSM Tsushin'
+            };
+            if (codeMap[inviteParam]) {
+                const regCodeEl = document.getElementById('reg-code');
+                const regCodeGrp = document.getElementById('reg-code-group');
+                if (regCodeEl) regCodeEl.value = codeMap[inviteParam];
+                if (regCodeGrp) regCodeGrp.style.display = 'none';
+
+                // 未ログイン状態なら登録画面をデフォルトに開く処理（このあとcheckAuthで処理される）
+                document.getElementById('login-view').classList.remove('active');
+                document.getElementById('register-view').classList.add('active');
+            }
+        }
 
         // Sidebar Navigation
         document.getElementById('nav-list').addEventListener('click', (e) => {
