@@ -446,6 +446,37 @@ App.Pages.youtube = async function() {
                         });
                     }
                 }
+                
+                // --- 全自動リアルタイム同期処理 ---
+                // まだ今日のデータが取得されていない、または強制更新フラグがあれば裏側でこっそりAPIを叩いて画面を更新する
+                const isSyncing = document.body.getAttribute('data-line-syncing') === 'true';
+                if (!isSyncing) {
+                    document.body.setAttribute('data-line-syncing', 'true');
+                    fetch('/api/line').then(res => res.json()).then(async data => {
+                        if(data.followers !== undefined) {
+                            const dateRaw = data.date; 
+                            const formattedDate = `${dateRaw.slice(0,4)}-${dateRaw.slice(4,6)}-${dateRaw.slice(6,8)}`;
+                            
+                            // 更新の必要がある場合のみ（最新じゃなければ）上書きして再描画
+                            const prevLatest = h[h.length - 1];
+                            if (!prevLatest || prevLatest.date !== formattedDate || prevLatest.subs !== data.followers || prevLatest.blocks !== data.blocks) {
+                                let newH = h.filter(x => x.date !== formattedDate);
+                                newH.push({ date: formattedDate, subs: data.followers, blocks: data.blocks });
+                                newH.sort((a,b) => new Date(a.date) - new Date(b.date));
+                                await Store.updateYTLine(line.id, { ...line, history: newH });
+                                document.body.removeAttribute('data-line-syncing');
+                                App.navigate('youtube'); // 再レンダリングして数値を最新にする
+                            } else {
+                                document.body.removeAttribute('data-line-syncing');
+                            }
+                        } else {
+                            document.body.removeAttribute('data-line-syncing');
+                        }
+                    }).catch(e => {
+                        console.error('Auto sync error:', e);
+                        document.body.removeAttribute('data-line-syncing');
+                    });
+                }
             }
         }
 
