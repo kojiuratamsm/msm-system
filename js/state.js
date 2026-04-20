@@ -161,6 +161,11 @@ const Store = {
         }));
     },
     
+    async getUsers() {
+        const { data } = await supabase.from('users').select('*');
+        return data || [];
+    },
+    
     async getSettings() {
         try {
             const { data, error } = await supabase.from('customers').select('*').eq('service_type', 'settings');
@@ -188,6 +193,46 @@ const Store = {
 
 // Auth
 const Auth = {
+    async register(name, email, password, code) {
+        let role = '';
+        let suffix = '';
+        if (code === 'Plus One') {
+            role = 'plusOneMember';
+            suffix = ' (Plus One)';
+        } else if (code === 'MEO Taisaku') {
+            role = 'meoMember';
+            suffix = ' (MEO)';
+        } else if (code === 'MSM Tsushin') {
+            role = 'telecomMember';
+            suffix = ' (通信)';
+        } else {
+            alert('招待コードが間違っています。');
+            return false;
+        }
+
+        try {
+            const { data: existing } = await supabase.from('users').select('id').eq('email', email);
+            if (existing && existing.length > 0) {
+                alert('このメールアドレスは既に登録されています。');
+                return false;
+            }
+            const { error } = await supabase.from('users').insert([{
+                email: email,
+                password: password,
+                role: role,
+                name: name + suffix
+            }]);
+            if (error) {
+                console.error(error);
+                return false;
+            }
+            Store.logAction(email, '新規メンバー登録しました').catch(e => console.error(e));
+            return true;
+        } catch(e) {
+            console.error(e);
+            return false;
+        }
+    },
     async login(email, password) {
         try {
             const { data, error } = await supabase.from('users').select('*').eq('email', email).eq('password', password).single();
@@ -197,6 +242,9 @@ const Auth = {
                 return false;
             }
             if (data) {
+                // ログイン履歴を記録 (非同期で投げておく)
+                Store.logAction(data.email, 'システムにログインしました').catch(e => console.error(e));
+                
                 localStorage.setItem('msm_current_user', JSON.stringify({ 
                     name: data.name, 
                     role: data.role, 
@@ -234,7 +282,7 @@ const Auth = {
     getDepartment() {
         const u = this.getCurrentUser();
         if (!u || u.role === 'admin') return 'all';
-        if (u.email === 'contact@msm-fund.com') return 'plusOne';
+        if (u.email === 'contact@msm-fund.com' || u.role === 'plusOneMember') return 'plusOne';
         if (u.email === 'info@msm-fund.com') return 'meo';
         if (u.email === 'jinzai@msm-fund.com') return 'telecom';
         return 'all';

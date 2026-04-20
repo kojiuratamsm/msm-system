@@ -103,6 +103,32 @@ const App = {
             }
         });
 
+        // Register Submit
+        const regForm = document.getElementById('register-form');
+        if (regForm) {
+            regForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const name = document.getElementById('reg-name').value;
+                const email = document.getElementById('reg-email').value;
+                const pass = document.getElementById('reg-password').value;
+                const code = document.getElementById('reg-code').value;
+                const errorEl = document.getElementById('register-error');
+                
+                errorEl.textContent = '登録処理中...';
+                const success = await Auth.register(name, email, pass, code);
+                if (success) {
+                    alert('登録が完了しました！ログイン画面から設定した内容でログインしてください。');
+                    document.getElementById('register-view').classList.remove('active');
+                    document.getElementById('login-view').classList.add('active');
+                    document.getElementById('email').value = email; // ログインしやすいようにセット
+                    regForm.reset();
+                    errorEl.textContent = '';
+                } else {
+                    errorEl.textContent = '登録に失敗しました。設定内容に誤りがないかご確認ください。';
+                }
+            });
+        }
+
         // Apply visual settings
         Store.getSettings().then(settings => {
             if (settings && settings.logoUrl) {
@@ -186,6 +212,13 @@ App.Pages.dashboard = async function(selectedYearText = null) {
     const user = Auth.getCurrentUser();
     const isAdmin = user && user.role === 'admin';
     const dept = Auth.getDepartment();
+
+    let allUsers = [];
+    let systemLogs = [];
+    if (isAdmin) {
+        allUsers = await Store.getUsers();
+        systemLogs = await Store.getLogs();
+    }
     
     // Default to current year
     const currentYear = new Date().getFullYear();
@@ -383,6 +416,47 @@ App.Pages.dashboard = async function(selectedYearText = null) {
                 </div>
                 <div style="height: 400px; width: 100%;">
                     <canvas id="dashboardChart"></canvas>
+                </div>
+            </div>
+        `;
+
+        // ユーザー一覧とログイン履歴パネル
+        html += `
+            <div class="card" style="margin-bottom: 24px;">
+                <div class="card-header" style="border-bottom: 1px solid var(--border-light); padding-bottom: 16px; margin-bottom: 16px;">
+                    <h3 class="card-title" style="font-size: 1.2rem; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+                        <i class="ph ph-shield-check"></i> ユーザー管理・アクセスログ
+                    </h3>
+                </div>
+                
+                <div class="grid grid-2" style="gap: 24px;">
+                    <!-- 登録ユーザー一覧 -->
+                    <div>
+                        <h4 style="margin-bottom: 12px; color: var(--text-secondary); font-size: 0.9rem;">👥 登録済みアカウント一覧</h4>
+                        <div style="max-height: 300px; overflow-y: auto; padding-right: 8px;">
+                            ${allUsers.length === 0 ? '<p>データなし</p>' : allUsers.map(u => `
+                                <div style="padding: 12px; background: var(--bg-tertiary); border-radius: 8px; margin-bottom: 8px; font-size: 0.9rem;">
+                                    <div style="font-weight: bold; margin-bottom: 4px;">${u.name} <span class="badge" style="background: ${u.role === 'admin' ? 'var(--danger)' : 'var(--primary)'}; color: #fff;">${u.role}</span></div>
+                                    <div style="color: var(--text-secondary);"><i class="ph ph-envelope"></i> ${u.email}</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                    
+                    <!-- システムログ -->
+                    <div>
+                        <h4 style="margin-bottom: 12px; color: var(--text-secondary); font-size: 0.9rem;">📋 最近のシステムログ (ログイン履歴など)</h4>
+                        <div style="max-height: 300px; overflow-y: auto; padding-right: 8px;">
+                            ${systemLogs.length === 0 ? '<p>ログなし</p>' : systemLogs.map(l => `
+                                <div style="display: flex; gap: 12px; padding: 12px; border-bottom: 1px solid var(--border-light); font-size: 0.85rem;">
+                                    <div style="color: var(--text-secondary); white-space: nowrap;">${new Date(l.date).toLocaleString('ja-JP', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}</div>
+                                    <div>
+                                        <span style="font-weight: 600; color: var(--primary-dark);">${l.user}</span> が <span style="font-weight: bold;">${l.desc}</span>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
                 </div>
             </div>
         `;

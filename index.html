@@ -61,6 +61,65 @@
                         <div class="error-msg" id="login-error"></div>
                         <button type="submit" class="btn-primary btn-block">Sign In</button>
                     </form>
+                    <div style="text-align: center; margin-top: 16px;">
+                        <a href="#" onclick="document.getElementById('login-view').classList.remove('active'); document.getElementById('register-view').classList.add('active'); return false;" style="color: var(--primary); text-decoration: none; font-size: 0.9rem; font-weight: 500;">メンバー登録はこちら（招待制）</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Register Screen -->
+    <div id="register-view" class="view">
+        <div class="login-split">
+            <div class="login-left">
+                <div class="login-graphics">
+                    <div class="graphic-shape shape1"></div>
+                    <div class="graphic-shape shape2"></div>
+                </div>
+            </div>
+            <div class="login-right">
+                <div class="login-card">
+                    <div class="login-header">
+                        <h1 class="logo">MSM</h1>
+                        <h2>Member Registration</h2>
+                        <p>招待コードと必要情報を入力してメンバー登録を行ってください。</p>
+                    </div>
+                    <form id="register-form">
+                        <div class="input-group">
+                            <label>お名前</label>
+                            <div class="input-wrapper">
+                                <i class="ph ph-user"></i>
+                                <input type="text" id="reg-name" placeholder="Name" required>
+                            </div>
+                        </div>
+                        <div class="input-group">
+                            <label>Email</label>
+                            <div class="input-wrapper">
+                                <i class="ph ph-envelope"></i>
+                                <input type="email" id="reg-email" placeholder="Email address" required>
+                            </div>
+                        </div>
+                        <div class="input-group">
+                            <label>Password</label>
+                            <div class="input-wrapper">
+                                <i class="ph ph-lock-key"></i>
+                                <input type="password" id="reg-password" placeholder="Password" required>
+                            </div>
+                        </div>
+                        <div class="input-group">
+                            <label>招待コード (合言葉)</label>
+                            <div class="input-wrapper">
+                                <i class="ph ph-key"></i>
+                                <input type="text" id="reg-code" placeholder="指定された合言葉" required>
+                            </div>
+                        </div>
+                        <div class="error-msg" id="register-error"></div>
+                        <button type="submit" class="btn-primary btn-block">登録する</button>
+                    </form>
+                    <div style="text-align: center; margin-top: 16px;">
+                        <a href="#" onclick="document.getElementById('register-view').classList.remove('active'); document.getElementById('login-view').classList.add('active'); return false;" style="color: var(--text-secondary); text-decoration: none; font-size: 0.9rem;">ログイン画面に戻る</a>
+                    </div>
                 </div>
             </div>
         </div>
