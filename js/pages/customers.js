@@ -339,7 +339,7 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                                     </td>
                                     <td>
                                         <div style="font-size:0.8rem; line-height:1.4;">
-                                            <div><strong>予約:</strong> ${d.reserveUrl ? `<a href="${d.reserveUrl}" target="_blank" style="color:var(--info);">リンク</a>` : '-'}</div>
+                                            <div><strong>予約:</strong> ${d.reserveUrl ? `<a href="#" onclick="navigator.clipboard.writeText('${d.reserveUrl}').then(() => alert('リンクをコピーしました')); return false;" style="color:var(--info);">リンクをコピー <i class="ph ph-copy"></i></a>` : '-'}</div>
                                             <div><strong>カテゴリ:</strong> ${d.gbpCategory || '-'}</div>
                                             <div><strong>その他:</strong> ${d.gbpOther || '-'}</div>
                                         </div>
