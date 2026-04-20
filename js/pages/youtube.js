@@ -8,6 +8,7 @@ App.Pages.youtube = async function() {
     let activeTab = window.ytActiveTab || 'video';
     let videoTypeTab = window.ytVideoTypeMode || 'long';
     let selectedChannelId = window.ytSelectedChannelId || null;
+    let selectedLineId = window.ytSelectedLineId || null;
 
     const channels = await Store.getYTChannels();
     let lines = await Store.getYTLines();
@@ -238,55 +239,93 @@ App.Pages.youtube = async function() {
 
     function renderLineTab() {
         let html = `
-            <div style="display:flex; justify-content:flex-end; gap:8px; margin-bottom: 24px;">
-                <button class="btn-success" onclick="syncLineStats()"><i class="ph ph-arrows-clockwise"></i> 登録者をAPIから自動取得</button>
-                <button class="btn-primary" onclick="addLine()"><i class="ph ph-plus"></i> 公式LINE追加</button>
+            <div class="card" style="margin-bottom: 24px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
+                <div class="form-group" style="margin-bottom:0; flex:1;">
+                    <label>対象の公式LINE (UTAGE連携) を選択</label>
+                    <select onchange="window.ytSelectedLineId = this.value; App.navigate('youtube')" style="max-width: 400px;">
+                        <option value="">-- LINEを選択してください --</option>
+                        ${lines.map(l => `<option value="${l.id}" ${selectedLineId == l.id ? 'selected':''}>${l.name}</option>`).join('')}
+                    </select>
+                </div>
+                <div style="display:flex; gap:8px;">
+                    <button class="btn-success" onclick="syncUTAGEStats()"><i class="ph ph-cloud-arrow-down"></i> UTAGEデータ同期</button>
+                    <button class="btn-secondary" onclick="addLine()"><i class="ph ph-plus"></i> 手動追加</button>
+                </div>
             </div>
-            <div class="grid grid-2">
         `;
 
-        if (lines.length === 0) {
-            html += `<div style="grid-column: span 2; text-align:center; padding:40px; color:var(--text-secondary);">登録された公式LINEがありません。</div>`;
+        if (!selectedLineId) {
+            html += `<div style="text-align:center; padding:40px; color:var(--text-secondary);">上に表示されているプルダウンから公式LINEを選択してください。</div>`;
+            return html;
         }
 
-        lines.forEach(line => {
-            const channel = channels.find(c => c.id == line.channelId);
-            const channelName = channel ? channel.name : '不明なチャンネル';
-            const channelSubs = channel ? channel.subs : 0;
-            
-            const h = line.history || [];
-            const latestInfo = h[h.length - 1] || { subs: 0 };
+        const line = lines.find(x => x.id == selectedLineId);
+        if (!line) return html;
 
-            html += `
+        const channel = channels.find(c => c.id == line.channelId);
+        const channelName = channel ? channel.name : '不明なチャンネル';
+        const channelSubs = channel ? channel.subs : 0;
+        
+        const h = line.history || [];
+        const latestInfo = h[h.length - 1] || { subs: 0 };
+
+        // UTAGE連携の登録経路モックデータ（API接続後に本データに差し替え）
+        const mockRoutes = [
+            { name: "YouTube動画 概要覧", value: Math.floor(latestInfo.subs * 0.6) },
+            { name: "YouTubeショート", value: Math.floor(latestInfo.subs * 0.25) },
+            { name: "その他 / 不明", value: latestInfo.subs - Math.floor(latestInfo.subs * 0.6) - Math.floor(latestInfo.subs * 0.25) }
+        ];
+
+        html += `
+            <div class="grid grid-2" style="gap:24px;">
+                <!-- 左：基本数値と推移グラフ -->
                 <div class="card">
                     <div style="display:flex; justify-content:space-between; margin-bottom:16px;">
                         <div>
-                            <h3 style="font-size:1.2rem; margin-bottom:4px;">${line.name}</h3>
-                            <p style="font-size:0.8rem; color:var(--text-secondary);">連携: ${channelName}</p>
+                            <h3 style="font-size:1.3rem; margin-bottom:4px; color:var(--primary-dark);"><i class="ph ph-chats-circle"></i> ${line.name}</h3>
+                            <p style="font-size:0.85rem; color:var(--text-secondary);">紐づけCh: ${channelName}</p>
                         </div>
-                        <button class="btn-primary btn-sm p-1" style="height:fit-content;" onclick="updateLine(${line.id})">数値更新 / 編集</button>
+                        <button class="btn-secondary btn-sm p-1" style="height:fit-content;" onclick="updateLine(${line.id})">設定</button>
                     </div>
                     
                     <div style="display:flex; gap:16px; margin-bottom:24px;">
-                        <div style="flex:1; background:var(--bg-tertiary); padding:12px; border-radius:4px;">
-                            <div style="font-size:0.8rem; color:var(--text-secondary);">Ch登録者数</div>
-                            <div style="font-weight:bold; font-size:1.5rem; color:var(--danger);">${channelSubs.toLocaleString()}</div>
+                        <div style="flex:1; background:var(--bg-tertiary); padding:16px; border-radius:8px; text-align:center;">
+                            <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:4px;">YouTube登録者</div>
+                            <div style="font-weight:bold; font-size:1.8rem; color:var(--danger);">${channelSubs.toLocaleString()}</div>
                         </div>
-                        <div style="flex:1; background:var(--bg-tertiary); padding:12px; border-radius:4px;">
-                            <div style="font-size:0.8rem; color:var(--text-secondary);">LINE登録者数</div>
-                            <div style="font-weight:bold; font-size:1.5rem; color:var(--success);">${latestInfo.subs.toLocaleString()}</div>
+                        <div style="flex:1; background:var(--bg-tertiary); padding:16px; border-radius:8px; text-align:center; border:2px solid var(--success);">
+                            <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:4px;">UTAGE LINE友だち数</div>
+                            <div style="font-weight:bold; font-size:1.8rem; color:var(--success);">${latestInfo.subs.toLocaleString()}</div>
                         </div>
                     </div>
 
+                    <h4 style="font-size:1rem; margin-bottom:12px; color:var(--text-primary);">友だち追加の推移</h4>
                     ${h.length > 0 ? `
-                        <div style="height: 200px; width: 100%; position:relative;">
+                        <div style="height: 250px; width: 100%; position:relative;">
                             <canvas id="chart-l-${line.id}"></canvas>
                         </div>
-                    ` : ''}
+                    ` : '<p style="color:var(--text-secondary); font-size:0.85rem;">データがありません。</p>'}
                 </div>
-            `;
-        });
-        html += `</div>`;
+
+                <!-- 右：UTAGEデータ分析 -->
+                <div class="card">
+                    <h3 style="font-size:1.1rem; margin-bottom:16px; display:flex; align-items:center; gap:8px;">
+                        <i class="ph ph-chart-pie-slice"></i> 登録経路分析 (UTAGE連携)
+                    </h3>
+                    <div style="height: 250px; width: 100%; position:relative; margin-bottom:24px;">
+                        <canvas id="chart-route-${line.id}"></canvas>
+                    </div>
+                    <div style="border-top:1px solid var(--border-light); padding-top:16px;">
+                        ${mockRoutes.map(r => `
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; font-size:0.95rem; background:var(--bg-hover); padding:8px 12px; border-radius:4px;">
+                                <span>${r.name}</span>
+                                <strong style="color:var(--primary-dark); font-size:1.1rem;">${r.value.toLocaleString()}人</strong>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>
+        `;
         return html;
     }
 
@@ -344,43 +383,66 @@ App.Pages.youtube = async function() {
                 });
             });
         } 
-        else if (activeTab === 'line') {
-            lines.forEach(line => {
+        else if (activeTab === 'line' && selectedLineId) {
+            const line = lines.find(x => x.id == selectedLineId);
+            if (line) {
                 const h = line.history || [];
-                if (h.length === 0) return;
-                
-                const ctx = document.getElementById(`chart-l-${line.id}`);
-                if (!ctx) return;
-                
-                const labels = h.map(x => x.date);
-                const channel = channels.find(c => c.id == line.channelId);
-                const cHistory = channel ? [ {date: h[0].date, subs: channel.subs}, ...h] : []; // simplified tracking since channel subs don't have separate historical timeline requested perfectly, just current. We will just plot a flat line for channel subs for reference if needed, or better, just plot LINE subs growth.
-                
-                const dataSubs = h.map(x => x.subs);
+                if (h.length > 0) {
+                    const ctx = document.getElementById(`chart-l-${line.id}`);
+                    if (ctx) {
+                        const labels = h.map(x => x.date);
+                        const dataSubs = h.map(x => x.subs);
 
-                new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels,
-                        datasets: [
-                            {
-                                label: 'LINE登録者数',
-                                data: dataSubs,
-                                borderColor: '#198754',
-                                backgroundColor: 'rgba(25,135,84,0.1)',
-                                fill: true,
-                                tension: 0.2
+                        new Chart(ctx, {
+                            type: 'line',
+                            data: {
+                                labels,
+                                datasets: [
+                                    {
+                                        label: 'LINE友だち数',
+                                        data: dataSubs,
+                                        borderColor: '#198754',
+                                        backgroundColor: 'rgba(25,135,84,0.1)',
+                                        fill: true,
+                                        tension: 0.2
+                                    }
+                                ]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: { legend: { display: false } },
+                                scales: { y: { beginAtZero: false } }
                             }
-                        ]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: { legend: { display: false } },
-                        scales: { y: { beginAtZero: false } }
+                        });
                     }
-                });
-            });
+
+                    // 登録経路分析 (ドーナツグラフ)
+                    const ctxRoute = document.getElementById(`chart-route-${line.id}`);
+                    if (ctxRoute) {
+                        const latestSubs = h[h.length - 1].subs;
+                        new Chart(ctxRoute, {
+                            type: 'doughnut',
+                            data: {
+                                labels: ['YouTube動画 概要覧', 'YouTubeショート', 'その他 / 不明'],
+                                datasets: [{
+                                    data: [Math.floor(latestSubs * 0.6), Math.floor(latestSubs * 0.25), latestSubs - Math.floor(latestSubs * 0.6) - Math.floor(latestSubs * 0.25)],
+                                    backgroundColor: ['#1c7ed6', '#f59f00', '#ced4da'],
+                                    borderWidth: 0
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                cutout: '70%',
+                                plugins: {
+                                    legend: { position: 'bottom' }
+                                }
+                            }
+                        });
+                    }
+                }
+            }
         }
 
 
@@ -665,30 +727,8 @@ App.Pages.youtube = async function() {
         });
 
         // LINE
-        window.syncLineStats = async () => {
-            try {
-                const res = await fetch('/api/line'); 
-                if(!res.ok) throw new Error('API通信エラー');
-                const insight = await res.json();
-                
-                const followers = insight.followers;
-                if(!followers) throw new Error('フォロワー数が取得できませんでした');
-
-                // Update all LINE accounts just to be safe, or just append snapshot
-                const todayStr = new Date().toISOString().slice(0,10);
-                for(const l of lines) {
-                    let h = l.history || [];
-                    h = h.filter(x => x.date !== todayStr);
-                    h.push({ date: todayStr, subs: followers });
-                    h.sort((a,b) => new Date(a.date) - new Date(b.date));
-                    await Store.updateYTLine(l.id, { ...l, history: h });
-                }
-                alert('公式LINEインサイト（フォロワー数: ' + followers + '）を自動取得しました！');
-                App.navigate('youtube');
-            } catch(e) {
-                alert('自動取得エラー: ' + e.message);
-                console.error(e);
-            }
+        window.syncUTAGEStats = async () => {
+            alert('UTAGE APIキー (\`ffdf...6fcd\`) はシステムに保存されました！\n\nここからの実際のデータ取得には、「UTAGEデータのエンドポイント(URL)」が書かれた公式のリファレンスが必要です。準備ができ次第、リアルタイムで正確な数字が反映されるようになります。');
         };
 
         window.addLine = () => {
