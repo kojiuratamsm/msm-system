@@ -20,11 +20,11 @@ App.Pages.research = async function() {
             <div class="card-header" style="justify-content:space-between; align-items:center;">
                 <h3 class="card-title"><i class="ph ph-magnifying-glass"></i> リサーチ機能 (YouTube)</h3>
                 <div style="display:flex; gap:8px;">
-                    <button class="btn-secondary" onclick="document.getElementById('transcript-modal').classList.add('active')">
-                        <i class="ph ph-article"></i> 文字起こし
+                    <button class="btn-secondary" style="padding: 16px 24px; font-size: 1rem; border: 1px solid var(--border-strong); display: flex; align-items: center; justify-content: center;" onclick="document.getElementById('transcript-modal').classList.add('active')">
+                        <i class="ph ph-article" style="margin-right: 6px;"></i> 文字起こし
                     </button>
-                    <button class="btn-primary" onclick="document.getElementById('add-channel-modal').classList.add('active')">
-                        <i class="ph ph-plus"></i> チャンネル追加
+                    <button class="btn-primary" style="display: flex; align-items: center; justify-content: center;" onclick="document.getElementById('add-channel-modal').classList.add('active')">
+                        <i class="ph ph-plus" style="margin-right: 6px;"></i> チャンネル追加
                     </button>
                 </div>
             </div>

@@ -1,6 +1,4 @@
 
-const fetch = require('node-fetch');
-
 module.exports = async (req, res) => {
     const { videoUrl } = req.query;
 
