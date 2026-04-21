@@ -19,9 +19,14 @@ App.Pages.research = async function() {
         <div class="card" style="margin-bottom: 24px;">
             <div class="card-header" style="justify-content:space-between; align-items:center;">
                 <h3 class="card-title"><i class="ph ph-magnifying-glass"></i> リサーチ機能 (YouTube)</h3>
-                <button class="btn-primary" onclick="document.getElementById('add-channel-modal').classList.add('active')">
-                    <i class="ph ph-plus"></i> 追加
-                </button>
+                <div style="display:flex; gap:8px;">
+                    <button class="btn-secondary" onclick="document.getElementById('transcript-modal').classList.add('active')">
+                        <i class="ph ph-article"></i> 文字起こし
+                    </button>
+                    <button class="btn-primary" onclick="document.getElementById('add-channel-modal').classList.add('active')">
+                        <i class="ph ph-plus"></i> チャンネル追加
+                    </button>
+                </div>
             </div>
             ${!apiKey ? `
                 <div style="background:#fff3cd; color:#856404; padding:12px; border-radius:4px; margin-bottom:16px;">
@@ -106,9 +111,69 @@ App.Pages.research = async function() {
                 </div>
             </div>
         </div>
+
+        <!-- Transcript Modal -->
+        <div class="modal-overlay" id="transcript-modal">
+            <div class="modal-content" style="max-width: 700px;">
+                <div class="modal-header">
+                    <h3 class="modal-title">YouTube動画の文字起こし</h3>
+                    <button class="modal-close" onclick="document.getElementById('transcript-modal').classList.remove('active')"><i class="ph ph-x"></i></button>
+                </div>
+                <div class="form-group pb-2">
+                    <label>YouTube動画URL</label>
+                    <div style="display:flex; gap:8px;">
+                        <input type="url" id="transcript-url" class="input-field" placeholder="https://www.youtube.com/watch?v=..." style="flex:1;">
+                        <button class="btn-primary" onclick="runTranscript()" id="transcript-btn">実行</button>
+                    </div>
+                </div>
+                <div id="transcript-result" style="display:none; margin-top:20px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                        <h4 id="ts-video-title" style="font-size:0.95rem; line-height:1.4; color:var(--primary); flex:1; margin-right:10px;"></h4>
+                        <button class="btn-secondary btn-sm" onclick="copyTranscript()"><i class="ph ph-copy"></i> コピー</button>
+                    </div>
+                    <div id="ts-text-area" style="background:var(--bg-tertiary); padding:16px; border-radius:8px; font-size:0.9rem; line-height:1.6; max-height:400px; overflow-y:auto; white-space:pre-wrap; word-break:break-all;"></div>
+                </div>
+            </div>
+        </div>
     `;
 
     App.mount(html, async () => {
+        window.runTranscript = async () => {
+            const url = document.getElementById('transcript-url').value.trim();
+            if(!url) { alert('URLを入力してください'); return; }
+
+            const btn = document.getElementById('transcript-btn');
+            const resultDiv = document.getElementById('transcript-result');
+            const textArea = document.getElementById('ts-text-area');
+            const titleEl = document.getElementById('ts-video-title');
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="ph ph-spinner-gap spinning"></i> 取得中...';
+            resultDiv.style.display = 'none';
+
+            try {
+                const res = await fetch(`/api/transcript?videoUrl=${encodeURIComponent(url)}`);
+                const data = await res.json();
+
+                if(!res.ok) throw new Error(data.error || '文字起こしの取得に失敗しました。');
+
+                titleEl.textContent = data.title;
+                textArea.textContent = data.text;
+                resultDiv.style.display = 'block';
+            } catch(e) {
+                alert(e.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '実行';
+            }
+        };
+
+        window.copyTranscript = () => {
+            const text = document.getElementById('ts-text-area').textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                alert('文字起こしをクリップボードにコピーしました！');
+            });
+        };
         window.saveApiKey = async () => {
             const key = document.getElementById('youtube-api-key').value.trim();
             if(!key) { alert('APIキーを入力してください'); return; }
