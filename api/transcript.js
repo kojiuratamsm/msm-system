@@ -15,31 +15,53 @@ module.exports = async (req, res) => {
         } else if (videoUrl.includes('shorts/')) {
             videoId = videoUrl.split('shorts/')[1].split('?')[0];
         } else {
-            return res.status(400).json({ error: 'Invalid YouTube URL' });
+            return res.status(400).json({ error: 'YouTubeのURL形式が正しくありません。' });
         }
 
-        // Fetch video page to find caption tracks
-        const response = await fetch(`https://www.youtube.com/watch?v=${videoId}`);
+        // Fetch video page with standard User-Agent to avoid simplified responses
+        const response = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
+                'Accept-Language': 'ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7'
+            }
+        });
         const html = await response.text();
 
-        // Regex to find ytInitialPlayerResponse which contains caption info
+        // extract ytInitialPlayerResponse
         const regex = /ytInitialPlayerResponse\s*=\s*({.+?});/;
         const match = html.match(regex);
 
         if (!match) {
-            return res.status(404).json({ error: 'Could not find caption data. Is the video public?' });
+            return res.status(404).json({ error: '動画データが見つかりませんでした。非公開動画や削除された動画の可能性があります。' });
         }
 
         const playerResponse = JSON.parse(match[1]);
-        const captionTracks = playerResponse.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+        const captions = playerResponse.captions;
 
-        if (!captionTracks || captionTracks.length === 0) {
-            return res.status(404).json({ error: 'This video has no captions enabled.' });
+        if (!captions) {
+            return res.status(404).json({ error: 'この動画には字幕（文字起こし）データが設定されていません。YouTuberが字幕を許可していないか、自動字幕がまだ生成されていません。' });
         }
 
-        // Prefer Japanese, then default to the first one
-        let track = captionTracks.find(t => t.languageCode === 'ja') || captionTracks[0];
-        const captionRes = await fetch(track.baseUrl + '&fmt=json3');
+        const captionTracks = captions.playerCaptionsTracklistRenderer?.captionTracks;
+        if (!captionTracks || captionTracks.length === 0) {
+            return res.status(404).json({ error: 'この動画には取得可能な字幕トラックがありません。' });
+        }
+
+        // Prefer Japanese, then English, then fallback
+        let track = captionTracks.find(t => t.languageCode === 'ja') 
+                 || captionTracks.find(t => t.languageCode === 'en')
+                 || captionTracks[0];
+
+        const captionRes = await fetch(track.baseUrl + '&fmt=json3', {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
+            }
+        });
+        
+        if (!captionRes.ok) {
+            return res.status(500).json({ error: '字幕データの取得中にエラーが発生しました。' });
+        }
+
         const captionData = await captionRes.json();
 
         // Concatenate text segments
@@ -51,7 +73,7 @@ module.exports = async (req, res) => {
             .trim();
 
         if (!fullText) {
-            return res.status(404).json({ error: 'Caption text is empty.' });
+            return res.status(404).json({ error: '字幕テキストが空でした。' });
         }
 
         res.status(200).json({ 
@@ -61,6 +83,6 @@ module.exports = async (req, res) => {
 
     } catch (error) {
         console.error('Transcript error:', error);
-        res.status(500).json({ error: 'Failed to fetch transcript: ' + error.message });
+        res.status(500).json({ error: 'サーバー処理中にエラーが発生しました。' });
     }
 };
