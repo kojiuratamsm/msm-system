@@ -20,7 +20,10 @@ App.Pages.youtube = async function() {
 
     const getHtml = () => `
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; flex-wrap:wrap; gap:16px;">
-            <h2 style="font-size:1.5rem;">YouTube 管理</h2>
+            <div style="display:flex; align-items:center; gap:16px;">
+                <h2 style="font-size:1.5rem; margin:0;">YouTube 管理</h2>
+                <button class="btn-sm" onclick="window.ytActiveTab='script'; App.navigate('youtube')" style="background: ${activeTab === 'script' ? '#dc3545' : 'transparent'}; color: ${activeTab === 'script' ? 'white' : '#dc3545'}; border: 1px solid #dc3545;"><i class="ph ph-notebook"></i> 台本作成</button>
+            </div>
             <div style="display:flex; gap:8px;">
                 <button class="btn-sm ${activeTab === 'video' ? 'btn-primary' : 'btn-secondary'}" onclick="window.ytActiveTab='video'; App.navigate('youtube')"><i class="ph ph-video-camera"></i> 動画進捗</button>
                 <button class="btn-sm ${activeTab === 'line' ? 'btn-primary' : 'btn-secondary'}" onclick="window.ytActiveTab='line'; App.navigate('youtube')"><i class="ph ph-chat-circle-dots"></i> 公式LINE</button>
@@ -29,7 +32,7 @@ App.Pages.youtube = async function() {
             </div>
         </div>
 
-        ${activeTab === 'video' ? renderVideoTab() : renderLineTab()}
+        ${activeTab === 'video' ? renderVideoTab() : (activeTab === 'script' ? renderScriptTab() : renderLineTab())}
 
         <!-- Modals -->
         <div class="modal-overlay" id="yt-channel-modal">
@@ -107,65 +110,7 @@ App.Pages.youtube = async function() {
             </div>
         </div>
 
-        <!-- YouTube Script Editor Modal -->
-        <div class="modal-overlay" id="yt-script-modal">
-            <div class="modal-content" style="max-width: 900px; width: 95%; max-height: 95vh; overflow: hidden; display: flex; flex-direction: column; padding: 0;">
-                <div class="modal-header" style="padding: 16px 24px; border-bottom: 1px solid var(--border-light); flex-shrink: 0;">
-                    <div style="flex: 1;">
-                        <h3 class="modal-title">YouTube台本作成ツール</h3>
-                        <div id="script-total-chars" style="font-size: 0.85rem; color: var(--primary); font-weight: bold; margin-top: 4px;">合計文字数: 0 文字 (空白抜き)</div>
-                    </div>
-                    <div style="display: flex; gap: 8px; align-items: center;">
-                        <select id="script-history-select" class="input-field" style="width: 200px; margin-bottom: 0;" onchange="loadSelectedScript(this.value)">
-                            <option value="">-- 保存済みを選択 --</option>
-                        </select>
-                        <button class="btn-secondary btn-sm" onclick="newScript()"><i class="ph ph-file-plus"></i> 新規</button>
-                        <button class="btn-primary btn-sm" onclick="saveScript()"><i class="ph ph-floppy-disk"></i> 保存</button>
-                        <button class="modal-close" onclick="document.getElementById('yt-script-modal').classList.remove('active')"><i class="ph ph-x"></i></button>
-                    </div>
-                </div>
-                <div class="modal-body" style="padding: 24px; overflow-y: auto; flex: 1; background: var(--bg-secondary);">
-                    <input type="hidden" id="script-id">
-                    <input type="hidden" id="script-video-id">
-                    
-                    <div class="grid grid-2" style="gap: 20px;">
-                        <div class="form-group"><label>1. 動画タイトル</label><textarea id="s-field-1" class="script-input" oninput="updateScriptState()"></textarea></div>
-                        <div class="form-group"><label>2. キーワード</label><textarea id="s-field-2" class="script-input" oninput="updateScriptState()"></textarea></div>
-                    </div>
 
-                    <div style="display: flex; flex-direction: column; gap: 20px; margin-top: 10px;">
-                        <div class="form-group"><label>3. OP</label><textarea id="s-field-3" class="script-input" oninput="updateScriptState()"></textarea></div>
-                        <div class="form-group"><label>4. 自己紹介（早く簡潔に）</label><textarea id="s-field-4" class="script-input" oninput="updateScriptState()"></textarea></div>
-                        <div class="form-group"><label>5. 動画概要（端的に動画内容を提示）</label><textarea id="s-field-5" class="script-input" oninput="updateScriptState()"></textarea></div>
-                        <div class="form-group"><label>6. タイトル回収（動画を見る理由を明確化）</label><textarea id="s-field-6" class="script-input" oninput="updateScriptState()"></textarea></div>
-                        
-                        <div style="background: var(--bg-tertiary); padding: 16px; border-radius: 8px; border-left: 4px solid var(--primary);">
-                            <h4 style="margin-bottom: 15px; display: flex; align-items: center; gap: 8px; color: var(--primary);">
-                                <i class="ph ph-lightning"></i> PASTORフォーミュラ構築
-                            </h4>
-                            <div style="display: flex; flex-direction: column; gap: 20px;">
-                                <div class="form-group"><label>8. 悩みの代弁（視聴者に共感）</label><textarea id="s-field-8" class="script-input" oninput="updateScriptState()"></textarea></div>
-                                <div class="form-group"><label>9. 悩みの言語化（具体例）</label><textarea id="s-field-9" class="script-input" oninput="updateScriptState()"></textarea></div>
-                                <div class="form-group"><label>10. 実体験（過去の自分もあなたと同じ）</label><textarea id="s-field-10" class="script-input" oninput="updateScriptState()"></textarea></div>
-                                <div class="form-group"><label>11. 問題の拡大（問題の重大さ）</label><textarea id="s-field-11" class="script-input" oninput="updateScriptState()"></textarea></div>
-                                <div class="form-group"><label>12. 解決策（具体的な行動を提示）</label><textarea id="s-field-12" class="script-input" oninput="updateScriptState()"></textarea></div>
-                                <div class="form-group"><label>13. 変革と証明（実績）</label><textarea id="s-field-13" class="script-input" oninput="updateScriptState()"></textarea></div>
-                                <div class="form-group"><label>14. CTA（早く簡潔に）</label><textarea id="s-field-14" class="script-input" oninput="updateScriptState()"></textarea></div>
-                            </div>
-                        </div>
-
-                        <div class="form-group"><label>15. 衝撃の結論（普通の結論×）</label><textarea id="s-field-15" class="script-input" oninput="updateScriptState()"></textarea></div>
-                        <div class="form-group"><label>16. 根拠（理解しやすい例）</label><textarea id="s-field-16" class="script-input" oninput="updateScriptState()"></textarea></div>
-                        <div class="form-group"><label>17. 具体例（気付き）</label><textarea id="s-field-17" class="script-input" oninput="updateScriptState()"></textarea></div>
-                        <div class="form-group"><label>18. 再度結論の繰り返し</label><textarea id="s-field-18" class="script-input" oninput="updateScriptState()"></textarea></div>
-                        <div class="form-group"><label>19. ED</label><textarea id="s-field-19" class="script-input" oninput="updateScriptState()"></textarea></div>
-                        <div class="form-group"><label>20. プレゼント</label><textarea id="s-field-20" class="script-input" oninput="updateScriptState()"></textarea></div>
-                        <div class="form-group"><label>21. CTA</label><textarea id="s-field-21" class="script-input" oninput="updateScriptState()"></textarea></div>
-                        <div class="form-group"><label>22. エンディング挨拶</label><textarea id="s-field-22" class="script-input" oninput="updateScriptState()"></textarea></div>
-                    </div>
-                </div>
-            </div>
-        </div>
     `;
 
     function renderVideoTab() {
@@ -413,6 +358,64 @@ App.Pages.youtube = async function() {
         return html;
     }
 
+    function renderScriptTab() {
+        return `
+            <div class="card" style="display: flex; flex-direction: column; padding: 24px; background: var(--bg-secondary);">
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-light); padding-bottom: 16px; margin-bottom: 24px;">
+                    <div>
+                        <h3 style="font-size: 1.2rem; margin: 0;">YouTube台本作成ツール</h3>
+                        <div id="script-total-chars" style="font-size: 0.85rem; color: var(--primary); font-weight: bold; margin-top: 4px;">合計文字数: 0 文字 (空白抜き)</div>
+                    </div>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <select id="script-history-select" class="input-field" style="width: 200px; margin-bottom: 0;" onchange="loadSelectedScript(this.value)">
+                            <option value="">-- 保存済みを選択 --</option>
+                        </select>
+                        <button class="btn-secondary btn-sm" onclick="newScript()"><i class="ph ph-file-plus"></i> 新規作成</button>
+                        <button class="btn-primary btn-sm" onclick="saveScript()"><i class="ph ph-floppy-disk"></i> 保存</button>
+                    </div>
+                </div>
+                
+                <input type="hidden" id="script-id">
+                
+                <div class="grid grid-2" style="gap: 20px;">
+                    <div class="form-group"><label>1. 動画タイトル</label><textarea id="s-field-1" class="script-input" oninput="updateScriptState()"></textarea></div>
+                    <div class="form-group"><label>2. キーワード</label><textarea id="s-field-2" class="script-input" oninput="updateScriptState()"></textarea></div>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 20px; margin-top: 10px;">
+                    <div class="form-group"><label>3. OP</label><textarea id="s-field-3" class="script-input" oninput="updateScriptState()"></textarea></div>
+                    <div class="form-group"><label>4. 自己紹介（早く簡潔に）</label><textarea id="s-field-4" class="script-input" oninput="updateScriptState()"></textarea></div>
+                    <div class="form-group"><label>5. 動画概要（端的に動画内容を提示）</label><textarea id="s-field-5" class="script-input" oninput="updateScriptState()"></textarea></div>
+                    <div class="form-group"><label>6. タイトル回収（動画を見る理由を明確化）</label><textarea id="s-field-6" class="script-input" oninput="updateScriptState()"></textarea></div>
+                    
+                    <div style="background: var(--bg-tertiary); padding: 16px; border-radius: 8px; border-left: 4px solid var(--primary);">
+                        <h4 style="margin-bottom: 15px; display: flex; align-items: center; gap: 8px; color: var(--primary);">
+                            <i class="ph ph-lightning"></i> PASTORフォーミュラ構築
+                        </h4>
+                        <div style="display: flex; flex-direction: column; gap: 20px;">
+                            <div class="form-group"><label>8. 悩みの代弁（視聴者に共感）</label><textarea id="s-field-8" class="script-input" oninput="updateScriptState()"></textarea></div>
+                            <div class="form-group"><label>9. 悩みの言語化（具体例）</label><textarea id="s-field-9" class="script-input" oninput="updateScriptState()"></textarea></div>
+                            <div class="form-group"><label>10. 実体験（過去の自分もあなたと同じ）</label><textarea id="s-field-10" class="script-input" oninput="updateScriptState()"></textarea></div>
+                            <div class="form-group"><label>11. 問題の拡大（問題の重大さ）</label><textarea id="s-field-11" class="script-input" oninput="updateScriptState()"></textarea></div>
+                            <div class="form-group"><label>12. 解決策（具体的な行動を提示）</label><textarea id="s-field-12" class="script-input" oninput="updateScriptState()"></textarea></div>
+                            <div class="form-group"><label>13. 変革と証明（実績）</label><textarea id="s-field-13" class="script-input" oninput="updateScriptState()"></textarea></div>
+                            <div class="form-group"><label>14. CTA（早く簡潔に）</label><textarea id="s-field-14" class="script-input" oninput="updateScriptState()"></textarea></div>
+                        </div>
+                    </div>
+
+                    <div class="form-group"><label>15. 衝撃の結論（普通の結論×）</label><textarea id="s-field-15" class="script-input" oninput="updateScriptState()"></textarea></div>
+                    <div class="form-group"><label>16. 根拠（理解しやすい例）</label><textarea id="s-field-16" class="script-input" oninput="updateScriptState()"></textarea></div>
+                    <div class="form-group"><label>17. 具体例（気付き）</label><textarea id="s-field-17" class="script-input" oninput="updateScriptState()"></textarea></div>
+                    <div class="form-group"><label>18. 再度結論の繰り返し</label><textarea id="s-field-18" class="script-input" oninput="updateScriptState()"></textarea></div>
+                    <div class="form-group"><label>19. ED</label><textarea id="s-field-19" class="script-input" oninput="updateScriptState()"></textarea></div>
+                    <div class="form-group"><label>20. プレゼント</label><textarea id="s-field-20" class="script-input" oninput="updateScriptState()"></textarea></div>
+                    <div class="form-group"><label>21. CTA</label><textarea id="s-field-21" class="script-input" oninput="updateScriptState()"></textarea></div>
+                    <div class="form-group"><label>22. エンディング挨拶</label><textarea id="s-field-22" class="script-input" oninput="updateScriptState()"></textarea></div>
+                </div>
+            </div>
+        `;
+    }
+
     App.mount(getHtml(), async () => {
         // --- YouTube Script Editor Logic ---
         let allScripts = await Store.getYTScripts();
@@ -424,29 +427,16 @@ App.Pages.youtube = async function() {
                 allScripts.map(s => `<option value="${s.id}" ${s.id == selectedId ? 'selected':''}>${s.title || '(無題)'}</option>`).join('');
         };
 
-        window.openScriptEditor = async (videoId) => {
-            allScripts = await Store.getYTScripts();
+        if (activeTab === 'script') {
             updateHistoryDropdown();
-            
-            // Reset fields
-            newScript();
-            
-            document.getElementById('script-video-id').value = videoId;
-            const video = videos.find(v => v.id == videoId);
-            if(video) {
-                document.getElementById('s-field-1').value = video.title;
-                document.getElementById('s-field-2').value = video.kw || '';
-                
-                // もし既にこの動画に紐づく最新の台本があれば自動で読み込む
-                const existing = allScripts.find(s => s.videoId == videoId);
-                if(existing) {
-                    loadSelectedScript(existing.id);
-                }
+            // Automatically select the first script if available
+            if (allScripts.length > 0) {
+                loadSelectedScript(allScripts[0].id);
+                document.getElementById('script-history-select').value = allScripts[0].id;
+            } else {
+                newScript();
             }
-            
-            document.getElementById('yt-script-modal').classList.add('active');
-            updateScriptState();
-        };
+        }
 
         window.newScript = () => {
             document.getElementById('script-id').value = '';
@@ -462,15 +452,15 @@ App.Pages.youtube = async function() {
 
         window.saveScript = async () => {
             const id = document.getElementById('script-id').value;
-            const videoId = document.getElementById('script-video-id').value;
             const title = document.getElementById('s-field-1').value || '無題の台本';
             
             const fields = {};
             for(let i=1; i<=22; i++) {
-                fields[`f${i}`] = document.getElementById(`s-field-${i}`).value;
+                const el = document.getElementById(`s-field-${i}`);
+                if (el) fields[`f${i}`] = el.value;
             }
 
-            const data = { title, videoId, fields, updatedAt: new Date().toISOString() };
+            const data = { title, fields, updatedAt: new Date().toISOString() };
 
             if(id) {
                 await Store.updateYTScript(id, data);
@@ -489,17 +479,20 @@ App.Pages.youtube = async function() {
             if(!s) return;
 
             document.getElementById('script-id').value = s.id;
-            document.getElementById('script-video-id').value = s.videoId || '';
             
-            for(let i=1; i<=22; i++) {
-                const el = document.getElementById(`s-field-${i}`);
-                if(el) {
-                    el.value = s.fields[`f${i}`] || '';
-                    autoResizeTextarea(el);
+            // Wait for DOM to be ready before updating values
+            setTimeout(() => {
+                for(let i=1; i<=22; i++) {
+                    const el = document.getElementById(`s-field-${i}`);
+                    if(el && s.fields) {
+                        el.value = s.fields[`f${i}`] || '';
+                        autoResizeTextarea(el);
+                    }
                 }
-            }
-            updateScriptState();
+                updateScriptState();
+            }, 50);
         };
+
 
         window.updateScriptState = () => {
             countTotalChars();
