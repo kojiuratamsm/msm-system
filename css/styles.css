@@ -210,7 +210,6 @@ textarea {
     line-height: 1.6;
     background: #fff;
     resize: none; /* JSで自動拡張するため固定 */
-    overflow-y: hidden;
     transition: border-color 0.2s;
 }
 .script-input:focus {

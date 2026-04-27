@@ -22,10 +22,10 @@ App.Pages.youtube = async function() {
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; flex-wrap:wrap; gap:16px;">
             <div style="display:flex; align-items:center; gap:16px;">
                 <h2 style="font-size:1.5rem; margin:0;">YouTube 管理</h2>
-                <button class="btn-sm" onclick="window.ytActiveTab='script'; App.navigate('youtube')" style="background: ${activeTab === 'script' ? '#dc3545' : 'transparent'}; color: ${activeTab === 'script' ? 'white' : '#dc3545'}; border: 1px solid #dc3545;"><i class="ph ph-notebook"></i> 台本作成</button>
             </div>
             <div style="display:flex; gap:8px;">
                 <button class="btn-sm ${activeTab === 'video' ? 'btn-primary' : 'btn-secondary'}" onclick="window.ytActiveTab='video'; App.navigate('youtube')"><i class="ph ph-video-camera"></i> 動画進捗</button>
+                <button class="btn-sm ${activeTab === 'script' ? 'btn-primary' : 'btn-secondary'}" onclick="window.ytActiveTab='script'; App.navigate('youtube')"><i class="ph ph-notebook"></i> 台本作成</button>
                 <button class="btn-sm ${activeTab === 'line' ? 'btn-primary' : 'btn-secondary'}" onclick="window.ytActiveTab='line'; App.navigate('youtube')"><i class="ph ph-chat-circle-dots"></i> 公式LINE</button>
                 <button class="btn-success btn-sm" onclick="syncAllChannels()"><i class="ph ph-arrows-clockwise"></i> 全てのChを一括更新</button>
                 <button class="btn-secondary btn-sm" onclick="document.getElementById('yt-channel-modal').classList.add('active')"><i class="ph ph-plus"></i> チャンネル追加</button>
@@ -378,39 +378,39 @@ App.Pages.youtube = async function() {
                 <input type="hidden" id="script-id">
                 
                 <div class="grid grid-2" style="gap: 20px;">
-                    <div class="form-group"><label>1. 動画タイトル</label><textarea id="s-field-1" class="script-input" oninput="updateScriptState()"></textarea></div>
-                    <div class="form-group"><label>2. キーワード</label><textarea id="s-field-2" class="script-input" oninput="updateScriptState()"></textarea></div>
+                    <div class="form-group"><label>1. 動画タイトル</label><textarea id="s-field-1" class="script-input" oninput="updateScriptState(this)"></textarea></div>
+                    <div class="form-group"><label>2. キーワード</label><textarea id="s-field-2" class="script-input" oninput="updateScriptState(this)"></textarea></div>
                 </div>
 
                 <div style="display: flex; flex-direction: column; gap: 20px; margin-top: 10px;">
-                    <div class="form-group"><label>3. OP</label><textarea id="s-field-3" class="script-input" oninput="updateScriptState()"></textarea></div>
-                    <div class="form-group"><label>4. 自己紹介（早く簡潔に）</label><textarea id="s-field-4" class="script-input" oninput="updateScriptState()"></textarea></div>
-                    <div class="form-group"><label>5. 動画概要（端的に動画内容を提示）</label><textarea id="s-field-5" class="script-input" oninput="updateScriptState()"></textarea></div>
-                    <div class="form-group"><label>6. タイトル回収（動画を見る理由を明確化）</label><textarea id="s-field-6" class="script-input" oninput="updateScriptState()"></textarea></div>
+                    <div class="form-group"><label>3. OP</label><textarea id="s-field-3" class="script-input" oninput="updateScriptState(this)"></textarea></div>
+                    <div class="form-group"><label>4. 自己紹介（早く簡潔に）</label><textarea id="s-field-4" class="script-input" oninput="updateScriptState(this)"></textarea></div>
+                    <div class="form-group"><label>5. 動画概要（端的に動画内容を提示）</label><textarea id="s-field-5" class="script-input" oninput="updateScriptState(this)"></textarea></div>
+                    <div class="form-group"><label>6. タイトル回収（動画を見る理由を明確化）</label><textarea id="s-field-6" class="script-input" oninput="updateScriptState(this)"></textarea></div>
                     
                     <div style="background: var(--bg-tertiary); padding: 16px; border-radius: 8px; border-left: 4px solid var(--primary);">
                         <h4 style="margin-bottom: 15px; display: flex; align-items: center; gap: 8px; color: var(--primary);">
                             <i class="ph ph-lightning"></i> PASTORフォーミュラ構築
                         </h4>
                         <div style="display: flex; flex-direction: column; gap: 20px;">
-                            <div class="form-group"><label>8. 悩みの代弁（視聴者に共感）</label><textarea id="s-field-8" class="script-input" oninput="updateScriptState()"></textarea></div>
-                            <div class="form-group"><label>9. 悩みの言語化（具体例）</label><textarea id="s-field-9" class="script-input" oninput="updateScriptState()"></textarea></div>
-                            <div class="form-group"><label>10. 実体験（過去の自分もあなたと同じ）</label><textarea id="s-field-10" class="script-input" oninput="updateScriptState()"></textarea></div>
-                            <div class="form-group"><label>11. 問題の拡大（問題の重大さ）</label><textarea id="s-field-11" class="script-input" oninput="updateScriptState()"></textarea></div>
-                            <div class="form-group"><label>12. 解決策（具体的な行動を提示）</label><textarea id="s-field-12" class="script-input" oninput="updateScriptState()"></textarea></div>
-                            <div class="form-group"><label>13. 変革と証明（実績）</label><textarea id="s-field-13" class="script-input" oninput="updateScriptState()"></textarea></div>
-                            <div class="form-group"><label>14. CTA（早く簡潔に）</label><textarea id="s-field-14" class="script-input" oninput="updateScriptState()"></textarea></div>
+                            <div class="form-group"><label>8. 悩みの代弁（視聴者に共感）</label><textarea id="s-field-8" class="script-input" oninput="updateScriptState(this)"></textarea></div>
+                            <div class="form-group"><label>9. 悩みの言語化（具体例）</label><textarea id="s-field-9" class="script-input" oninput="updateScriptState(this)"></textarea></div>
+                            <div class="form-group"><label>10. 実体験（過去の自分もあなたと同じ）</label><textarea id="s-field-10" class="script-input" oninput="updateScriptState(this)"></textarea></div>
+                            <div class="form-group"><label>11. 問題の拡大（問題の重大さ）</label><textarea id="s-field-11" class="script-input" oninput="updateScriptState(this)"></textarea></div>
+                            <div class="form-group"><label>12. 解決策（具体的な行動を提示）</label><textarea id="s-field-12" class="script-input" oninput="updateScriptState(this)"></textarea></div>
+                            <div class="form-group"><label>13. 変革と証明（実績）</label><textarea id="s-field-13" class="script-input" oninput="updateScriptState(this)"></textarea></div>
+                            <div class="form-group"><label>14. CTA（早く簡潔に）</label><textarea id="s-field-14" class="script-input" oninput="updateScriptState(this)"></textarea></div>
                         </div>
                     </div>
 
-                    <div class="form-group"><label>15. 衝撃の結論（普通の結論×）</label><textarea id="s-field-15" class="script-input" oninput="updateScriptState()"></textarea></div>
-                    <div class="form-group"><label>16. 根拠（理解しやすい例）</label><textarea id="s-field-16" class="script-input" oninput="updateScriptState()"></textarea></div>
-                    <div class="form-group"><label>17. 具体例（気付き）</label><textarea id="s-field-17" class="script-input" oninput="updateScriptState()"></textarea></div>
-                    <div class="form-group"><label>18. 再度結論の繰り返し</label><textarea id="s-field-18" class="script-input" oninput="updateScriptState()"></textarea></div>
-                    <div class="form-group"><label>19. ED</label><textarea id="s-field-19" class="script-input" oninput="updateScriptState()"></textarea></div>
-                    <div class="form-group"><label>20. プレゼント</label><textarea id="s-field-20" class="script-input" oninput="updateScriptState()"></textarea></div>
-                    <div class="form-group"><label>21. CTA</label><textarea id="s-field-21" class="script-input" oninput="updateScriptState()"></textarea></div>
-                    <div class="form-group"><label>22. エンディング挨拶</label><textarea id="s-field-22" class="script-input" oninput="updateScriptState()"></textarea></div>
+                    <div class="form-group"><label>15. 衝撃の結論（普通の結論×）</label><textarea id="s-field-15" class="script-input" oninput="updateScriptState(this)"></textarea></div>
+                    <div class="form-group"><label>16. 根拠（理解しやすい例）</label><textarea id="s-field-16" class="script-input" oninput="updateScriptState(this)"></textarea></div>
+                    <div class="form-group"><label>17. 具体例（気付き）</label><textarea id="s-field-17" class="script-input" oninput="updateScriptState(this)"></textarea></div>
+                    <div class="form-group"><label>18. 再度結論の繰り返し</label><textarea id="s-field-18" class="script-input" oninput="updateScriptState(this)"></textarea></div>
+                    <div class="form-group"><label>19. ED</label><textarea id="s-field-19" class="script-input" oninput="updateScriptState(this)"></textarea></div>
+                    <div class="form-group"><label>20. プレゼント</label><textarea id="s-field-20" class="script-input" oninput="updateScriptState(this)"></textarea></div>
+                    <div class="form-group"><label>21. CTA</label><textarea id="s-field-21" class="script-input" oninput="updateScriptState(this)"></textarea></div>
+                    <div class="form-group"><label>22. エンディング挨拶</label><textarea id="s-field-22" class="script-input" oninput="updateScriptState(this)"></textarea></div>
                 </div>
             </div>
         `;
@@ -502,7 +502,8 @@ App.Pages.youtube = async function() {
 
         const countTotalChars = () => {
             let total = 0;
-            for(let i=1; i<=22; i++) {
+            // タイトルとキーワード(1, 2)はカウントから除外するため i=3 からスタート
+            for(let i=3; i<=22; i++) {
                 const el = document.getElementById(`s-field-${i}`);
                 if (el) {
                     const val = el.value || '';
