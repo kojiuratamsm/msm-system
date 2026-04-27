@@ -98,6 +98,21 @@ const Store = {
     async updateYTLine(id, data) {
         await supabase.from('customers').update({ data }).eq('id', id);
     },
+    
+    // YouTube Scripts
+    async getYTScripts() {
+        const { data } = await supabase.from('customers').select('*').eq('service_type', 'youtube_script').order('id', { ascending: false });
+        return (data || []).map(r => ({ id: r.id, ...r.data }));
+    },
+    async addYTScript(data) {
+        await supabase.from('customers').insert([{ id: Date.now(), service_type: 'youtube_script', data }]);
+    },
+    async updateYTScript(id, data) {
+        await supabase.from('customers').update({ data }).eq('id', id);
+    },
+    async deleteYTScript(id) {
+        await supabase.from('customers').delete().eq('id', id);
+    },
 
     // Targets and KPIs
     async getTargetsKpis() {

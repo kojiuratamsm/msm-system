@@ -199,6 +199,32 @@ textarea {
    resize: vertical;
 }
 
+/* YouTube Script Editor Custom Styles */
+.script-input {
+    width: 100%;
+    min-height: 150px; /* 約7行分 */
+    padding: 12px;
+    border: 1px solid var(--border-light);
+    border-radius: 6px;
+    font-size: 0.95rem;
+    line-height: 1.6;
+    background: #fff;
+    resize: none; /* JSで自動拡張するため固定 */
+    overflow-y: hidden;
+    transition: border-color 0.2s;
+}
+.script-input:focus {
+    border-color: var(--primary);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.1);
+}
+.modal-body .form-group label {
+    font-weight: 600;
+    margin-bottom: 8px;
+    display: block;
+    color: var(--text-primary);
+}
+
 .btn-primary {
     background: var(--accent);
     color: white;
