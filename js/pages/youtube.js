@@ -493,31 +493,38 @@ App.Pages.youtube = async function() {
             }, 50);
         };
 
-
-        window.updateScriptState = () => {
+        window.updateScriptState = (targetElement) => {
             countTotalChars();
-            // Auto resize current target if it was an input event
-            if(event && event.target && event.target.classList.contains('script-input')) {
-                autoResizeTextarea(event.target);
+            if(targetElement) {
+                autoResizeTextarea(targetElement);
             }
         };
 
         const countTotalChars = () => {
             let total = 0;
             for(let i=1; i<=22; i++) {
-                const val = document.getElementById(`s-field-${i}`).value || '';
-                total += val.replace(/\s+/g, '').length;
+                const el = document.getElementById(`s-field-${i}`);
+                if (el) {
+                    const val = el.value || '';
+                    total += val.replace(/\s+/g, '').length;
+                }
             }
-            document.getElementById('script-total-chars').textContent = `合計文字数: ${total.toLocaleString()} 文字 (空白抜き)`;
+            const countDisplay = document.getElementById('script-total-chars');
+            if(countDisplay) {
+                countDisplay.textContent = `合計文字数: ${total.toLocaleString()} 文字 (空白抜き)`;
+            }
         };
 
         const autoResizeTextarea = (el) => {
-            el.style.height = 'auto';
-            el.style.height = (el.scrollHeight) + 'px';
+            if(!el) return;
+            el.style.height = 'auto'; // 一旦リセット
+            el.style.height = (el.scrollHeight) + 'px'; // 内容に合わせて拡張
         };
 
         // Initialize display
-        updateHistoryDropdown();
+        if (activeTab === 'script') {
+            updateHistoryDropdown();
+        }
 
         // Setup Charts for Videos
         if (activeTab === 'video') {
