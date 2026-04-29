@@ -131,10 +131,13 @@ const Store = {
     
     async getPayroll() {
         const { data } = await supabase.from('payroll').select('*');
-        const result = { staffs: [], plusOne: [], meo: [], telecom: [] };
+        const result = { staffs: [], plusOne: [], meo: [], telecom: [], meoStatus: [], telecomStatus: [] };
         if (data) {
             data.forEach(row => {
                 if (result[row.category]) {
+                    result[row.category].push({ id: row.id, ...row.data });
+                } else if (row.category === 'meoStatus' || row.category === 'telecomStatus') {
+                    if (!result[row.category]) result[row.category] = [];
                     result[row.category].push({ id: row.id, ...row.data });
                 }
             });
@@ -145,11 +148,12 @@ const Store = {
         // Drop and recreate strategy for simplicity of deeply nested objects mapping to simple rows
         await supabase.from('payroll').delete().neq('category', 'dummy'); 
         const inserts = [];
+        let index = 0;
         for (const [cat, arr] of Object.entries(data)) {
             if (Array.isArray(arr)) {
                 arr.forEach(item => {
                     const { id, ...rest } = item;
-                    inserts.push({ id: id || Date.now() + Math.random(), category: cat, data: rest });
+                    inserts.push({ id: id || (Date.now() + index++), category: cat, data: rest });
                 });
             }
         }
