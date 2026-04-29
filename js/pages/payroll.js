@@ -82,7 +82,10 @@ App.Pages.payroll = async function(activeTab = 'plusOne') {
 
         contentHtml = `
             <div class="card">
-                <div class="card-header"><h3 class="card-title">Plus One 担当者別振込一覧 (${selectedMonth})</h3></div>
+                <div class="card-header" style="justify-content:space-between; align-items:center;">
+                    <h3 class="card-title">Plus One 担当者別振込一覧 (${selectedMonth})</h3>
+                    <button onclick="savePayrollChecks()" style="padding: 8px 32px; font-size: 1.1rem; border-radius: 4px; border: 3px solid #dc3545; background: white; color: black; font-weight: bold; cursor: pointer; transition: all 0.2s;">保存</button>
+                </div>
                 <div style="margin-bottom: 16px; font-size: 0.9rem; color: var(--text-secondary);">※案件管理に入力された「対象月」と「担当者」「卸単価」に基づき、ステータスが「納品」の案件のみを合計しています。</div>
                 <div class="table-container">
                     <table>
@@ -125,11 +128,14 @@ App.Pages.payroll = async function(activeTab = 'plusOne') {
 
         contentHtml = `
             <div class="card" style="margin-bottom: 24px;">
-                <div class="card-header" style="justify-content:space-between;">
+                <div class="card-header" style="justify-content:space-between; align-items:center;">
                     <h3 class="card-title">MEO対策チャンネル 担当者別振込一覧 (${selectedMonth})</h3>
-                    <button class="btn-primary btn-sm" onclick="document.getElementById('meo-add-modal').classList.add('active')">
-                        <i class="ph ph-plus"></i> 新規記録を追加
-                    </button>
+                    <div style="display:flex; gap:12px; align-items:center;">
+                        <button onclick="savePayrollChecks()" style="padding: 8px 32px; font-size: 1.1rem; border-radius: 4px; border: 3px solid #dc3545; background: white; color: black; font-weight: bold; cursor: pointer; transition: all 0.2s;">保存</button>
+                        <button class="btn-primary btn-sm" onclick="document.getElementById('meo-add-modal').classList.add('active')">
+                            <i class="ph ph-plus"></i> 新規記録を追加
+                        </button>
+                    </div>
                 </div>
                 
                 ${staffsInMeo.map(p => {
@@ -205,11 +211,14 @@ App.Pages.payroll = async function(activeTab = 'plusOne') {
 
         contentHtml = `
             <div class="card" style="margin-bottom: 24px;">
-                <div class="card-header" style="justify-content:space-between;">
+                <div class="card-header" style="justify-content:space-between; align-items:center;">
                     <h3 class="card-title">通信 担当稼働・振込一覧 (${selectedMonth})</h3>
-                    <button class="btn-primary btn-sm" onclick="document.getElementById('tc-add-modal').classList.add('active')">
-                        <i class="ph ph-plus"></i> 新規記録を追加
-                    </button>
+                    <div style="display:flex; gap:12px; align-items:center;">
+                        <button onclick="savePayrollChecks()" style="padding: 8px 32px; font-size: 1.1rem; border-radius: 4px; border: 3px solid #dc3545; background: white; color: black; font-weight: bold; cursor: pointer; transition: all 0.2s;">保存</button>
+                        <button class="btn-primary btn-sm" onclick="document.getElementById('tc-add-modal').classList.add('active')">
+                            <i class="ph ph-plus"></i> 新規記録を追加
+                        </button>
+                    </div>
                 </div>
                 
                 ${staffsInTelecom.map(p => {
@@ -442,8 +451,8 @@ App.Pages.payroll = async function(activeTab = 'plusOne') {
             App.navigate('payroll', activeTab);
         };
 
-        // Common Checkbox Toggler
-        window.togglePaymentCheck = async (type, month, person, field, checked) => {
+        // Common Checkbox Toggler (Local memory only)
+        window.togglePaymentCheck = (type, month, person, field, checked) => {
             const arrName = type === 'plusOne' ? 'plusOne' : (type === 'meo' ? 'meoStatus' : 'telecomStatus');
             if(!payrollData[arrName]) payrollData[arrName] = [];
             
@@ -453,9 +462,13 @@ App.Pages.payroll = async function(activeTab = 'plusOne') {
                 payrollData[arrName].push(rec);
             }
             rec[field] = checked;
-            
-            // Wait for update to finish before anything else happens to avoid race conditions
+            // Removed await Store.updatePayroll(payrollData); to prevent data overriding on page switch
+        };
+
+        // Manual Save Trigger for Checkboxes
+        window.savePayrollChecks = async () => {
             await Store.updatePayroll(payrollData);
+            alert('チェック状態を保存しました');
         };
 
         // MEO
