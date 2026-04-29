@@ -104,10 +104,10 @@ App.Pages.payroll = async function(activeTab = 'plusOne') {
                                         <td>${getBank(p)}</td>
                                         <td style="font-weight:bold; color:var(--success);">¥${sumsByPerson[p].toLocaleString()}</td>
                                         <td style="text-align:center;">
-                                            <input type="checkbox" ${rec.invoice ? 'checked' : ''} onchange="togglePoCheck('${selectedMonth}', '${p}', 'invoice', this.checked)" style="width:18px;height:18px;">
+                                            <input type="checkbox" ${rec.invoice ? 'checked' : ''} onchange="togglePaymentCheck('plusOne', '${selectedMonth}', '${p}', 'invoice', this.checked)" style="width:18px;height:18px;">
                                         </td>
                                         <td style="text-align:center;">
-                                            <input type="checkbox" ${rec.paid ? 'checked' : ''} onchange="togglePoCheck('${selectedMonth}', '${p}', 'paid', this.checked)" style="width:18px;height:18px;">
+                                            <input type="checkbox" ${rec.paid ? 'checked' : ''} onchange="togglePaymentCheck('plusOne', '${selectedMonth}', '${p}', 'paid', this.checked)" style="width:18px;height:18px;">
                                         </td>
                                     </tr>
                                 `;
@@ -135,10 +135,17 @@ App.Pages.payroll = async function(activeTab = 'plusOne') {
                 ${staffsInMeo.map(p => {
                     const records = mData.filter(m => m.person === p);
                     const total = records.reduce((acc, m) => acc + (m.amount || 0), 0);
+                    const statusRec = (payrollData.meoStatus || []).find(s => s.month === selectedMonth && s.person === p) || { invoice: false, paid: false };
                     return `
                         <div style="margin-bottom: 24px; border: 1px solid var(--border-light); padding: 16px; border-radius: var(--radius-md);">
-                            <div style="display:flex; justify-content:space-between; margin-bottom:12px;">
-                                <h4 style="font-size: 1.1rem; flex:1;">${p} <span style="font-size:0.8rem; font-weight:normal; color:var(--text-secondary); margin-left:16px;">振込先: ${getBank(p)}</span></h4>
+                            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+                                <div>
+                                    <h4 style="font-size: 1.1rem; margin-bottom: 4px;">${p} <span style="font-size:0.8rem; font-weight:normal; color:var(--text-secondary); margin-left:16px;">振込先: ${getBank(p)}</span></h4>
+                                    <div style="display:flex; gap:16px; font-size: 0.85rem; color: var(--text-primary); margin-top: 8px;">
+                                        <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" ${statusRec.invoice ? 'checked' : ''} onchange="togglePaymentCheck('meo', '${selectedMonth}', '${p}', 'invoice', this.checked)"> 請求書</label>
+                                        <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" ${statusRec.paid ? 'checked' : ''} onchange="togglePaymentCheck('meo', '${selectedMonth}', '${p}', 'paid', this.checked)"> 入金確認</label>
+                                    </div>
+                                </div>
                                 <h3 style="color:var(--success);">合計: ¥${total.toLocaleString()}</h3>
                             </div>
                             <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
@@ -210,10 +217,17 @@ App.Pages.payroll = async function(activeTab = 'plusOne') {
                     const totalCost = records.reduce((acc, t) => acc + (t.cost || 0), 0);
                     const totalTransport = records.reduce((acc, t) => acc + (t.transport || 0), 0);
                     const grandTotal = totalCost + totalTransport;
+                    const statusRec = (payrollData.telecomStatus || []).find(s => s.month === selectedMonth && s.person === p) || { invoice: false, paid: false };
                     return `
                         <div style="margin-bottom: 24px; border: 1px solid var(--border-light); padding: 16px; border-radius: var(--radius-md);">
-                            <div style="display:flex; justify-content:space-between; margin-bottom:12px;">
-                                <h4 style="font-size: 1.1rem; flex:1;">${p} <span style="font-size:0.8rem; font-weight:normal; color:var(--text-secondary); margin-left:16px;">振込先: ${getBank(p)}</span></h4>
+                            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+                                <div>
+                                    <h4 style="font-size: 1.1rem; margin-bottom: 4px;">${p} <span style="font-size:0.8rem; font-weight:normal; color:var(--text-secondary); margin-left:16px;">振込先: ${getBank(p)}</span></h4>
+                                    <div style="display:flex; gap:16px; font-size: 0.85rem; color: var(--text-primary); margin-top: 8px;">
+                                        <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" ${statusRec.invoice ? 'checked' : ''} onchange="togglePaymentCheck('telecom', '${selectedMonth}', '${p}', 'invoice', this.checked)"> 請求書</label>
+                                        <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" ${statusRec.paid ? 'checked' : ''} onchange="togglePaymentCheck('telecom', '${selectedMonth}', '${p}', 'paid', this.checked)"> 入金確認</label>
+                                    </div>
+                                </div>
                                 <div style="text-align:right;">
                                     <div style="font-size:0.8rem; color:var(--text-secondary);">卸単価計: ¥${totalCost.toLocaleString()} / 交通費計: ¥${totalTransport.toLocaleString()}</div>
                                     <h3 style="color:var(--success);">総合計: ¥${grandTotal.toLocaleString()}</h3>
@@ -428,17 +442,20 @@ App.Pages.payroll = async function(activeTab = 'plusOne') {
             App.navigate('payroll', activeTab);
         };
 
-        // PlusOne
-        window.togglePoCheck = async (month, person, field, checked) => {
-            const data = await Store.getPayroll();
-            if(!data.plusOne) data.plusOne = [];
-            let rec = data.plusOne.find(p => p.month === month && p.person === person);
+        // Common Checkbox Toggler
+        window.togglePaymentCheck = async (type, month, person, field, checked) => {
+            const arrName = type === 'plusOne' ? 'plusOne' : (type === 'meo' ? 'meoStatus' : 'telecomStatus');
+            if(!payrollData[arrName]) payrollData[arrName] = [];
+            
+            let rec = payrollData[arrName].find(p => p.month === month && p.person === person);
             if (!rec) {
                 rec = { month, person, invoice: false, paid: false };
-                data.plusOne.push(rec);
+                payrollData[arrName].push(rec);
             }
             rec[field] = checked;
-            await Store.updatePayroll(data);
+            
+            // Wait for update to finish before anything else happens to avoid race conditions
+            await Store.updatePayroll(payrollData);
         };
 
         // MEO

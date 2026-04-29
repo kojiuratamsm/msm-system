@@ -25,10 +25,10 @@ App.Pages.meo_users = function() {
                 </div>
 
                 <div class="grid grid-2" style="gap: 16px; max-width: 500px; margin: 0 auto;">
-                    <a href="https://meo-dashboard-system.vercel.app/master-dashboard.html" target="_blank" class="btn-primary" style="justify-content: center; align-items: center; display: flex; padding: 16px; gap: 8px; text-decoration: none;">
+                    <a href="https://www.mapon-meo.com/master-dashboard" target="_blank" class="btn-primary" style="justify-content: center; align-items: center; display: flex; padding: 16px; gap: 8px; text-decoration: none;">
                         マスター画面を開く <i class="ph ph-arrow-square-out"></i>
                     </a>
-                    <a href="https://meo-dashboard-system.vercel.app/index.html" target="_blank" class="btn-primary" style="justify-content: center; align-items: center; display: flex; padding: 16px; gap: 8px; text-decoration: none;">
+                    <a href="https://www.mapon-meo.com/login" target="_blank" class="btn-primary" style="justify-content: center; align-items: center; display: flex; padding: 16px; gap: 8px; text-decoration: none;">
                         テスト画面を開く <i class="ph ph-arrow-square-out"></i>
                     </a>
                 </div>
