@@ -358,6 +358,21 @@ App.Pages.youtube = async function() {
         return html;
     }
 
+    function getScriptFieldHtml(id, labelText) {
+        return `
+            <div class="form-group">
+                <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:8px;">
+                    <label style="margin-bottom:0;">${labelText}</label>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn-sm" style="border: 2px solid #dc3545; background: white; color: #dc3545; padding: 4px 20px; font-weight: bold; border-radius: 4px; cursor: pointer; transition: 0.2s;" onclick="expandScriptField(${id})">拡大</button>
+                        <button class="btn-sm" style="border: 2px solid #dc3545; background: white; color: #dc3545; padding: 4px 20px; font-weight: bold; border-radius: 4px; cursor: pointer; transition: 0.2s;" onclick="copyScriptField(${id})">コピー</button>
+                    </div>
+                </div>
+                <textarea id="s-field-${id}" class="script-input" oninput="updateScriptState(this)"></textarea>
+            </div>
+        `;
+    }
+
     function renderScriptTab() {
         return `
             <div class="card" style="display: flex; flex-direction: column; padding: 24px; background: var(--bg-secondary);">
@@ -378,39 +393,51 @@ App.Pages.youtube = async function() {
                 <input type="hidden" id="script-id">
                 
                 <div class="grid grid-2" style="gap: 20px;">
-                    <div class="form-group"><label>1. 動画タイトル</label><textarea id="s-field-1" class="script-input" oninput="updateScriptState(this)"></textarea></div>
-                    <div class="form-group"><label>2. キーワード</label><textarea id="s-field-2" class="script-input" oninput="updateScriptState(this)"></textarea></div>
+                    ${getScriptFieldHtml(1, '1. 動画タイトル')}
+                    ${getScriptFieldHtml(2, '2. キーワード')}
                 </div>
 
                 <div style="display: flex; flex-direction: column; gap: 20px; margin-top: 10px;">
-                    <div class="form-group"><label>3. OP</label><textarea id="s-field-3" class="script-input" oninput="updateScriptState(this)"></textarea></div>
-                    <div class="form-group"><label>4. 自己紹介（早く簡潔に）</label><textarea id="s-field-4" class="script-input" oninput="updateScriptState(this)"></textarea></div>
-                    <div class="form-group"><label>5. 動画概要（端的に動画内容を提示）</label><textarea id="s-field-5" class="script-input" oninput="updateScriptState(this)"></textarea></div>
-                    <div class="form-group"><label>6. タイトル回収（動画を見る理由を明確化）</label><textarea id="s-field-6" class="script-input" oninput="updateScriptState(this)"></textarea></div>
+                    ${getScriptFieldHtml(3, '3. OP')}
+                    ${getScriptFieldHtml(4, '4. 自己紹介（早く簡潔に）')}
+                    ${getScriptFieldHtml(5, '5. 動画概要（端的に動画内容を提示）')}
+                    ${getScriptFieldHtml(6, '6. タイトル回収（動画を見る理由を明確化）')}
                     
                     <div style="background: var(--bg-tertiary); padding: 16px; border-radius: 8px; border-left: 4px solid var(--primary);">
                         <h4 style="margin-bottom: 15px; display: flex; align-items: center; gap: 8px; color: var(--primary);">
                             <i class="ph ph-lightning"></i> PASTORフォーミュラ構築
                         </h4>
                         <div style="display: flex; flex-direction: column; gap: 20px;">
-                            <div class="form-group"><label>8. 悩みの代弁（視聴者に共感）</label><textarea id="s-field-8" class="script-input" oninput="updateScriptState(this)"></textarea></div>
-                            <div class="form-group"><label>9. 悩みの言語化（具体例）</label><textarea id="s-field-9" class="script-input" oninput="updateScriptState(this)"></textarea></div>
-                            <div class="form-group"><label>10. 実体験（過去の自分もあなたと同じ）</label><textarea id="s-field-10" class="script-input" oninput="updateScriptState(this)"></textarea></div>
-                            <div class="form-group"><label>11. 問題の拡大（問題の重大さ）</label><textarea id="s-field-11" class="script-input" oninput="updateScriptState(this)"></textarea></div>
-                            <div class="form-group"><label>12. 解決策（具体的な行動を提示）</label><textarea id="s-field-12" class="script-input" oninput="updateScriptState(this)"></textarea></div>
-                            <div class="form-group"><label>13. 変革と証明（実績）</label><textarea id="s-field-13" class="script-input" oninput="updateScriptState(this)"></textarea></div>
-                            <div class="form-group"><label>14. CTA（早く簡潔に）</label><textarea id="s-field-14" class="script-input" oninput="updateScriptState(this)"></textarea></div>
+                            ${getScriptFieldHtml(8, '8. 悩みの代弁（視聴者に共感）')}
+                            ${getScriptFieldHtml(9, '9. 悩みの言語化（具体例）')}
+                            ${getScriptFieldHtml(10, '10. 実体験（過去の自分もあなたと同じ）')}
+                            ${getScriptFieldHtml(11, '11. 問題の拡大（問題の重大さ）')}
+                            ${getScriptFieldHtml(12, '12. 解決策（具体的な行動を提示）')}
+                            ${getScriptFieldHtml(13, '13. 変革と証明（実績）')}
+                            ${getScriptFieldHtml(14, '14. CTA（早く簡潔に）')}
                         </div>
                     </div>
 
-                    <div class="form-group"><label>15. 衝撃の結論（普通の結論×）</label><textarea id="s-field-15" class="script-input" oninput="updateScriptState(this)"></textarea></div>
-                    <div class="form-group"><label>16. 根拠（理解しやすい例）</label><textarea id="s-field-16" class="script-input" oninput="updateScriptState(this)"></textarea></div>
-                    <div class="form-group"><label>17. 具体例（気付き）</label><textarea id="s-field-17" class="script-input" oninput="updateScriptState(this)"></textarea></div>
-                    <div class="form-group"><label>18. 再度結論の繰り返し</label><textarea id="s-field-18" class="script-input" oninput="updateScriptState(this)"></textarea></div>
-                    <div class="form-group"><label>19. ED</label><textarea id="s-field-19" class="script-input" oninput="updateScriptState(this)"></textarea></div>
-                    <div class="form-group"><label>20. プレゼント</label><textarea id="s-field-20" class="script-input" oninput="updateScriptState(this)"></textarea></div>
-                    <div class="form-group"><label>21. CTA</label><textarea id="s-field-21" class="script-input" oninput="updateScriptState(this)"></textarea></div>
-                    <div class="form-group"><label>22. エンディング挨拶</label><textarea id="s-field-22" class="script-input" oninput="updateScriptState(this)"></textarea></div>
+                    ${getScriptFieldHtml(15, '15. 衝撃の結論（普通の結論×）')}
+                    ${getScriptFieldHtml(16, '16. 根拠（理解しやすい例）')}
+                    ${getScriptFieldHtml(17, '17. 具体例（気付き）')}
+                    ${getScriptFieldHtml(18, '18. 再度結論の繰り返し')}
+                    ${getScriptFieldHtml(19, '19. ED')}
+                    ${getScriptFieldHtml(20, '20. プレゼント')}
+                    ${getScriptFieldHtml(21, '21. CTA')}
+                    ${getScriptFieldHtml(22, '22. エンディング挨拶')}
+                </div>
+            </div>
+
+            <!-- Script Expand Modal -->
+            <div class="modal-overlay" id="script-expand-modal">
+                <div class="modal-content" style="max-width: 90vw; height: 90vh; display: flex; flex-direction: column; padding: 0;">
+                    <div class="modal-header" style="padding: 16px 24px; border-bottom: 1px solid var(--border-light);">
+                        <h3 class="modal-title">台本 拡大表示</h3>
+                        <button class="modal-close" onclick="document.getElementById('script-expand-modal').classList.remove('active')"><i class="ph ph-x"></i></button>
+                    </div>
+                    <div class="modal-body" style="flex: 1; overflow-y: auto; padding: 40px; background: #fff; font-size: 2.5rem; line-height: 1.8; white-space: pre-wrap; font-weight: bold; color: #111;" id="expanded-script-content">
+                    </div>
                 </div>
             </div>
         `;
@@ -425,6 +452,28 @@ App.Pages.youtube = async function() {
             if(!select) return;
             select.innerHTML = '<option value="">-- 保存済みを選択 --</option>' + 
                 allScripts.map(s => `<option value="${s.id}" ${s.id == selectedId ? 'selected':''}>${s.title || '(無題)'}</option>`).join('');
+        };
+
+        window.copyScriptField = (id) => {
+            const el = document.getElementById(`s-field-${id}`);
+            if(!el || !el.value) return;
+            navigator.clipboard.writeText(el.value).then(() => {
+                alert('コピーしました！');
+            }).catch(err => {
+                console.error('コピーに失敗しました', err);
+                alert('コピーに失敗しました');
+            });
+        };
+
+        window.expandScriptField = (id) => {
+            const el = document.getElementById(`s-field-${id}`);
+            if(!el) return;
+            const content = el.value || '(内容がありません)';
+            const modal = document.getElementById('script-expand-modal');
+            if(modal) {
+                document.getElementById('expanded-script-content').textContent = content;
+                modal.classList.add('active');
+            }
         };
 
         if (activeTab === 'script') {
