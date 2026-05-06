@@ -471,6 +471,10 @@ App.Pages.youtube = async function() {
             const content = el.value || '(内容がありません)';
             const modal = document.getElementById('script-expand-modal');
             if(modal) {
+                // Ensure the modal is a direct child of body so position: fixed covers the whole screen
+                if (modal.parentNode !== document.body) {
+                    document.body.appendChild(modal);
+                }
                 document.getElementById('expanded-script-content').textContent = content;
                 modal.classList.add('active');
             }
