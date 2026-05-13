@@ -503,9 +503,11 @@ App.Pages.youtube = async function() {
             updateScriptState();
         };
 
-        window.saveScript = async () => {
-            const id = document.getElementById('script-id').value;
+        window.saveScript = async (showAlert = true) => {
+            let id = document.getElementById('script-id').value;
             const title = document.getElementById('s-field-1').value || '無題の台本';
+            
+
             
             const fields = {};
             for(let i=1; i<=22; i++) {
@@ -518,12 +520,16 @@ App.Pages.youtube = async function() {
             if(id) {
                 await Store.updateYTScript(id, data);
             } else {
-                await Store.addYTScript(data);
+                id = await Store.addYTScript(data);
+                document.getElementById('script-id').value = id;
             }
             
-            alert('保存しました');
             allScripts = await Store.getYTScripts();
-            updateHistoryDropdown(id || allScripts[0]?.id);
+            updateHistoryDropdown(id);
+            
+            if (showAlert) {
+                alert('保存しました');
+            }
         };
 
         window.loadSelectedScript = (id) => {
@@ -546,11 +552,19 @@ App.Pages.youtube = async function() {
             }, 50);
         };
 
+        let autoSaveTimer = null;
+
         window.updateScriptState = (targetElement) => {
             countTotalChars();
             if(targetElement) {
                 autoResizeTextarea(targetElement);
             }
+            
+            // 自動保存（入力が止まってから1.5秒後に保存）
+            clearTimeout(autoSaveTimer);
+            autoSaveTimer = setTimeout(() => {
+                window.saveScript(false);
+            }, 1500);
         };
 
         const countTotalChars = () => {

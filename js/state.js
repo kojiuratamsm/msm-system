@@ -105,7 +105,9 @@ const Store = {
         return (data || []).map(r => ({ id: r.id, ...r.data }));
     },
     async addYTScript(data) {
-        await supabase.from('customers').insert([{ id: Date.now(), service_type: 'youtube_script', data }]);
+        const id = Date.now();
+        await supabase.from('customers').insert([{ id, service_type: 'youtube_script', data }]);
+        return id;
     },
     async updateYTScript(id, data) {
         await supabase.from('customers').update({ data }).eq('id', id);
