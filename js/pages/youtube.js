@@ -385,6 +385,7 @@ App.Pages.youtube = async function() {
                         <select id="script-history-select" class="input-field" style="width: 200px; margin-bottom: 0;" onchange="loadSelectedScript(this.value)">
                             <option value="">-- 保存済みを選択 --</option>
                         </select>
+                        <button class="btn-sm" style="border: 2px solid #dc3545; background: white; color: #dc3545; padding: 4px 16px; border-radius: 4px; cursor: pointer; transition: 0.2s; font-weight: bold;" onclick="deleteCurrentScript()"><i class="ph ph-trash"></i> 削除</button>
                         <button class="btn-secondary btn-sm" onclick="newScript()"><i class="ph ph-file-plus"></i> 新規作成</button>
                         <button class="btn-primary btn-sm" onclick="saveScript()"><i class="ph ph-floppy-disk"></i> 保存</button>
                     </div>
@@ -529,6 +530,26 @@ App.Pages.youtube = async function() {
             
             if (showAlert) {
                 alert('保存しました');
+            }
+        };
+
+        window.deleteCurrentScript = async () => {
+            const id = document.getElementById('script-id').value;
+            if(!id) {
+                alert('削除する台本が選択されていません。');
+                return;
+            }
+            if(!confirm('本当にこの台本を削除してもよろしいですか？')) return;
+            
+            await Store.deleteYTScript(id);
+            alert('台本を削除しました。');
+            
+            allScripts = await Store.getYTScripts();
+            updateHistoryDropdown();
+            if(allScripts.length > 0) {
+                loadSelectedScript(allScripts[0].id);
+            } else {
+                newScript();
             }
         };
 
