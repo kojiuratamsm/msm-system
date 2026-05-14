@@ -518,6 +518,8 @@ App.Pages.youtube = async function() {
 
             const data = { title, fields, updatedAt: new Date().toISOString() };
 
+            let isNew = !id;
+
             if(id) {
                 await Store.updateYTScript(id, data);
             } else {
@@ -525,8 +527,12 @@ App.Pages.youtube = async function() {
                 document.getElementById('script-id').value = id;
             }
             
-            allScripts = await Store.getYTScripts();
-            updateHistoryDropdown(id);
+            // 入力中（自動保存）にリストを再描画するとフォーカスが飛ぶ場合があるため、
+            // 手動保存時か、新規作成した直後のみリストを更新する
+            if (showAlert || isNew) {
+                allScripts = await Store.getYTScripts();
+                updateHistoryDropdown(id);
+            }
             
             if (showAlert) {
                 alert('保存しました');
@@ -606,8 +612,10 @@ App.Pages.youtube = async function() {
 
         const autoResizeTextarea = (el) => {
             if(!el) return;
+            const scrollPos = window.scrollY; // スクロール飛びを防ぐために現在の位置を記憶
             el.style.height = 'auto'; // 一旦リセット
             el.style.height = (el.scrollHeight) + 'px'; // 内容に合わせて拡張
+            window.scrollTo(0, scrollPos); // スクロール位置を元に戻す
         };
 
         // Initialize display
