@@ -400,6 +400,13 @@ App.Pages.youtube = async function() {
                     ${getScriptFieldHtml(1, '1. 動画タイトル')}
                     ${getScriptFieldHtml(2, '2. キーワード')}
                 </div>
+                
+                <div style="margin-top: 20px;">
+                    <div class="form-group" style="background: var(--bg-tertiary); padding: 16px; border-radius: 8px; border-left: 4px solid #888;">
+                        <label style="margin-bottom: 8px; color: var(--text-secondary); display: flex; align-items: center; gap: 4px;"><i class="ph ph-note"></i> 【メモ用】※一括コピー対象外</label>
+                        <textarea id="s-field-memo" class="script-input" oninput="updateScriptState(this)" style="background: var(--bg-color); min-height: 80px;" placeholder="自由にメモを書き込めます..."></textarea>
+                    </div>
+                </div>
 
                 <div style="display: flex; flex-direction: column; gap: 20px; margin-top: 10px;">
                     ${getScriptFieldHtml(3, '3. OP')}
@@ -532,6 +539,11 @@ App.Pages.youtube = async function() {
                     el.style.height = 'auto'; // Reset size
                 }
             }
+            const memoEl = document.getElementById('s-field-memo');
+            if(memoEl) {
+                memoEl.value = '';
+                memoEl.style.height = 'auto';
+            }
             updateScriptState();
         };
 
@@ -546,6 +558,8 @@ App.Pages.youtube = async function() {
                 const el = document.getElementById(`s-field-${i}`);
                 if (el) fields[`f${i}`] = el.value;
             }
+            const memoEl = document.getElementById('s-field-memo');
+            if (memoEl) fields['memo'] = memoEl.value;
 
             const data = { title, fields, updatedAt: new Date().toISOString() };
 
@@ -605,6 +619,11 @@ App.Pages.youtube = async function() {
                         el.value = s.fields[`f${i}`] || '';
                         autoResizeTextarea(el);
                     }
+                }
+                const memoEl = document.getElementById('s-field-memo');
+                if (memoEl && s.fields) {
+                    memoEl.value = s.fields['memo'] || '';
+                    autoResizeTextarea(memoEl);
                 }
                 updateScriptState();
             }, 50);
