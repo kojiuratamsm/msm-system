@@ -378,7 +378,10 @@ App.Pages.youtube = async function() {
             <div class="card" style="display: flex; flex-direction: column; padding: 24px; background: var(--bg-secondary);">
                 <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-light); padding-bottom: 16px; margin-bottom: 24px;">
                     <div>
-                        <h3 style="font-size: 1.2rem; margin: 0;">YouTube台本作成ツール</h3>
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <h3 style="font-size: 1.2rem; margin: 0;">YouTube台本作成ツール</h3>
+                            <button class="btn-sm" style="background: #2b5585; color: white; border: none; padding: 4px 16px; border-radius: 4px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 4px;" onclick="copyAllScriptFields()">一括コピー</button>
+                        </div>
                         <div id="script-total-chars" style="font-size: 0.85rem; color: var(--primary); font-weight: bold; margin-top: 4px;">合計文字数: 0 文字 (空白抜き)</div>
                     </div>
                     <div style="display: flex; gap: 8px; align-items: center;">
@@ -460,6 +463,34 @@ App.Pages.youtube = async function() {
             if(!el || !el.value) return;
             navigator.clipboard.writeText(el.value).then(() => {
                 alert('コピーしました！');
+            }).catch(err => {
+                console.error('コピーに失敗しました', err);
+                alert('コピーに失敗しました');
+            });
+        };
+
+        window.copyAllScriptFields = () => {
+            let fullText = '';
+            for(let i=1; i<=22; i++) {
+                const el = document.getElementById(`s-field-${i}`);
+                if(!el) continue;
+                const val = el.value.trim();
+                if(!val) continue;
+                
+                // 対応するラベルのテキストを取得
+                const labelEl = el.closest('.form-group')?.querySelector('label');
+                const labelText = labelEl ? labelEl.textContent : `項目 ${i}`;
+                
+                fullText += `【${labelText}】\n${val}\n\n`;
+            }
+            
+            if(!fullText.trim()) {
+                alert('コピーする内容がありません。');
+                return;
+            }
+
+            navigator.clipboard.writeText(fullText.trim()).then(() => {
+                alert('すべての内容を一括コピーしました！');
             }).catch(err => {
                 console.error('コピーに失敗しました', err);
                 alert('コピーに失敗しました');
