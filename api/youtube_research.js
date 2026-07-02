@@ -1,4 +1,4 @@
-const fetch = require('node-fetch');
+// Global fetch is used directly in Node.js 18+ / Vercel environment
 
 module.exports = async (req, res) => {
     // CORS headers

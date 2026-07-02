@@ -30,6 +30,10 @@ App.Pages.ai_planner = async function() {
                     調べたいキーワードやジャンルを入力してください。<br>
                     AI社員がYouTube上のリアルタイムな最新トレンド（直近半年〜1年）をリサーチし、伸びている動画の傾向分析と、そこからヒットが期待できる企画案を3つ自動で提案します。
                 </p>
+                <div style="margin-top: 12px; padding: 10px 16px; background: rgba(240, 62, 62, 0.08); border: 1px solid rgba(240, 62, 62, 0.2); border-radius: 6px; display: inline-flex; align-items: center; gap: 8px; font-size: 0.85rem; color: #c92a2a; font-weight: bold;">
+                    <i class="ph ph-youtube-logo" style="font-size: 1.2rem; color: var(--danger);"></i>
+                    分析時に自動連携される自社チャンネル: MEO対策チャンネル (@meo_taisaku)
+                </div>
             </div>
 
             <div class="grid grid-2" style="gap: 24px; max-width: 900px;">
@@ -63,9 +67,14 @@ App.Pages.ai_planner = async function() {
         <!-- 結果表示エリア -->
         <div id="planner-result-card" class="card" style="display: none; padding: 32px;">
             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-light); padding-bottom: 16px; margin-bottom: 24px;">
-                <h3 style="font-size: 1.3rem; margin: 0; color: var(--success-dark); display: flex; align-items: center; gap: 8px;">
-                    <i class="ph ph-sparkles" style="color: var(--warning);"></i> AI企画提案書
-                </h3>
+                <div>
+                    <h3 style="font-size: 1.3rem; margin: 0; color: var(--success-dark); display: flex; align-items: center; gap: 8px;">
+                        <i class="ph ph-sparkles" style="color: var(--warning);"></i> AI企画提案書
+                    </h3>
+                    <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 4px; margin-bottom: 0;">
+                        分析対象チャンネル: MEO対策チャンネル (@meo_taisaku)
+                    </p>
+                </div>
                 <button class="btn-secondary" onclick="window.print()"><i class="ph ph-printer"></i> 印刷 / PDF保存</button>
             </div>
 
