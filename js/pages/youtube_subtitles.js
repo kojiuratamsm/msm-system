@@ -222,13 +222,33 @@ ${srtText}
                     const gptData = await gptRes.json();
                     let correctedText = gptData.choices[0].message.content.trim();
                     
-                    // Remove markdown code block if API ignored instructions
-                    if (correctedText.startsWith('\`\`\`')) {
-                        correctedText = correctedText.replace(/^\`\`\`(srt|text)?\n/, '');
-                        correctedText = correctedText.replace(/\n\`\`\`$/, '');
-                    }
-                    
-                    finalSrtText = correctedText;
+                    // SRTデータのクレンジング関数
+                    const cleanSrt = (text) => {
+                        let clean = text.trim();
+                        // マークダウンコードブロックの除去
+                        clean = clean.replace(/^```[a-zA-Z0-9]*\n/, '');
+                        clean = clean.replace(/\n```$/, '');
+                        clean = clean.trim();
+
+                        // 最初の字幕番号「1」の前の不要な導入文をカットする
+                        // 例: "1\n00:00:00,000 --> ..." のパターンを探す
+                        const match = clean.match(/(?:^|\n)(1)\s*\n\d{2}:\d{2}:\d{2}[,.]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[,.]\d{3}/);
+                        if (match) {
+                            const startIndex = clean.indexOf(match[1]);
+                            if (startIndex !== -1) {
+                                clean = clean.substring(startIndex);
+                            }
+                        }
+                        
+                        // 改行コードをWindows/Mac両対応の CRLF(\r\n) に統一
+                        clean = clean.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+                        return clean;
+                    };
+
+                    finalSrtText = cleanSrt(correctedText);
+                } else {
+                    // 台本がない（Whisperの生データ）場合も念のため改行コードを統一
+                    finalSrtText = finalSrtText.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
                 }
 
                 // 完了表示とダウンロード準備
@@ -237,7 +257,9 @@ ${srtText}
 
                 const downloadBtn = document.getElementById('btn-download');
                 downloadBtn.onclick = () => {
-                    const blob = new Blob([finalSrtText], { type: 'text/plain' });
+                    // Premiere Proでの文字化けや読み込みエラーを防ぐため、
+                    // BOM付きUTF-8 (\ufeff) を付与してBlobを作成します
+                    const blob = new Blob(["\ufeff", finalSrtText], { type: 'text/srt;charset=utf-8' });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;

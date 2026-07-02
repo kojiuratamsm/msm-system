@@ -1,11 +1,14 @@
-App.Pages.youtube = async function() {
+App.Pages.youtube = async function(targetScriptId = null) {
     const user = Auth.getCurrentUser();
     if (!user || user.role !== 'admin') {
         App.mount('<div class="card" style="margin-top:24px; padding: 40px; text-align:center;"><h3 class="card-title">アクセス権限がありません</h3><p style="color:var(--text-secondary); margin-top: 16px;">YouTubeは管理者のみ閲覧可能です。</p></div>');
         return;
     }
 
-    let activeTab = window.ytActiveTab || 'video';
+    let activeTab = targetScriptId ? 'script' : (window.ytActiveTab || 'video');
+    if (targetScriptId) {
+        window.ytActiveTab = 'script';
+    }
     let videoTypeTab = window.ytVideoTypeMode || 'long';
     let selectedChannelId = window.ytSelectedChannelId || null;
     let selectedLineId = window.ytSelectedLineId || null;
@@ -520,9 +523,12 @@ App.Pages.youtube = async function() {
         };
 
         if (activeTab === 'script') {
-            updateHistoryDropdown();
-            // Automatically select the first script if available
-            if (allScripts.length > 0) {
+            updateHistoryDropdown(targetScriptId);
+            // targetScriptIdが指定されていればそれを優先ロード、なければ従来通り最初の台本
+            if (targetScriptId) {
+                loadSelectedScript(targetScriptId);
+                document.getElementById('script-history-select').value = targetScriptId;
+            } else if (allScripts.length > 0) {
                 loadSelectedScript(allScripts[0].id);
                 document.getElementById('script-history-select').value = allScripts[0].id;
             } else {

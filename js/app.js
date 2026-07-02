@@ -20,7 +20,8 @@ const App = {
             'payroll': '給与計算',
             'tasks': 'タスク表',
             'invites': 'リンク',
-            'youtube_subtitles': 'YouTubeテロップ生成'
+            'youtube_subtitles': 'YouTubeテロップ生成',
+            'ai_planner': 'AI企画室'
         };
         document.getElementById('page-title').textContent = titleMap[target] || '';
 
@@ -184,7 +185,7 @@ const App = {
             
             // Sidebar will explicitly show all items to all users now.
             // When clicked, non-admins will see a rejection screen for restricted pages.
-            const allNavs = ['dashboard', 'services', 'customers', 'sales', 'finance', 'payroll', 'tasks', 'research', 'youtube', 'youtube_subtitles', 'meo_users', 'invites', 'settings'];
+            const allNavs = ['dashboard', 'services', 'customers', 'sales', 'finance', 'payroll', 'tasks', 'research', 'youtube', 'youtube_subtitles', 'ai_planner', 'meo_users', 'invites', 'settings'];
             allNavs.forEach(nav => {
                 const el = document.querySelector(`li[data-target="${nav}"]`);
                 if (el) el.style.display = 'flex';
