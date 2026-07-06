@@ -21,11 +21,12 @@ const App = {
             'tasks': 'タスク表',
             'invites': 'リンク',
             'youtube_subtitles': 'YouTubeテロップ生成',
-            'ai_planner': 'AI企画室'
+            'ai_planner': 'AI企画室',
+            'sales_leads': 'MEO営業リスト作成'
         };
         document.getElementById('page-title').textContent = titleMap[target] || '';
 
-        if (target === 'finance' || target === 'payroll' || target === 'invites' || target === 'meo_users') {
+        if (target === 'finance' || target === 'payroll' || target === 'invites' || target === 'meo_users' || target === 'sales_leads') {
             const user = Auth.getCurrentUser();
             if (!user || user.role !== 'admin') {
                 alert('管理者以外閲覧できません');
@@ -185,7 +186,7 @@ const App = {
             
             // Sidebar will explicitly show all items to all users now.
             // When clicked, non-admins will see a rejection screen for restricted pages.
-            const allNavs = ['dashboard', 'services', 'customers', 'sales', 'finance', 'payroll', 'tasks', 'research', 'youtube', 'youtube_subtitles', 'ai_planner', 'meo_users', 'invites', 'settings'];
+            const allNavs = ['dashboard', 'services', 'customers', 'sales', 'finance', 'payroll', 'tasks', 'research', 'youtube', 'youtube_subtitles', 'ai_planner', 'sales_leads', 'meo_users', 'invites', 'settings'];
             allNavs.forEach(nav => {
                 const el = document.querySelector(`li[data-target="${nav}"]`);
                 if (el) el.style.display = 'flex';
