@@ -201,13 +201,21 @@ function doPost(e) {
                     })
                 });
 
-                if (!response.ok) {
-                    const err = await response.json();
-                    throw new Error(err.error || 'リストの作成に失敗しました。');
+                const responseText = await response.text();
+                let data;
+                try {
+                    data = JSON.parse(responseText);
+                } catch (jsonErr) {
+                    console.error("Non-JSON response:", responseText);
+                    // HTMLエラーページからタイトルなどを抽出してわかりやすくする
+                    const titleMatch = responseText.match(/<title>(.*?)<\/title>/i);
+                    const errorTitle = titleMatch ? titleMatch[1] : '不明なエラー';
+                    throw new Error(`サーバーから不正な応答がありました (ステータス: ${response.status} ${response.statusText} / 内容: ${errorTitle})。ファイルが正しくアップロードされているか、サーバーが再起動されているか確認してください。`);
                 }
 
-                // サーバーのログストリームを処理（可能であればストリーミング、不可能なら一括取得）
-                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.error || 'リストの作成に失敗しました。');
+                }
                 
                 // ログを一括出力
                 if (data.logs && data.logs.length > 0) {
