@@ -230,7 +230,7 @@ ${companyDataText}
         res.status(200).json({
             success: true,
             report,
-            videoCount: videoList.length
+            videoCount: marketVideos.length
         });
 
     } catch (error) {
