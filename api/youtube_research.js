@@ -1,10 +1,9 @@
 // Global fetch is used directly in Node.js 18+ / Vercel environment
 
 module.exports = async (req, res) => {
-    // CORS headers
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-YouTube-API-Key');
 
     if (req.method === 'OPTIONS') {
         res.status(200).end();
@@ -17,6 +16,7 @@ module.exports = async (req, res) => {
 
     const { query, period } = req.body;
     const authHeader = req.headers.authorization;
+    const ytApiKey = req.headers['x-youtube-api-key'];
 
     if (!query) {
         return res.status(400).json({ error: '検索キーワードを入力してください。' });
@@ -26,132 +26,102 @@ module.exports = async (req, res) => {
         return res.status(401).json({ error: 'OpenAIのAPIキーが設定されていません。' });
     }
 
-    const apiKey = authHeader.split(' ')[1];
+    if (!ytApiKey) {
+        return res.status(401).json({ error: 'YouTube Data APIキーが設定されていません。' });
+    }
 
-    // ytInitialData から動画リストを抽出するヘルパー関数
-    const extractVideos = (html, isChannelPage = false) => {
-        const regex = /ytInitialData\s*=\s*({.+?});/;
-        const match = html.match(regex);
-        const videos = [];
-
-        if (match) {
-            try {
-                const data = JSON.parse(match[1]);
-                let items = [];
-
-                if (isChannelPage) {
-                    // チャンネルページ (動画タブ) の構造
-                    const tabs = data.contents?.twoColumnBrowseResultsRenderer?.tabs || [];
-                    const videosTab = tabs.find(t => t.tabRenderer?.title === '動画' || t.tabRenderer?.title === 'Videos');
-                    if (videosTab) {
-                        items = videosTab.tabRenderer.content?.richGridRenderer?.contents?.map(c => c.richItemRenderer?.content) || [];
-                    }
-                } else {
-                    // 検索結果ページの構造
-                    const contents = data.contents?.twoColumnSearchResultRenderer?.primaryContents?.sectionListRenderer?.contents || [];
-                    if (contents.length > 0) {
-                        items = contents[0].itemSectionRenderer?.contents || [];
-                    }
-                }
-
-                for (const item of items) {
-                    if (!item) continue;
-                    const video = item.videoRenderer;
-                    if (video) {
-                        const title = video.title?.runs?.[0]?.text || '';
-                        const videoId = video.videoId || '';
-                        const viewCount = video.viewCountText?.simpleText || video.shortViewCountText?.simpleText || '';
-                        const publishedTime = video.publishedTimeText?.simpleText || '';
-                        const description = video.detailedMetadataSnippets?.[0]?.snippetText?.runs?.map(r => r.text).join('') || '';
-
-                        // 厳格な期間フィルタリング
-                        let isWithinPeriod = true;
-                        
-                        // "1 年前" などの場合
-                        if (publishedTime.includes('年')) {
-                            const yearsAgo = parseInt(publishedTime) || 0;
-                            if (period === '6months') {
-                                isWithinPeriod = false; // 半年指定なら年単位は除外
-                            } else if (period === '1year' && yearsAgo > 1) {
-                                isWithinPeriod = false; // 1年指定なら2年以上は除外
-                            }
-                        }
-                        
-                        // "ヶ月前" の場合（半年指定時の厳格チェック）
-                        if (period === '6months' && publishedTime.includes('ヶ月')) {
-                            const monthsAgo = parseInt(publishedTime) || 0;
-                            if (monthsAgo > 6) {
-                                isWithinPeriod = false;
-                            }
-                        }
-
-                        // ライブ配信予定などは除外（publishedTimeがない場合など）
-                        if (!publishedTime || publishedTime.includes('予定')) {
-                            isWithinPeriod = false;
-                        }
-
-                        if (isWithinPeriod && title) {
-                            videos.push({
-                                title,
-                                videoId,
-                                viewCount,
-                                publishedTime,
-                                description: description.substring(0, 100)
-                            });
-                        }
-                    }
-                }
-            } catch (err) {
-                console.error('Data extraction error:', err);
-            }
-        }
-        return videos;
-    };
+    const openaiKey = authHeader.split(' ')[1];
 
     try {
-        // 1. YouTubeデータの取得 (直列実行でボット判定を防ぎ、エラーハンドリングを強化)
-        const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&sp=CAASAhAB`;
-        const companyUrl = `https://www.youtube.com/@meo_taisaku/videos`;
+        // 対象期間の計算 (RFC 3339 formatted date-time value)
+        const date = new Date();
+        if (period === '6months') {
+            date.setMonth(date.getMonth() - 6);
+        } else {
+            date.setFullYear(date.getFullYear() - 1);
+        }
+        const publishedAfter = date.toISOString();
 
-        const reqHeaders = {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
-            'Accept-Language': 'ja-JP,ja;q=0.9'
-        };
+        // 1. YouTube Data API で市場検索 (50件取得して、そこから異なる15チャンネルを抽出)
+        const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=50&q=${encodeURIComponent(query)}&type=video&publishedAfter=${publishedAfter}&order=viewCount&key=${ytApiKey}`;
+        const searchRes = await fetch(searchUrl);
 
-        let searchHtml = '';
-        let companyHtml = '';
-
-        try {
-            // 市場データの取得
-            const searchRes = await fetch(searchUrl, { headers: reqHeaders });
-            if (searchRes.ok) searchHtml = await searchRes.text();
-            
-            // サーバーの過負荷・ボット判定防止のために1秒待機
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            // 自社データの取得
-            const companyRes = await fetch(companyUrl, { headers: reqHeaders });
-            if (companyRes.ok) companyHtml = await companyRes.text();
-        } catch (ytError) {
-            console.error('YouTube Fetch Error:', ytError);
-            // エラーが発生しても、空のHTMLとして後続のフォールバック(データなし)でGPTに処理させる
-            searchHtml = '';
-            companyHtml = '';
+        if (!searchRes.ok) {
+            const errBody = await searchRes.text();
+            console.error('YouTube API Error (Market):', errBody);
+            throw new Error('YouTube Data APIでの検索に失敗しました。APIキーやクオータ(制限)を確認してください。');
         }
 
-        const marketVideos = extractVideos(searchHtml, false);
-        const companyVideos = extractVideos(companyHtml, true);
+        const searchData = await searchRes.json();
+        
+        // チャンネルごとの動画を1つずつ集め、最低15チャンネルの多様なデータを確保する
+        const uniqueChannels = new Set();
+        const marketVideos = [];
 
-        // データ整形 (GPTへのインプット用)
-        const formatVideos = (list, limit) => {
-            if (list.length === 0) return '（データの自動取得に失敗したか、条件に合う動画がありませんでした。一般的な市場動向の知識に基づいて分析・企画を作成してください。）';
-            return list.slice(0, limit).map((v, i) => `[${i+1}] タイトル: ${v.title}\n   公開時期: ${v.publishedTime} / 再生数: ${v.viewCount}\n   概要: ${v.description}`).join('\n\n');
+        for (const item of searchData.items || []) {
+            const snippet = item.snippet;
+            if (!snippet) continue;
+            
+            const channelId = snippet.channelId;
+            // 同じチャンネルからの動画は最大2つまでに制限して多様性を持たせる等の工夫も可能だが、
+            // 今回は「15チャンネル以上の情報を集める」ため、まずはユニークチャンネルを優先
+            if (!uniqueChannels.has(channelId)) {
+                uniqueChannels.add(channelId);
+                marketVideos.push({
+                    title: snippet.title,
+                    videoId: item.id.videoId,
+                    channelName: snippet.channelTitle,
+                    publishedAt: snippet.publishedAt,
+                    description: snippet.description.substring(0, 150)
+                });
+            } else if (marketVideos.length < 15) {
+                // 15チャンネルに満たない場合は、同一チャンネルの別動画も許容して件数を稼ぐ
+                 marketVideos.push({
+                    title: snippet.title,
+                    videoId: item.id.videoId,
+                    channelName: snippet.channelTitle,
+                    publishedAt: snippet.publishedAt,
+                    description: snippet.description.substring(0, 150)
+                });
+            }
+            if (marketVideos.length >= 25) break; // GPTのトークン節約のため最大25件
+        }
+
+        if (marketVideos.length === 0) {
+            throw new Error('指定された期間・キーワードでYouTube動画が見つかりませんでした。');
+        }
+
+        // 2. 自社チャンネル(MEO対策チャンネル)の最新動画を取得
+        // まず自社チャンネルを検索して特定する (MEO対策チャンネル)
+        const companySearchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=10&q=${encodeURIComponent('MEO対策チャンネル')}&type=video&order=date&key=${ytApiKey}`;
+        const companyRes = await fetch(companySearchUrl);
+        let companyVideos = [];
+
+        if (companyRes.ok) {
+            const companyData = await companyRes.json();
+            for (const item of companyData.items || []) {
+                const snippet = item.snippet;
+                if (!snippet) continue;
+                companyVideos.push({
+                    title: snippet.title,
+                    videoId: item.id.videoId,
+                    channelName: snippet.channelTitle, // MEO対策チャンネルのはず
+                    publishedAt: snippet.publishedAt,
+                    description: snippet.description.substring(0, 150)
+                });
+            }
+        }
+
+        // 3. データ整形 (GPTへのインプット用)
+        const formatVideos = (list) => {
+            if (list.length === 0) return '（データなし）';
+            return list.map((v, i) => `[${i+1}] チャンネル: ${v.channelName}\n    タイトル: ${v.title}\n    URL: https://youtu.be/${v.videoId}\n    公開日: ${v.publishedAt}\n    概要: ${v.description}`).join('\n\n');
         };
 
-        const marketDataText = formatVideos(marketVideos, 15);
-        const companyDataText = formatVideos(companyVideos, 10);
+        const marketDataText = formatVideos(marketVideos);
+        const companyDataText = formatVideos(companyVideos);
 
-        // 2. GPT-4o にトレンド分析と企画提案を依頼
+        // 4. GPT-4o にトレンド分析と企画提案を依頼
         const systemPrompt = `
 あなたは「MEO対策チャンネル (https://www.youtube.com/@meo_taisaku)」の専属YouTubeプランナーであり、超優秀なAI社員です。
 ユーザーから提供されたYouTubeの「市場の検索結果（最新の投稿トレンド）」と、「自社(MEO対策チャンネル)の直近の投稿データ」を基に、以下のタスクを処理してください。
@@ -171,8 +141,13 @@ module.exports = async (req, res) => {
 # 【市場リサーチ＆分析結果】
 （直近のYouTube検索結果に基づくトレンドの解説、および全体的な動画スタイルの傾向）
 
-## ■ 伸びている動画の共通点と理由
-（なぜこれらの動画が伸びているのか、視聴者心理を含めて詳しく解説）
+## ■ リサーチで参考にした主なチャンネルと動画
+（リサーチデータの中から、特に傾向を裏付ける重要な参考動画を3〜5つピックアップし、チャンネル名と動画URLをリストアップしてください）
+*   チャンネル名: 動画タイトル (URL)
+*   チャンネル名: 動画タイトル (URL)
+
+## ■ 伸びている動画の共通点と根拠
+（なぜこれらの動画が伸びているのか、具体的な根拠や視聴者心理を含めて詳しく解説）
 
 ---
 
@@ -203,7 +178,7 @@ module.exports = async (req, res) => {
 【リサーチキーワード】: ${query}
 【対象期間】: 直近${period === '6months' ? '半年' : '1年'}
 
-【1. 市場のYouTube最新トレンド動画リスト】
+【1. 市場のYouTube最新トレンド動画リスト（${marketVideos.length}件のデータ）】
 ${marketDataText}
 
 【2. 自社(MEO対策チャンネル)の直近の投稿リスト】
@@ -216,7 +191,7 @@ ${companyDataText}
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`
+                    'Authorization': `Bearer ${openaiKey}`
                 },
                 body: JSON.stringify({
                     model: "gpt-4o",

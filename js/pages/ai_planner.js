@@ -10,16 +10,22 @@ App.Pages.ai_planner = async function() {
             <div style="border-bottom: 1px solid var(--border-light); padding-bottom: 16px; margin-bottom: 24px;">
                 <h3 style="font-size: 1.2rem; margin: 0; color: var(--primary-dark);"><i class="ph ph-gear"></i> API設定</h3>
                 <p style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 8px;">
-                    自動リサーチと企画生成を行うためにOpenAIのAPIキーを保存してください。<br>
+                    自動リサーチと企画生成を行うために必要な2つのAPIキーを保存してください。<br>
                     ※キーはブラウザのローカルストレージに安全に保管されます。
                 </p>
             </div>
-            <div class="form-group" style="max-width: 600px;">
-                <label>OpenAI APIキー (sk-proj-...)</label>
-                <div style="display: flex; gap: 8px;">
+            <div class="grid grid-2" style="gap: 16px; max-width: 800px; margin-bottom: 16px;">
+                <div class="form-group">
+                    <label>OpenAI APIキー (sk-proj-...)</label>
                     <input type="password" id="openai-api-key" class="input-field" placeholder="sk-..." value="">
-                    <button class="btn-primary" onclick="saveApiKey()">保存</button>
                 </div>
+                <div class="form-group">
+                    <label>YouTube Data API v3 キー</label>
+                    <input type="password" id="youtube-api-key" class="input-field" placeholder="AIza..." value="">
+                </div>
+            </div>
+            <div>
+                <button class="btn-primary" onclick="saveApiKeys()"><i class="ph ph-floppy-disk"></i> キーを保存する</button>
             </div>
         </div>
 
@@ -28,7 +34,7 @@ App.Pages.ai_planner = async function() {
                 <h3 style="font-size: 1.2rem; margin: 0; color: var(--primary-dark);"><i class="ph ph-brain"></i> AI企画室 (YouTube企画リサーチAI)</h3>
                 <p style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 8px;">
                     調べたいキーワードやジャンルを入力してください。<br>
-                    AI社員がYouTube上のリアルタイムな最新トレンド（直近半年〜1年）をリサーチし、伸びている動画の傾向分析と、そこからヒットが期待できる企画案を3つ自動で提案します。
+                    AI社員がYouTube公式APIを用いて15チャンネル以上の最新トレンド（直近半年〜1年）をリサーチし、伸びている動画の根拠と参考元を明記した上で、ヒットが期待できる企画案を3つ自動で提案します。
                 </p>
                 <div style="margin-top: 12px; padding: 10px 16px; background: rgba(240, 62, 62, 0.08); border: 1px solid rgba(240, 62, 62, 0.2); border-radius: 6px; display: inline-flex; align-items: center; gap: 8px; font-size: 0.85rem; color: #c92a2a; font-weight: bold;">
                     <i class="ph ph-youtube-logo" style="font-size: 1.2rem; color: var(--danger);"></i>
@@ -59,8 +65,8 @@ App.Pages.ai_planner = async function() {
             <!-- 進捗表示 -->
             <div id="planner-progress" style="display: none; margin-top: 32px; padding: 24px; background: var(--bg-tertiary); border-radius: 8px; text-align: center;">
                 <i class="ph ph-spinner ph-spin" style="font-size: 2.5rem; color: var(--primary); margin-bottom: 16px;"></i>
-                <div id="planner-progress-text" style="font-size: 1.1rem; font-weight: bold; color: var(--text-primary);">YouTube上の最新動画データを収集中...</div>
-                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 8px;">※YouTube上の検索データ収集とGPT-4oによる分析には約1〜2分かかります。画面を閉じずにお待ちください。</p>
+                <div id="planner-progress-text" style="font-size: 1.1rem; font-weight: bold; color: var(--text-primary);">YouTube Data APIから最新動画データを確実に収集中...</div>
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 8px;">※公式APIによる検索データ収集とGPT-4oによる分析には約1〜2分かかります。画面を閉じずにお待ちください。</p>
             </div>
         </div>
 
@@ -86,25 +92,28 @@ App.Pages.ai_planner = async function() {
 
     App.mount(html, () => {
         // APIキーの読み込み
-        const savedKey = localStorage.getItem('openai_api_key');
-        if (savedKey) {
-            document.getElementById('openai-api-key').value = savedKey;
-        }
+        const savedOpenAIKey = localStorage.getItem('openai_api_key');
+        const savedYTKey = localStorage.getItem('youtube_api_key');
+        if (savedOpenAIKey) document.getElementById('openai-api-key').value = savedOpenAIKey;
+        if (savedYTKey) document.getElementById('youtube-api-key').value = savedYTKey;
 
-        window.saveApiKey = () => {
-            const key = document.getElementById('openai-api-key').value.trim();
-            if (!key) {
-                alert('APIキーを入力してください。');
+        window.saveApiKeys = () => {
+            const oKey = document.getElementById('openai-api-key').value.trim();
+            const yKey = document.getElementById('youtube-api-key').value.trim();
+            if (!oKey || !yKey) {
+                alert('OpenAIとYouTubeの両方のAPIキーを入力してください。');
                 return;
             }
-            localStorage.setItem('openai_api_key', key);
-            alert('APIキーをブラウザに保存しました！');
+            localStorage.setItem('openai_api_key', oKey);
+            localStorage.setItem('youtube_api_key', yKey);
+            alert('両方のAPIキーをブラウザに保存しました！');
         };
 
         window.runResearchAndPlanning = async () => {
-            const apiKey = localStorage.getItem('openai_api_key');
-            if (!apiKey) {
-                alert('まずは画面上部の「API設定」でOpenAIのAPIキーを保存してください。');
+            const oKey = localStorage.getItem('openai_api_key');
+            const yKey = localStorage.getItem('youtube_api_key');
+            if (!oKey || !yKey) {
+                alert('まずは画面上部の「API設定」で両方のAPIキーを保存してください。');
                 return;
             }
 
@@ -126,22 +135,22 @@ App.Pages.ai_planner = async function() {
             btn.style.opacity = '0.5';
             progress.style.display = 'block';
             resultCard.style.display = 'none';
-            progressText.textContent = 'YouTube上の最新動画データを収集中...';
+            progressText.textContent = 'YouTube公式APIから15チャンネル以上の最新データを確実に収集中...';
 
             try {
-                // 30秒後ぐらいにローテーションでメッセージを変えて退屈を防ぐ
                 const msgTimer = setTimeout(() => {
-                    progressText.textContent = 'データをGPT-4oに転送し、直近のヒット傾向を分析中...';
+                    progressText.textContent = 'データをGPT-4oに転送し、直近のヒット傾向や伸びている根拠を分析中...';
                 }, 15000);
                 const msgTimer2 = setTimeout(() => {
-                    progressText.textContent = '競合の伸びている理由を特定し、新規企画案を構築中...';
+                    progressText.textContent = '自社との差別化を図り、新規企画案を構築中...';
                 }, 35000);
 
                 const response = await fetch('/api/youtube_research', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${apiKey}`
+                        'Authorization': `Bearer ${oKey}`,
+                        'X-YouTube-API-Key': yKey
                     },
                     body: JSON.stringify({ query, period })
                 });
