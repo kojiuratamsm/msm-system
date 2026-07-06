@@ -109,7 +109,7 @@ module.exports = async (req, res) => {
     };
 
     try {
-        // 1. YouTubeデータの並列取得 (市場検索結果 ＋ 自社チャンネル最新動画)
+        // 1. YouTubeデータの取得 (直列実行でボット判定を防ぎ、エラーハンドリングを強化)
         const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&sp=CAASAhAB`;
         const companyUrl = `https://www.youtube.com/@meo_taisaku/videos`;
 
@@ -118,26 +118,33 @@ module.exports = async (req, res) => {
             'Accept-Language': 'ja-JP,ja;q=0.9'
         };
 
-        const [searchRes, companyRes] = await Promise.all([
-            fetch(searchUrl, { headers: reqHeaders }),
-            fetch(companyUrl, { headers: reqHeaders })
-        ]);
+        let searchHtml = '';
+        let companyHtml = '';
 
-        if (!searchRes.ok || !companyRes.ok) {
-            throw new Error('YouTubeデータの取得に一部失敗しました。');
+        try {
+            // 市場データの取得
+            const searchRes = await fetch(searchUrl, { headers: reqHeaders });
+            if (searchRes.ok) searchHtml = await searchRes.text();
+            
+            // サーバーの過負荷・ボット判定防止のために1秒待機
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // 自社データの取得
+            const companyRes = await fetch(companyUrl, { headers: reqHeaders });
+            if (companyRes.ok) companyHtml = await companyRes.text();
+        } catch (ytError) {
+            console.error('YouTube Fetch Error:', ytError);
+            // エラーが発生しても、空のHTMLとして後続のフォールバック(データなし)でGPTに処理させる
+            searchHtml = '';
+            companyHtml = '';
         }
-
-        const [searchHtml, companyHtml] = await Promise.all([
-            searchRes.text(),
-            companyRes.text()
-        ]);
 
         const marketVideos = extractVideos(searchHtml, false);
         const companyVideos = extractVideos(companyHtml, true);
 
         // データ整形 (GPTへのインプット用)
         const formatVideos = (list, limit) => {
-            if (list.length === 0) return '（データなし）';
+            if (list.length === 0) return '（データの自動取得に失敗したか、条件に合う動画がありませんでした。一般的な市場動向の知識に基づいて分析・企画を作成してください。）';
             return list.slice(0, limit).map((v, i) => `[${i+1}] タイトル: ${v.title}\n   公開時期: ${v.publishedTime} / 再生数: ${v.viewCount}\n   概要: ${v.description}`).join('\n\n');
         };
 
@@ -203,21 +210,27 @@ ${marketDataText}
 ${companyDataText}
 `;
 
-        const gptRes = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
-            },
-            body: JSON.stringify({
-                model: "gpt-4o",
-                messages: [
-                    { role: "system", content: systemPrompt },
-                    { role: "user", content: userPrompt }
-                ],
-                temperature: 0.7
-            })
-        });
+        let gptRes;
+        try {
+            gptRes = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify({
+                    model: "gpt-4o",
+                    messages: [
+                        { role: "system", content: systemPrompt },
+                        { role: "user", content: userPrompt }
+                    ],
+                    temperature: 0.7
+                })
+            });
+        } catch (openaiError) {
+            console.error('OpenAI Fetch Error:', openaiError);
+            throw new Error('OpenAI APIへの接続に失敗しました。時間をおいて再試行してください。');
+        }
 
         if (!gptRes.ok) {
             const err = await gptRes.json();
