@@ -93,7 +93,16 @@ const App = {
             const li = e.target.closest('li');
             if (li) {
                 const target = li.getAttribute('data-target');
-                if (target) this.navigate(target);
+                if (target === 'youtube_short') {
+                    window.ytActiveTab = 'script';
+                    window.ytVideoTypeMode = 'short';
+                    this.navigate('youtube');
+                } else if (target === 'youtube') {
+                    window.ytVideoTypeMode = 'long';
+                    this.navigate('youtube');
+                } else if (target) {
+                    this.navigate(target);
+                }
             }
         });
 

@@ -399,48 +399,60 @@ App.Pages.youtube = async function(targetScriptId = null) {
                 
                 <input type="hidden" id="script-id">
                 
-                <div class="grid grid-2" style="gap: 20px;">
-                    ${getScriptFieldHtml(1, '1. 動画タイトル')}
-                    ${getScriptFieldHtml(2, '2. キーワード')}
-                </div>
-                
-                <div style="margin-top: 20px;">
-                    <div class="form-group" style="background: var(--bg-tertiary); padding: 16px; border-radius: 8px; border-left: 4px solid #888;">
-                        <label style="margin-bottom: 8px; color: var(--text-secondary); display: flex; align-items: center; gap: 4px;"><i class="ph ph-note"></i> 【メモ用】※一括コピー対象外</label>
-                        <textarea id="s-field-memo" class="script-input" oninput="updateScriptState(this)" style="background: var(--bg-color); min-height: 80px;" placeholder="自由にメモを書き込めます..."></textarea>
+                ${videoTypeTab === 'short' ? `
+                    <div style="display: flex; flex-direction: column; gap: 20px; margin-top: 10px;">
+                        ${getScriptFieldHtml(1, '動画タイトル')}
+                        <div class="form-group" style="background: var(--bg-tertiary); padding: 16px; border-radius: 8px; border-left: 4px solid #888;">
+                            <label style="margin-bottom: 8px; color: var(--text-secondary); display: flex; align-items: center; gap: 4px;"><i class="ph ph-note"></i> 【メモ用】※一括コピー対象外</label>
+                            <textarea id="s-field-memo" class="script-input" oninput="updateScriptState(this)" style="background: var(--bg-color); min-height: 80px;" placeholder="自由にメモを書き込めます..."></textarea>
+                        </div>
+                        ${getScriptFieldHtml(3, '導入（OP）')}
+                        ${getScriptFieldHtml(4, '動画内容')}
                     </div>
-                </div>
-
-                <div style="display: flex; flex-direction: column; gap: 20px; margin-top: 10px;">
-                    ${getScriptFieldHtml(3, '3. OP')}
-                    ${getScriptFieldHtml(4, '4. 自己紹介（早く簡潔に）')}
-                    ${getScriptFieldHtml(5, '5. 動画概要（端的に動画内容を提示）')}
-                    ${getScriptFieldHtml(6, '6. タイトル回収（動画を見る理由を明確化）')}
+                ` : `
+                    <div class="grid grid-2" style="gap: 20px;">
+                        ${getScriptFieldHtml(1, '1. 動画タイトル')}
+                        ${getScriptFieldHtml(2, '2. キーワード')}
+                    </div>
                     
-                    <div style="background: var(--bg-tertiary); padding: 16px; border-radius: 8px; border-left: 4px solid var(--primary);">
-                        <h4 style="margin-bottom: 15px; display: flex; align-items: center; gap: 8px; color: var(--primary);">
-                            <i class="ph ph-lightning"></i> PASTORフォーミュラ構築
-                        </h4>
-                        <div style="display: flex; flex-direction: column; gap: 20px;">
-                            ${getScriptFieldHtml(8, '8. 悩みの代弁（視聴者に共感）')}
-                            ${getScriptFieldHtml(9, '9. 悩みの言語化（具体例）')}
-                            ${getScriptFieldHtml(10, '10. 実体験（過去の自分もあなたと同じ）')}
-                            ${getScriptFieldHtml(11, '11. 問題の拡大（問題の重大さ）')}
-                            ${getScriptFieldHtml(12, '12. 解決策（具体的な行動を提示）')}
-                            ${getScriptFieldHtml(13, '13. 変革と証明（実績）')}
-                            ${getScriptFieldHtml(14, '14. CTA（早く簡潔に）')}
+                    <div style="margin-top: 20px;">
+                        <div class="form-group" style="background: var(--bg-tertiary); padding: 16px; border-radius: 8px; border-left: 4px solid #888;">
+                            <label style="margin-bottom: 8px; color: var(--text-secondary); display: flex; align-items: center; gap: 4px;"><i class="ph ph-note"></i> 【メモ用】※一括コピー対象外</label>
+                            <textarea id="s-field-memo" class="script-input" oninput="updateScriptState(this)" style="background: var(--bg-color); min-height: 80px;" placeholder="自由にメモを書き込めます..."></textarea>
                         </div>
                     </div>
 
-                    ${getScriptFieldHtml(15, '15. 衝撃の結論（普通の結論×）')}
-                    ${getScriptFieldHtml(16, '16. 根拠（理解しやすい例）')}
-                    ${getScriptFieldHtml(17, '17. 具体例（気付き）')}
-                    ${getScriptFieldHtml(18, '18. 再度結論の繰り返し')}
-                    ${getScriptFieldHtml(19, '19. ED')}
-                    ${getScriptFieldHtml(20, '20. プレゼント')}
-                    ${getScriptFieldHtml(21, '21. CTA')}
-                    ${getScriptFieldHtml(22, '22. エンディング挨拶')}
-                </div>
+                    <div style="display: flex; flex-direction: column; gap: 20px; margin-top: 10px;">
+                        ${getScriptFieldHtml(3, '3. OP')}
+                        ${getScriptFieldHtml(4, '4. 自己紹介（早く簡潔に）')}
+                        ${getScriptFieldHtml(5, '5. 動画概要（端的に動画内容を提示）')}
+                        ${getScriptFieldHtml(6, '6. タイトル回収（動画を見る理由を明確化）')}
+                        
+                        <div style="background: var(--bg-tertiary); padding: 16px; border-radius: 8px; border-left: 4px solid var(--primary);">
+                            <h4 style="margin-bottom: 15px; display: flex; align-items: center; gap: 8px; color: var(--primary);">
+                                <i class="ph ph-lightning"></i> PASTORフォーミュラ構築
+                            </h4>
+                            <div style="display: flex; flex-direction: column; gap: 20px;">
+                                ${getScriptFieldHtml(8, '8. 悩みの代弁（視聴者に共感）')}
+                                ${getScriptFieldHtml(9, '9. 悩みの言語化（具体例）')}
+                                ${getScriptFieldHtml(10, '10. 実体験（過去の自分もあなたと同じ）')}
+                                ${getScriptFieldHtml(11, '11. 問題の拡大（問題の重大さ）')}
+                                ${getScriptFieldHtml(12, '12. 解決策（具体的な行動を提示）')}
+                                ${getScriptFieldHtml(13, '13. 変革と証明（実績）')}
+                                ${getScriptFieldHtml(14, '14. CTA（早く簡潔に）')}
+                            </div>
+                        </div>
+
+                        ${getScriptFieldHtml(15, '15. 衝撃の結論（普通の結論×）')}
+                        ${getScriptFieldHtml(16, '16. 根拠（理解しやすい例）')}
+                        ${getScriptFieldHtml(17, '17. 具体例（気付き）')}
+                        ${getScriptFieldHtml(18, '18. 再度結論の繰り返し')}
+                        ${getScriptFieldHtml(19, '19. ED')}
+                        ${getScriptFieldHtml(20, '20. プレゼント')}
+                        ${getScriptFieldHtml(21, '21. CTA')}
+                        ${getScriptFieldHtml(22, '22. エンディング挨拶')}
+                    </div>
+                `}
             </div>
 
             <!-- Script Expand Modal -->
@@ -464,8 +476,9 @@ App.Pages.youtube = async function(targetScriptId = null) {
         const updateHistoryDropdown = (selectedId = "") => {
             const select = document.getElementById('script-history-select');
             if(!select) return;
+            const filteredScripts = allScripts.filter(s => (s.videoType || 'long') === videoTypeTab);
             select.innerHTML = '<option value="">-- 保存済みを選択 --</option>' + 
-                allScripts.map(s => `<option value="${s.id}" ${s.id == selectedId ? 'selected':''}>${s.title || '(無題)'}</option>`).join('');
+                filteredScripts.map(s => `<option value="${s.id}" ${s.id == selectedId ? 'selected':''}>${s.title || '(無題)'}</option>`).join('');
         };
 
         window.copyScriptField = (id) => {
@@ -524,13 +537,14 @@ App.Pages.youtube = async function(targetScriptId = null) {
 
         if (activeTab === 'script') {
             updateHistoryDropdown(targetScriptId);
+            const filteredScripts = allScripts.filter(s => (s.videoType || 'long') === videoTypeTab);
             // targetScriptIdが指定されていればそれを優先ロード、なければ従来通り最初の台本
             if (targetScriptId) {
                 loadSelectedScript(targetScriptId);
                 document.getElementById('script-history-select').value = targetScriptId;
-            } else if (allScripts.length > 0) {
-                loadSelectedScript(allScripts[0].id);
-                document.getElementById('script-history-select').value = allScripts[0].id;
+            } else if (filteredScripts.length > 0) {
+                loadSelectedScript(filteredScripts[0].id);
+                document.getElementById('script-history-select').value = filteredScripts[0].id;
             } else {
                 newScript();
             }
@@ -567,7 +581,7 @@ App.Pages.youtube = async function(targetScriptId = null) {
             const memoEl = document.getElementById('s-field-memo');
             if (memoEl) fields['memo'] = memoEl.value;
 
-            const data = { title, fields, updatedAt: new Date().toISOString() };
+            const data = { title, fields, updatedAt: new Date().toISOString(), videoType: videoTypeTab };
 
             let isNew = !id;
 
