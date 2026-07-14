@@ -20,6 +20,8 @@ const App = {
             'payroll': '給与計算',
             'tasks': 'タスク表',
             'invites': 'リンク',
+            'youtube': 'YouTube管理 (ロング)',
+            'youtube_short': 'YouTube管理 (ショート)',
             'youtube_subtitles': 'YouTubeテロップ生成',
             'ai_planner': 'AI企画室',
             'sales_leads': 'MEO営業リスト作成'
@@ -93,16 +95,7 @@ const App = {
             const li = e.target.closest('li');
             if (li) {
                 const target = li.getAttribute('data-target');
-                if (target === 'youtube_short') {
-                    window.ytActiveTab = 'script';
-                    window.ytVideoTypeMode = 'short';
-                    this.navigate('youtube');
-                } else if (target === 'youtube') {
-                    window.ytVideoTypeMode = 'long';
-                    this.navigate('youtube');
-                } else if (target) {
-                    this.navigate(target);
-                }
+                if (target) this.navigate(target);
             }
         });
 
@@ -195,7 +188,7 @@ const App = {
             
             // Sidebar will explicitly show all items to all users now.
             // When clicked, non-admins will see a rejection screen for restricted pages.
-            const allNavs = ['dashboard', 'services', 'customers', 'sales', 'finance', 'payroll', 'tasks', 'research', 'youtube', 'youtube_subtitles', 'ai_planner', 'sales_leads', 'meo_users', 'invites', 'settings'];
+            const allNavs = ['dashboard', 'services', 'customers', 'sales', 'finance', 'payroll', 'tasks', 'research', 'youtube', 'youtube_short', 'youtube_subtitles', 'ai_planner', 'sales_leads', 'meo_users', 'invites', 'settings'];
             allNavs.forEach(nav => {
                 const el = document.querySelector(`li[data-target="${nav}"]`);
                 if (el) el.style.display = 'flex';

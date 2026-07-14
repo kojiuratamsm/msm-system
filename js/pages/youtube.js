@@ -1,4 +1,8 @@
 App.Pages.youtube = async function(targetScriptId = null) {
+    if (window.ytVideoTypeMode !== 'short') {
+        window.ytVideoTypeMode = 'long';
+    }
+
     const user = Auth.getCurrentUser();
     if (!user || user.role !== 'admin') {
         App.mount('<div class="card" style="margin-top:24px; padding: 40px; text-align:center;"><h3 class="card-title">アクセス権限がありません</h3><p style="color:var(--text-secondary); margin-top: 16px;">YouTubeは管理者のみ閲覧可能です。</p></div>');
@@ -1216,4 +1220,10 @@ App.Pages.youtube = async function(targetScriptId = null) {
             App.navigate('youtube');
         });
     });
+};
+
+App.Pages.youtube_short = async function(targetScriptId = null) {
+    window.ytVideoTypeMode = 'short';
+    window.ytActiveTab = 'script';
+    await App.Pages.youtube(targetScriptId);
 };
