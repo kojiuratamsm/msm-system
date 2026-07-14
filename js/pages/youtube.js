@@ -535,20 +535,7 @@ App.Pages.youtube = async function(targetScriptId = null) {
             }
         };
 
-        if (activeTab === 'script') {
-            updateHistoryDropdown(targetScriptId);
-            const filteredScripts = allScripts.filter(s => (s.videoType || 'long') === videoTypeTab);
-            // targetScriptIdが指定されていればそれを優先ロード、なければ従来通り最初の台本
-            if (targetScriptId) {
-                loadSelectedScript(targetScriptId);
-                document.getElementById('script-history-select').value = targetScriptId;
-            } else if (filteredScripts.length > 0) {
-                loadSelectedScript(filteredScripts[0].id);
-                document.getElementById('script-history-select').value = filteredScripts[0].id;
-            } else {
-                newScript();
-            }
-        }
+        // --- (Initialization logic moved to the bottom) ---
 
         window.newScript = () => {
             document.getElementById('script-id').value = '';
@@ -690,7 +677,20 @@ App.Pages.youtube = async function(targetScriptId = null) {
 
         // Initialize display
         if (activeTab === 'script') {
-            updateHistoryDropdown();
+            updateHistoryDropdown(targetScriptId);
+            const filteredScripts = allScripts.filter(s => (s.videoType || 'long') === videoTypeTab);
+            // targetScriptIdが指定されていればそれを優先ロード、なければ従来通り最初の台本
+            if (targetScriptId) {
+                window.loadSelectedScript(targetScriptId);
+                const selectEl = document.getElementById('script-history-select');
+                if (selectEl) selectEl.value = targetScriptId;
+            } else if (filteredScripts.length > 0) {
+                window.loadSelectedScript(filteredScripts[0].id);
+                const selectEl = document.getElementById('script-history-select');
+                if (selectEl) selectEl.value = filteredScripts[0].id;
+            } else {
+                window.newScript();
+            }
         }
 
         // Setup Charts for Videos
