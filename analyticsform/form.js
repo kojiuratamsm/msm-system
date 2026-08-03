@@ -35,7 +35,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if(formData.theme.descSize) root.style.setProperty('--desc-size', formData.theme.descSize);
         }
 
-        // 非同期でViewのログ保存（これが失敗しても全体の表示は止めない）
+        // 非同期でViewのログ保存
         logStat('view').catch(e => console.error("View log failed:", e));
 
         renderForm();
@@ -78,7 +78,7 @@ function renderForm() {
     };
 
     const getAlignClass = (obj) => {
-        return obj && obj.align ? `align-${obj.align}` : 'align-center';
+        return obj && obj.align ? `align-${obj.align}` : 'align-left';
     };
 
     // OP Slide (Index 0)
@@ -94,10 +94,11 @@ function renderForm() {
     // Question Slides
     formData.questions.forEach((q, idx) => {
         const slideIdx = idx + 1;
-        html += `<div class="slide align-left" id="slide-${slideIdx}" data-type="question" data-id="${q.id}" data-required="${q.required}">`;
+        const alignClass = getAlignClass(q);
+        html += `<div class="slide ${alignClass}" id="slide-${slideIdx}" data-type="question" data-id="${q.id}" data-required="${q.required}">`;
         
         if (q.imageUrl) {
-            html += `<div class="slide-img-container" style="text-align:left;"><img src="${q.imageUrl}" class="slide-img"></div>`;
+            html += `<div class="slide-img-container"><img src="${q.imageUrl}" class="slide-img"></div>`;
         }
         const reqMark = q.required ? '<span class="required-mark">*</span>' : '';
         html += `<div class="slide-title" style="${applyTheme(true)}">${idx + 1}. ${q.title || ''}${reqMark}</div>`;
@@ -109,10 +110,10 @@ function renderForm() {
 
         if (q.type === 'short_text') {
             html += `<input type="text" class="input-text q-input" data-id="${q.id}" placeholder="${placeholderText}">`;
-            html += `<div style="font-size:0.8rem; color:var(--text-secondary); margin-top:8px;">段落を追加するためには Shift ⇧ と Enter ↵ キーを同時に押して下さい</div>`;
+            html += `<div style="font-size:0.8rem; color:var(--text-secondary); margin-top:8px; width: 100%;">段落を追加するためには Shift ⇧ と Enter ↵ キーを同時に押して下さい</div>`;
         } else if (q.type === 'long_text') {
             html += `<textarea class="input-text q-input" data-id="${q.id}" placeholder="${placeholderText}" style="resize:none; height:100px;"></textarea>`;
-            html += `<div style="font-size:0.8rem; color:var(--text-secondary); margin-top:8px;">段落を追加するためには Shift ⇧ と Enter ↵ キーを同時に押して下さい</div>`;
+            html += `<div style="font-size:0.8rem; color:var(--text-secondary); margin-top:8px; width: 100%;">段落を追加するためには Shift ⇧ と Enter ↵ キーを同時に押して下さい</div>`;
         } else if (q.type === 'dropdown') {
             html += `<select class="dropdown-select q-select" data-id="${q.id}" onchange="handleDropdownSelect('${q.id}', this)">`;
             html += `<option value="">選択してください...</option>`;
@@ -135,10 +136,9 @@ function renderForm() {
         
         html += `<div class="error-msg" id="err-${q.id}">必須項目です。回答を入力してください。</div>`;
         
-        // 複数回答可能のときだけOKボタンを表示、単一の場合はクリック即遷移なので隠す（またはOKで進める）
         const isMultiple = (q.type === 'multiple_choice' && q.allowMultiple === true);
         if (isMultiple || q.type === 'short_text' || q.type === 'long_text') {
-            html += `<div style="margin-top:32px;"><button class="btn-primary" onclick="goNext()">OK <i class="ph ph-check"></i></button></div>`;
+            html += `<div style="margin-top:32px; width: 100%;"><button class="btn-primary" onclick="goNext()">OK <i class="ph ph-check"></i></button></div>`;
         }
         html += `</div>`;
     });
@@ -196,7 +196,7 @@ function handleDropdownSelect(qId, selectEl) {
     if (val) {
         answers[qId] = val;
         document.getElementById('err-' + qId).classList.remove('visible');
-        setTimeout(goNext, 300); // 選択したら自動で次へ
+        setTimeout(goNext, 300);
     } else {
         answers[qId] = "";
     }
@@ -219,7 +219,7 @@ function selectChoice(qId, val, el, isMultiple) {
         const container = el.parentElement;
         container.querySelectorAll('.choice-box').forEach(box => box.classList.remove('selected'));
         el.classList.add('selected');
-        setTimeout(goNext, 300); // 単一選択なら自動遷移
+        setTimeout(goNext, 300);
     }
     document.getElementById('err-' + qId).classList.remove('visible');
 }
@@ -320,7 +320,7 @@ function updateView() {
         }
     }
 
-    const progress = ((currentSlideIndex) / (slidesCount - 2)) * 100; // EDを除く
+    const progress = ((currentSlideIndex) / (slidesCount - 2)) * 100;
     const progressBar = document.getElementById('progress-bar');
     if (progressBar) progressBar.style.width = `${Math.min(progress, 100)}%`;
 
@@ -350,7 +350,6 @@ async function submitForm() {
         
         await logStat('submission');
 
-        // Go to ED slide
         currentSlideIndex++;
         updateView();
     } catch (err) {

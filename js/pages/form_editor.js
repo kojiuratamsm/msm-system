@@ -44,7 +44,8 @@ App.Pages.form_editor = async function() {
                 choices: [],
                 imageUrl: "",
                 allowMultiple: false,
-                placeholder: "こちらに回答を入力..."
+                placeholder: "こちらに回答を入力...",
+                align: "left"
             }
         ]
     };
@@ -62,7 +63,7 @@ App.Pages.form_editor = async function() {
         let leftNavHtml = `
             <div class="editor-section-title" style="margin-bottom:16px; font-weight:600; color:var(--text-secondary);">Pages</div>
             <div class="editor-nav-item ${activePageId === 'op' ? 'active' : ''}" data-id="op">
-                <i class="ph ph-door-open" style="margin-right:8px; font-size:1.2rem;"></i> <span class="nav-text">OP: ${formData.op.title || 'タイトルなし'}</span>
+                <i class="ph ph-door-open" style="margin-right:8px; font-size:1.2rem;"></i> <span class="nav-text" id="nav-text-op">OP: ${formData.op.title || 'タイトルなし'}</span>
             </div>
             <div id="questions-list">
         `;
@@ -70,7 +71,7 @@ App.Pages.form_editor = async function() {
         formData.questions.forEach((q, index) => {
             leftNavHtml += `
                 <div class="editor-nav-item ${activePageId === q.id ? 'active' : ''}" data-id="${q.id}">
-                    <span class="q-badge">${index + 1}</span> <span class="nav-text">${q.title || '無題の質問'}</span>
+                    <span class="q-badge">${index + 1}</span> <span class="nav-text" id="nav-text-${q.id}">${q.title || '無題の質問'}</span>
                     <i class="ph ph-trash delete-q-btn" data-id="${q.id}"></i>
                 </div>
             `;
@@ -87,7 +88,7 @@ App.Pages.form_editor = async function() {
                 <i class="ph ph-clipboard-text" style="margin-right:8px; font-size:1.2rem;"></i> <span class="nav-text">確認画面 (Review)</span>
             </div>
             <div class="editor-nav-item ${activePageId === 'ed' ? 'active' : ''}" data-id="ed">
-                <i class="ph ph-flag-checkered" style="margin-right:8px; font-size:1.2rem;"></i> <span class="nav-text">ED: ${formData.ed.title || 'タイトルなし'}</span>
+                <i class="ph ph-flag-checkered" style="margin-right:8px; font-size:1.2rem;"></i> <span class="nav-text" id="nav-text-ed">ED: ${formData.ed.title || 'タイトルなし'}</span>
             </div>
         `;
 
@@ -252,7 +253,8 @@ App.Pages.form_editor = async function() {
                         choices: [],
                         imageUrl: "",
                         allowMultiple: false,
-                        placeholder: "こちらに回答を入力..."
+                        placeholder: "こちらに回答を入力...",
+                        align: "left"
                     });
                     activePageId = newId;
                     render();
@@ -305,15 +307,15 @@ App.Pages.form_editor = async function() {
             html += `<img src="${obj.imageUrl}" class="mockup-img">`;
         }
         
-        html += `<div class="mockup-title mockup-editable" data-prop="title" data-placeholder="タイトルを入力..." contenteditable="true">${obj.title || ''}</div>`;
-        html += `<div class="mockup-desc mockup-editable" data-prop="description" data-placeholder="補足説明を入力 (任意)" contenteditable="true">${obj.description || ''}</div>`;
+        html += `<div class="mockup-title mockup-editable" id="mock-title-node" data-prop="title" data-placeholder="タイトルを入力..." contenteditable="true">${obj.title || ''}</div>`;
+        html += `<div class="mockup-desc mockup-editable" id="mock-desc-node" data-prop="description" data-placeholder="補足説明を入力 (任意)" contenteditable="true">${obj.description || ''}</div>`;
 
         if (type === 'op' || type === 'ed' || type === 'review') {
-            html += `<div class="mockup-btn">${obj.buttonText || 'スタート'}</div>`;
+            html += `<div class="mockup-btn" id="mock-btn-node">${obj.buttonText || 'スタート'}</div>`;
         } else if (type === 'question') {
             if (obj.type === 'short_text' || obj.type === 'long_text') {
                 const placeholderVal = obj.placeholder !== undefined ? obj.placeholder : "こちらに回答を入力...";
-                html += `<div class="mockup-input mockup-editable" data-prop="placeholder" data-placeholder="プレースホルダーを入力..." contenteditable="true" style="border-bottom: 2px solid rgba(0,0,0,0.2); padding: 8px 0; color: #888; text-align: left; width: 100%;">${placeholderVal}</div>`;
+                html += `<div class="mockup-input mockup-editable" id="mock-placeholder-node" data-prop="placeholder" data-placeholder="プレースホルダーを入力..." contenteditable="true" style="border-bottom: 2px solid rgba(0,0,0,0.2); padding: 8px 0; color: #888; text-align: left; width: 100%;">${placeholderVal}</div>`;
             } else if (obj.type === 'dropdown') {
                 html += `
                     <div class="mockup-choice" style="justify-content: space-between; width: 100%;">
@@ -345,7 +347,7 @@ App.Pages.form_editor = async function() {
                 `;
             });
             html += '</div>';
-            html += `<div class="mockup-btn" style="width:100%;">${obj.buttonText || 'この内容で提出する'}</div>`;
+            html += `<div class="mockup-btn" id="mock-review-btn-node" style="width:100%;">${obj.buttonText || 'この内容で提出する'}</div>`;
         }
 
         html += '</div>';
@@ -364,7 +366,16 @@ App.Pages.form_editor = async function() {
                 const prop = el.getAttribute('data-prop');
                 obj[prop] = el.innerText;
                 
-                // 右側設定パネルの同期
+                // 左メニューのテキスト同期（renderは呼ばずDOMの書き換えのみ）
+                if (prop === 'title') {
+                    const navEl = document.getElementById(`nav-text-${activePageId}`);
+                    if (navEl) {
+                        const prefix = activePageId === 'op' ? 'OP: ' : activePageId === 'ed' ? 'ED: ' : '';
+                        navEl.innerText = prefix + (obj.title || 'タイトルなし');
+                    }
+                }
+                
+                // 右側設定パネルの同期（フォーカスを奪わないようrender()は呼ばず直接 value を書き換える）
                 let rightInputId = '';
                 if (prop === 'title') rightInputId = 'set-title';
                 else if (prop === 'description') rightInputId = 'set-desc';
@@ -460,19 +471,18 @@ App.Pages.form_editor = async function() {
             `;
         }
 
-        // OP/ED/Review の配置設定
-        if (type === 'op' || type === 'ed' || type === 'review') {
-            html += `
-                <div class="form-group">
-                    <label>文字の配置</label>
-                    <select id="set-align" class="input-field">
-                        <option value="left" ${obj.align === 'left' ? 'selected' : ''}>左寄せ</option>
-                        <option value="center" ${obj.align === 'center' ? 'selected' : ''}>中央揃え</option>
-                        <option value="right" ${obj.align === 'right' ? 'selected' : ''}>右寄せ</option>
-                    </select>
-                </div>
-            `;
-        }
+        // 配置設定（全ページ対応）
+        const alignVal = obj.align || 'left';
+        html += `
+            <div class="form-group">
+                <label>文字の配置</label>
+                <select id="set-align" class="input-field">
+                    <option value="left" ${alignVal === 'left' ? 'selected' : ''}>左寄せ</option>
+                    <option value="center" ${alignVal === 'center' ? 'selected' : ''}>中央揃え</option>
+                    <option value="right" ${alignVal === 'right' ? 'selected' : ''}>右寄せ</option>
+                </select>
+            </div>
+        `;
 
         if (type === 'question') {
             html += `
@@ -550,22 +560,39 @@ App.Pages.form_editor = async function() {
     };
 
     const bindSettingsEvents = (obj, type) => {
-        const bindInput = (id, prop) => {
-            const el = document.getElementById(id);
+        // 全体の再描画（render()）をせず、中央モックの特定のDOMだけを更新するDOM直書きロジック
+        const bindInputNoRender = (inputId, mockNodeId, prop) => {
+            const el = document.getElementById(inputId);
             if (el) {
                 el.addEventListener('input', (e) => {
                     obj[prop] = e.target.value;
-                    render();
+                    // 中央モックの更新
+                    const mockNode = document.getElementById(mockNodeId);
+                    if (mockNode) {
+                        mockNode.innerText = e.target.value;
+                    }
+                    // 左メニュータイトル同期（タイトルのみ）
+                    if (prop === 'title') {
+                        const navEl = document.getElementById(`nav-text-${activePageId}`);
+                        if (navEl) {
+                            const prefix = activePageId === 'op' ? 'OP: ' : activePageId === 'ed' ? 'ED: ' : '';
+                            navEl.innerText = prefix + (obj.title || 'タイトルなし');
+                        }
+                    }
                 });
             }
         };
 
-        bindInput('set-title', 'title');
-        bindInput('set-desc', 'description');
-        if (type === 'op' || type === 'ed' || type === 'review') bindInput('set-btn-text', 'buttonText');
-        if (type === 'question') bindInput('set-placeholder', 'placeholder');
+        bindInputNoRender('set-title', 'mock-title-node', 'title');
+        bindInputNoRender('set-desc', 'mock-desc-node', 'description');
+        if (type === 'op' || type === 'ed' || type === 'review') {
+            bindInputNoRender('set-btn-text', activePageId === 'review' ? 'mock-review-btn-node' : 'mock-btn-node', 'buttonText');
+        }
+        if (type === 'question') {
+            bindInputNoRender('set-placeholder', 'mock-placeholder-node', 'placeholder');
+        }
         
-        // 配置変更
+        // 配置変更 (align) はCSSクラスを変更するため再描画が必要だが、カーソル奪取の問題はないためrender()でOK
         const alignSelect = document.getElementById('set-align');
         if (alignSelect) {
             alignSelect.addEventListener('change', (e) => {
@@ -574,15 +601,31 @@ App.Pages.form_editor = async function() {
             });
         }
 
-        // テーマ
+        // テーマカラーやサイズ変更（カラーピッカーなどもフォーカス外れを防ぐためDOMへ直接スタイル適用）
         const tColor = document.getElementById('set-theme-tcolor');
-        if(tColor) tColor.addEventListener('input', e => { formData.theme.titleColor = e.target.value; render(); });
+        if(tColor) tColor.addEventListener('input', e => { 
+            formData.theme.titleColor = e.target.value; 
+            const mockTitle = document.getElementById('mock-title-node');
+            if(mockTitle) mockTitle.style.color = e.target.value;
+        });
         const dColor = document.getElementById('set-theme-dcolor');
-        if(dColor) dColor.addEventListener('input', e => { formData.theme.descColor = e.target.value; render(); });
+        if(dColor) dColor.addEventListener('input', e => { 
+            formData.theme.descColor = e.target.value; 
+            const mockDesc = document.getElementById('mock-desc-node');
+            if(mockDesc) mockDesc.style.color = e.target.value;
+        });
         const tSize = document.getElementById('set-theme-tsize');
-        if(tSize) tSize.addEventListener('change', e => { formData.theme.titleSize = e.target.value; render(); });
+        if(tSize) tSize.addEventListener('change', e => { 
+            formData.theme.titleSize = e.target.value; 
+            const mockTitle = document.getElementById('mock-title-node');
+            if(mockTitle) mockTitle.style.fontSize = e.target.value;
+        });
         const dSize = document.getElementById('set-theme-dsize');
-        if(dSize) dSize.addEventListener('change', e => { formData.theme.descSize = e.target.value; render(); });
+        if(dSize) dSize.addEventListener('change', e => { 
+            formData.theme.descSize = e.target.value; 
+            const mockDesc = document.getElementById('mock-desc-node');
+            if(mockDesc) mockDesc.style.fontSize = e.target.value;
+        });
 
         // 画像削除
         const rmImgBtn = document.getElementById('remove-img-btn');
