@@ -8,19 +8,23 @@ App.Pages.form_editor = async function() {
     // デフォルトのフォームデータ構造
     const defaultFormData = {
         title: "MEOキーワード分析フォーム",
+        theme: {
+            titleColor: "#1a1a1a",
+            descColor: "#666666",
+            titleSize: "1.5rem",
+            descSize: "1rem"
+        },
         op: {
             title: "Googleマップ売上分析診断",
             description: "あなたの店舗のMEOキーワードを分析します",
             imageUrl: "",
-            buttonText: "診断をスタート",
-            buttonSize: "medium"
+            buttonText: "診断をスタート"
         },
         ed: {
             title: "ご提出ありがとうございました！",
             description: "結果は担当者よりご連絡いたします。",
             imageUrl: "",
-            buttonText: "終了する",
-            buttonSize: "medium"
+            buttonText: "終了する"
         },
         questions: [
             {
@@ -39,15 +43,15 @@ App.Pages.form_editor = async function() {
     if (!formData || !formData.op) {
         formData = JSON.parse(JSON.stringify(defaultFormData));
     }
+    if (!formData.theme) formData.theme = defaultFormData.theme;
 
-    // 現在選択されているページ ( 'op', 'ed', または questionのid )
     let activePageId = 'op';
 
     const render = () => {
         let leftNavHtml = `
             <div class="editor-section-title" style="margin-bottom:16px; font-weight:600; color:var(--text-secondary);">Pages</div>
             <div class="editor-nav-item ${activePageId === 'op' ? 'active' : ''}" data-id="op">
-                <i class="ph ph-door-open" style="margin-right:8px; font-size:1.2rem;"></i> OP: ${formData.op.title || 'タイトルなし'}
+                <i class="ph ph-door-open" style="margin-right:8px; font-size:1.2rem;"></i> <span class="nav-text">OP: ${formData.op.title || 'タイトルなし'}</span>
             </div>
             <div id="questions-list">
         `;
@@ -55,8 +59,8 @@ App.Pages.form_editor = async function() {
         formData.questions.forEach((q, index) => {
             leftNavHtml += `
                 <div class="editor-nav-item ${activePageId === q.id ? 'active' : ''}" data-id="${q.id}">
-                    <span style="background:var(--primary-color); color:white; border-radius:4px; padding:2px 6px; font-size:0.75rem; margin-right:8px;">${index + 1}</span> ${q.title || '無題の質問'}
-                    <i class="ph ph-trash text-danger delete-q-btn" data-id="${q.id}" style="margin-left:auto; cursor:pointer;"></i>
+                    <span class="q-badge">${index + 1}</span> <span class="nav-text">${q.title || '無題の質問'}</span>
+                    <i class="ph ph-trash delete-q-btn" data-id="${q.id}"></i>
                 </div>
             `;
         });
@@ -69,11 +73,10 @@ App.Pages.form_editor = async function() {
 
             <div class="editor-section-title" style="margin-top:32px; margin-bottom:16px; font-weight:600; color:var(--text-secondary);">Endings</div>
             <div class="editor-nav-item ${activePageId === 'ed' ? 'active' : ''}" data-id="ed">
-                <i class="ph ph-flag-checkered" style="margin-right:8px; font-size:1.2rem;"></i> ED: ${formData.ed.title || 'タイトルなし'}
+                <i class="ph ph-flag-checkered" style="margin-right:8px; font-size:1.2rem;"></i> <span class="nav-text">ED: ${formData.ed.title || 'タイトルなし'}</span>
             </div>
         `;
 
-        // プレビューと設定パネルの生成
         let mockupHtml = '';
         let settingsHtml = '';
         let activeObj = null;
@@ -102,21 +105,58 @@ App.Pages.form_editor = async function() {
                 .editor-left { width: 280px; background: white; border-radius: 12px; padding: 24px; overflow-y: auto; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
                 .editor-middle { flex: 1; display: flex; justify-content: center; align-items: center; background: #f8f9fc; border-radius: 12px; overflow: hidden; position: relative; padding: 24px;}
                 .editor-right { width: 320px; background: white; border-radius: 12px; padding: 24px; overflow-y: auto; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+                
+                /* Left Nav UI */
                 .editor-nav-item { padding: 12px 16px; border-radius: 8px; margin-bottom: 8px; cursor: pointer; display: flex; align-items: center; background: #f8f9fc; transition: 0.2s; font-size: 0.9rem; font-weight: 500;}
                 .editor-nav-item:hover { background: #eef2f7; }
-                .editor-nav-item.active { background: var(--primary-color); color: white; }
+                .editor-nav-item.active { background: #0d6efd; color: white; box-shadow: 0 4px 12px rgba(13,110,253,0.3); }
                 .editor-nav-item.active i { color: white !important; }
-                .editor-nav-item.active .text-danger { color: #ffcccc !important; }
+                .editor-nav-item .nav-text { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                .q-badge { background: #0d6efd; color: white; border-radius: 4px; padding: 2px 6px; font-size: 0.75rem; margin-right: 8px; }
+                .editor-nav-item.active .q-badge { background: white; color: #0d6efd; }
+                .delete-q-btn { color: #dc3545; margin-left: auto; cursor: pointer; opacity: 0.6; }
+                .delete-q-btn:hover { opacity: 1; }
+                .editor-nav-item.active .delete-q-btn { color: #ffcccc; }
                 
-                /* Smartphone Mockup CSS */
-                .phone-mockup { width: 340px; height: 680px; background: white; border-radius: 40px; box-shadow: 0 20px 40px rgba(0,0,0,0.1); border: 12px solid #2c3e50; position: relative; overflow: hidden; display: flex; flex-direction: column; font-family: 'Inter', sans-serif;}
-                .phone-mockup-inner { flex: 1; padding: 32px 24px; display: flex; flex-direction: column; justify-content: center; overflow-y: auto;}
-                .mockup-title { font-size: 1.5rem; font-weight: 700; color: #1a1a1a; margin-bottom: 12px; line-height: 1.4; }
-                .mockup-desc { font-size: 1rem; color: #666; margin-bottom: 32px; line-height: 1.6; }
-                .mockup-btn { background: var(--primary-color); color: white; padding: 16px 24px; border-radius: 8px; font-weight: 600; text-align: center; font-size: 1.1rem; box-shadow: 0 4px 12px rgba(13, 110, 253, 0.3); }
-                .mockup-input { width: 100%; border: none; border-bottom: 2px solid #e0e0e0; font-size: 1.2rem; padding: 8px 0; outline: none; margin-bottom: 24px; background: transparent; color: #333;}
-                .mockup-choice { padding: 16px; border: 1px solid #e0e0e0; border-radius: 8px; margin-bottom: 12px; font-weight: 500; color: #333; background: #fafafa; display: flex; align-items: center;}
+                /* Smartphone Mockup CSS (Glassmorphism & Gradient Background) */
+                .phone-mockup { 
+                    width: 360px; height: 720px; 
+                    background: #fdfbfb;
+                    border-radius: 40px; box-shadow: 0 20px 40px rgba(0,0,0,0.1); border: 12px solid #2c3e50; position: relative; overflow: hidden; display: flex; flex-direction: column; font-family: 'Inter', sans-serif;
+                }
+                .phone-mockup::before {
+                    content: ''; position: absolute; bottom: -20%; right: -20%; width: 400px; height: 400px;
+                    background: radial-gradient(circle, rgba(235,93,149,0.8) 0%, rgba(246,149,94,0.6) 50%, transparent 80%);
+                    filter: blur(40px); z-index: 0; pointer-events: none;
+                }
+                .phone-mockup::after {
+                    content: ''; position: absolute; top: -10%; left: -10%; width: 300px; height: 300px;
+                    background: radial-gradient(circle, rgba(255,255,255,0.6) 0%, transparent 70%);
+                    filter: blur(20px); z-index: 0; pointer-events: none;
+                }
+                
+                .phone-mockup-inner { 
+                    flex: 1; padding: 32px 24px; display: flex; flex-direction: column; justify-content: center; overflow-y: auto; z-index: 1;
+                }
+                
+                /* Content Editable Fields */
+                .mockup-editable {
+                    outline: none; border: 1px dashed transparent; transition: border 0.2s; white-space: pre-wrap; word-wrap: break-word;
+                }
+                .mockup-editable:hover, .mockup-editable:focus { border-color: rgba(0,0,0,0.2); background: rgba(255,255,255,0.3); border-radius: 4px; }
+                .mockup-editable[data-placeholder]:empty:before {
+                    content: attr(data-placeholder); color: #aaa; pointer-events: none;
+                }
+                
+                .mockup-title { font-weight: 700; margin-bottom: 12px; line-height: 1.4; color: ${formData.theme.titleColor}; font-size: ${formData.theme.titleSize}; }
+                .mockup-desc { margin-bottom: 32px; line-height: 1.6; color: ${formData.theme.descColor}; font-size: ${formData.theme.descSize}; }
+                
+                .mockup-btn { background: rgba(0,0,0,0.8); color: white; padding: 16px 24px; border-radius: 8px; font-weight: 600; text-align: center; font-size: 1.1rem; box-shadow: 0 8px 24px rgba(0,0,0,0.2); backdrop-filter: blur(4px); }
+                .mockup-input { width: 100%; border: none; border-bottom: 2px solid rgba(0,0,0,0.2); font-size: 1.2rem; padding: 8px 0; outline: none; margin-bottom: 24px; background: transparent; color: #333;}
+                .mockup-choice { padding: 16px; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; margin-bottom: 12px; font-weight: 500; color: #333; background: rgba(255,255,255,0.7); backdrop-filter: blur(8px); display: flex; align-items: center;}
                 .mockup-img { max-width: 100%; border-radius: 8px; margin-bottom: 24px; max-height: 200px; object-fit: cover;}
+                
+                .required-mark { color: #dc3545; margin-left: 4px; font-size: 0.9em; font-weight: normal; }
             </style>
             
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
@@ -146,7 +186,7 @@ App.Pages.form_editor = async function() {
         `;
 
         App.mount(html, () => {
-            // イベントリスナーの登録
+            // 左メニュークリック
             document.querySelectorAll('.editor-nav-item').forEach(el => {
                 el.addEventListener('click', (e) => {
                     if (e.target.classList.contains('delete-q-btn')) return;
@@ -155,6 +195,7 @@ App.Pages.form_editor = async function() {
                 });
             });
 
+            // 質問削除
             document.querySelectorAll('.delete-q-btn').forEach(el => {
                 el.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -167,6 +208,7 @@ App.Pages.form_editor = async function() {
                 });
             });
 
+            // 質問追加
             const addQBtn = document.getElementById('add-q-btn');
             if (addQBtn) {
                 addQBtn.addEventListener('click', () => {
@@ -189,6 +231,7 @@ App.Pages.form_editor = async function() {
                 });
             }
 
+            // フォーム保存
             const saveBtn = document.getElementById('save-form-btn');
             if (saveBtn) {
                 saveBtn.addEventListener('click', async () => {
@@ -200,107 +243,208 @@ App.Pages.form_editor = async function() {
                 });
             }
 
-            // リアルタイム反映のためのイベント登録
+            // 画像アップロードのイベントバインド
+            const imgUploadBtn = document.getElementById('img-upload-btn');
+            const fileInput = document.getElementById('img-file-input');
+            if (imgUploadBtn && fileInput) {
+                imgUploadBtn.addEventListener('click', () => fileInput.click());
+                fileInput.addEventListener('change', (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        const base64Str = event.target.result;
+                        activeObj.imageUrl = base64Str;
+                        render();
+                    };
+                    reader.readAsDataURL(file);
+                });
+            }
+
+            // モック直接編集のイベントバインド
+            bindMockupEditableEvents(activeObj, isQuestion ? 'question' : activePageId);
+            
+            // 右パネルのイベントバインド
             bindSettingsEvents(activeObj, isQuestion ? 'question' : activePageId);
         });
     };
 
     const generateMockupHtml = (obj, type) => {
-        let html = `<div class="phone-mockup-inner">`;
+        let html = \`<div class="phone-mockup-inner">\`;
         if (obj.imageUrl) {
-            html += `<img src="${obj.imageUrl}" class="mockup-img">`;
+            html += \`<img src="\${obj.imageUrl}" class="mockup-img">\`;
         }
-        html += `<div class="mockup-title">${obj.title || 'テキストを入力...'}</div>`;
-        if (obj.description) {
-            html += `<div class="mockup-desc">${obj.description.replace(/\\n/g, '<br>')}</div>`;
-        }
+        
+        const reqMark = (type === 'question' && obj.required) ? \`<span class="required-mark">*</span>\` : '';
+        html += \`<div class="mockup-title mockup-editable" data-prop="title" data-placeholder="タイトルを入力..." contenteditable="true">\${obj.title || ''}</div>\`;
+        html += \`<div class="mockup-desc mockup-editable" data-prop="description" data-placeholder="補足説明を入力 (任意)" contenteditable="true">\${obj.description || ''}</div>\`;
 
         if (type === 'op' || type === 'ed') {
-            html += `<div style="margin-top:auto;"><div class="mockup-btn">${obj.buttonText || 'ボタン'}</div></div>`;
+            html += \`<div style="margin-top:auto;"><div class="mockup-btn">\${obj.buttonText || 'ボタン'}</div></div>\`;
         } else if (type === 'question') {
             if (obj.type === 'short_text') {
-                html += `<input type="text" class="mockup-input" placeholder="回答を入力...">`;
+                html += \`<input type="text" class="mockup-input" placeholder="こちらに回答を入力..." disabled>\`;
             } else if (obj.type === 'long_text') {
-                html += `<input type="text" class="mockup-input" placeholder="回答を入力..." style="height:60px;">`;
+                html += \`<input type="text" class="mockup-input" placeholder="こちらに回答を入力..." style="height:60px;" disabled>\`;
             } else if (obj.type === 'multiple_choice' || obj.type === 'dropdown') {
                 if (!obj.choices || obj.choices.length === 0) {
-                    html += `<div class="mockup-choice" style="opacity:0.5;">選択肢がありません</div>`;
+                    html += \`<div class="mockup-choice" style="opacity:0.5;">選択肢がありません</div>\`;
                 } else {
                     obj.choices.forEach((c, idx) => {
-                        const alpha = String.fromCharCode(65 + idx); // A, B, C...
-                        html += `<div class="mockup-choice"><div style="background:#e0e0e0; width:24px; height:24px; border-radius:4px; display:flex; align-items:center; justify-content:center; margin-right:12px; font-size:0.8rem; font-weight:700;">${alpha}</div> ${c}</div>`;
+                        const alpha = String.fromCharCode(65 + idx);
+                        html += \`<div class="mockup-choice"><div class="choice-alpha" style="background:#e0e0e0; width:24px; height:24px; border-radius:4px; display:flex; align-items:center; justify-content:center; margin-right:12px; font-size:0.8rem; font-weight:700;">\${alpha}</div> \${c}</div>\`;
                     });
                 }
             }
-            if (obj.required) {
-                 html = `<div style="position:absolute; top:24px; left:24px; background:rgba(0,0,0,0.05); padding:4px 8px; border-radius:4px; font-size:0.75rem; font-weight:600; color:#666;">必須</div>` + html;
-            }
         }
-        html += `</div>`;
+        html += \`</div>\`;
+        
+        // 必須マークを擬似要素等ではなくDOM外から挿入（contenteditableに影響しないようにJSでタイトル内に付与）
         return html;
     };
 
+    const bindMockupEditableEvents = (obj, type) => {
+        // 直接編集されたら、オブジェクトに反映
+        document.querySelectorAll('.mockup-editable').forEach(el => {
+            // ペースト時にプレーンテキストにする
+            el.addEventListener('paste', (e) => {
+                e.preventDefault();
+                const text = (e.originalEvent || e).clipboardData.getData('text/plain');
+                document.execCommand('insertText', false, text);
+            });
+            
+            el.addEventListener('input', (e) => {
+                const prop = el.getAttribute('data-prop');
+                obj[prop] = el.innerText;
+                // 右側の入力欄にも同期
+                const rightInput = document.getElementById(prop === 'title' ? 'set-title' : 'set-desc');
+                if (rightInput) rightInput.value = obj[prop];
+            });
+            
+            // 必須マークの表示ロジック
+            if (type === 'question' && el.getAttribute('data-prop') === 'title') {
+                const updateMark = () => {
+                    const markExists = el.querySelector('.required-mark');
+                    if (obj.required && !markExists) {
+                        el.insertAdjacentHTML('beforeend', '<span class="required-mark" contenteditable="false">*</span>');
+                    } else if (!obj.required && markExists) {
+                        markExists.remove();
+                    }
+                };
+                updateMark();
+                
+                // inputイベントでマークが消されたら再付与する
+                el.addEventListener('blur', updateMark);
+            }
+        });
+    };
+
     const generateSettingsHtml = (obj, type) => {
-        let html = `<h3 style="margin-top:0; margin-bottom:24px; font-size:1.2rem;">${type === 'op' ? 'OP設定' : type === 'ed' ? 'ED設定' : '質問設定'}</h3>`;
+        let html = \`<h3 style="margin-top:0; margin-bottom:24px; font-size:1.2rem;">\${type === 'op' ? 'OP画面の設定' : type === 'ed' ? 'ED画面の設定' : '質問の設定'}</h3>\`;
         
+        html += \`
+            <div class="form-group">
+                <label>画像 (任意)</label>
+                \`;
+        if (obj.imageUrl) {
+            html += \`
+                <div style="margin-bottom:8px;"><img src="\${obj.imageUrl}" style="max-width:100px; max-height:100px; border-radius:4px; object-fit:cover;"></div>
+                <button class="btn btn-secondary btn-sm" onclick="document.getElementById('img-file-input').click()"><i class="ph ph-image"></i> 変更する</button>
+                <button class="btn btn-danger btn-sm" id="remove-img-btn" style="margin-left:8px;"><i class="ph ph-trash"></i></button>
+            \`;
+        } else {
+            html += \`<button class="btn btn-secondary btn-sm" id="img-upload-btn"><i class="ph ph-image"></i> 画像をアップロード</button>\`;
+        }
+        html += \`<input type="file" id="img-file-input" accept="image/*" style="display:none;"></div>\`;
+
         if (type === 'question') {
-            html += `
+            html += \`
                 <div class="form-group">
                     <label>質問タイプ</label>
                     <select id="set-type" class="input-field">
-                        <option value="short_text" ${obj.type === 'short_text' ? 'selected' : ''}>記述式 (短文)</option>
-                        <option value="long_text" ${obj.type === 'long_text' ? 'selected' : ''}>記述式 (長文)</option>
-                        <option value="multiple_choice" ${obj.type === 'multiple_choice' ? 'selected' : ''}>選択肢 (複数/単一)</option>
-                        <option value="dropdown" ${obj.type === 'dropdown' ? 'selected' : ''}>プルダウン</option>
+                        <option value="short_text" \${obj.type === 'short_text' ? 'selected' : ''}>記述式 (短文)</option>
+                        <option value="long_text" \${obj.type === 'long_text' ? 'selected' : ''}>記述式 (長文)</option>
+                        <option value="multiple_choice" \${obj.type === 'multiple_choice' ? 'selected' : ''}>選択肢 (複数/単一)</option>
+                        <option value="dropdown" \${obj.type === 'dropdown' ? 'selected' : ''}>プルダウン</option>
                     </select>
                 </div>
-            `;
+            \`;
         }
 
-        html += `
+        html += \`
             <div class="form-group">
-                <label>タイトル (質問文)</label>
-                <input type="text" id="set-title" class="input-field" value="${obj.title}">
+                <label>タイトル (プレビューで直接編集可能)</label>
+                <textarea id="set-title" class="input-field" style="height:60px;">\${obj.title || ''}</textarea>
             </div>
             <div class="form-group">
-                <label>補足説明</label>
-                <textarea id="set-desc" class="input-field" style="height:80px;">${obj.description || ''}</textarea>
+                <label>補足説明 (プレビューで直接編集可能)</label>
+                <textarea id="set-desc" class="input-field" style="height:80px;">\${obj.description || ''}</textarea>
             </div>
-            <div class="form-group">
-                <label>画像URL (任意)</label>
-                <input type="text" id="set-img" class="input-field" value="${obj.imageUrl || ''}" placeholder="https://...">
-            </div>
-        `;
+        \`;
 
         if (type === 'op' || type === 'ed') {
-            html += `
+            html += \`
                 <div class="form-group">
                     <label>ボタンテキスト</label>
-                    <input type="text" id="set-btn-text" class="input-field" value="${obj.buttonText}">
+                    <input type="text" id="set-btn-text" class="input-field" value="\${obj.buttonText}">
                 </div>
-            `;
+            \`;
         }
 
         if (type === 'question') {
-            html += `
-                <div class="form-group" style="display:flex; align-items:center; margin-top:24px; margin-bottom:24px;">
-                    <label style="margin:0; flex:1;">回答を必須にする</label>
-                    <input type="checkbox" id="set-required" style="width:20px; height:20px;" ${obj.required ? 'checked' : ''}>
+            html += \`
+                <div class="form-group" style="display:flex; align-items:center; margin-top:24px; margin-bottom:24px; padding:12px; background:#f8f9fc; border-radius:8px;">
+                    <label style="margin:0; flex:1; font-weight:600;">回答を必須にする</label>
+                    <input type="checkbox" id="set-required" style="width:20px; height:20px;" \${obj.required ? 'checked' : ''}>
                 </div>
-            `;
+            \`;
 
             if (obj.type === 'multiple_choice' || obj.type === 'dropdown') {
-                html += `<div class="form-group"><label>選択肢設定</label><div id="choices-container">`;
+                html += \`<div class="form-group"><label>選択肢設定</label><div id="choices-container">\`;
                 const choices = obj.choices || [];
                 choices.forEach((c, idx) => {
-                    html += `<div style="display:flex; gap:8px; margin-bottom:8px;">
-                                <input type="text" class="input-field set-choice-input" data-index="${idx}" value="${c}" style="margin-bottom:0;">
-                                <button class="btn btn-danger delete-choice-btn" data-index="${idx}" style="padding:0 12px;"><i class="ph ph-trash"></i></button>
-                             </div>`;
+                    html += \`<div style="display:flex; gap:8px; margin-bottom:8px;">
+                                <input type="text" class="input-field set-choice-input" data-index="\${idx}" value="\${c}" style="margin-bottom:0;">
+                                <button class="btn btn-danger delete-choice-btn" data-index="\${idx}" style="padding:0 12px;"><i class="ph ph-trash"></i></button>
+                             </div>\`;
                 });
-                html += `</div><button class="btn btn-secondary btn-sm" id="add-choice-btn" style="margin-top:8px; width:100%;"><i class="ph ph-plus"></i> 選択肢を追加</button></div>`;
+                html += \`</div><button class="btn btn-secondary btn-sm" id="add-choice-btn" style="margin-top:8px; width:100%;"><i class="ph ph-plus"></i> 選択肢を追加</button></div>\`;
             }
         }
+        
+        // デザインテーマ設定 (OPページにのみ全体設定として表示するか、常に表示するか。今回は常に表示)
+        html += \`
+            <hr style="margin:32px 0; border:none; border-top:1px solid #e0e0e0;">
+            <h4 style="margin-bottom:16px;">🎨 デザイン設定 (全体)</h4>
+            <div style="display:flex; gap:16px;">
+                <div class="form-group" style="flex:1;">
+                    <label>タイトルの色</label>
+                    <input type="color" id="set-theme-tcolor" class="input-field" value="\${formData.theme.titleColor}" style="padding:0; height:40px;">
+                </div>
+                <div class="form-group" style="flex:1;">
+                    <label>文字サイズ</label>
+                    <select id="set-theme-tsize" class="input-field">
+                        <option value="1.2rem" \${formData.theme.titleSize==='1.2rem'?'selected':''}>小</option>
+                        <option value="1.5rem" \${formData.theme.titleSize==='1.5rem'?'selected':''}>中</option>
+                        <option value="1.8rem" \${formData.theme.titleSize==='1.8rem'?'selected':''}>大</option>
+                    </select>
+                </div>
+            </div>
+            <div style="display:flex; gap:16px;">
+                <div class="form-group" style="flex:1;">
+                    <label>補足説明の色</label>
+                    <input type="color" id="set-theme-dcolor" class="input-field" value="\${formData.theme.descColor}" style="padding:0; height:40px;">
+                </div>
+                <div class="form-group" style="flex:1;">
+                    <label>文字サイズ</label>
+                    <select id="set-theme-dsize" class="input-field">
+                        <option value="0.9rem" \${formData.theme.descSize==='0.9rem'?'selected':''}>小</option>
+                        <option value="1rem" \${formData.theme.descSize==='1rem'?'selected':''}>中</option>
+                        <option value="1.1rem" \${formData.theme.descSize==='1.1rem'?'selected':''}>大</option>
+                    </select>
+                </div>
+            </div>
+        \`;
 
         return html;
     };
@@ -311,22 +455,40 @@ App.Pages.form_editor = async function() {
             if (el) {
                 el.addEventListener('input', (e) => {
                     obj[prop] = e.target.value;
-                    updateMockup(obj, type);
+                    render(); // 文字反映
                 });
             }
         };
 
         bindInput('set-title', 'title');
         bindInput('set-desc', 'description');
-        bindInput('set-img', 'imageUrl');
         if (type === 'op' || type === 'ed') bindInput('set-btn-text', 'buttonText');
+        
+        // テーマ
+        const tColor = document.getElementById('set-theme-tcolor');
+        if(tColor) tColor.addEventListener('input', e => { formData.theme.titleColor = e.target.value; render(); });
+        const dColor = document.getElementById('set-theme-dcolor');
+        if(dColor) dColor.addEventListener('input', e => { formData.theme.descColor = e.target.value; render(); });
+        const tSize = document.getElementById('set-theme-tsize');
+        if(tSize) tSize.addEventListener('change', e => { formData.theme.titleSize = e.target.value; render(); });
+        const dSize = document.getElementById('set-theme-dsize');
+        if(dSize) dSize.addEventListener('change', e => { formData.theme.descSize = e.target.value; render(); });
+
+        // 画像削除
+        const rmImgBtn = document.getElementById('remove-img-btn');
+        if (rmImgBtn) {
+            rmImgBtn.addEventListener('click', () => {
+                obj.imageUrl = '';
+                render();
+            });
+        }
 
         const typeSelect = document.getElementById('set-type');
         if (typeSelect) {
             typeSelect.addEventListener('change', (e) => {
                 obj.type = e.target.value;
                 if (!obj.choices) obj.choices = [];
-                render(); // UI全体を再描画して選択肢エディタを表示/非表示
+                render(); 
             });
         }
 
@@ -334,7 +496,7 @@ App.Pages.form_editor = async function() {
         if (reqCheck) {
             reqCheck.addEventListener('change', (e) => {
                 obj.required = e.target.checked;
-                updateMockup(obj, type);
+                render();
             });
         }
 
@@ -351,8 +513,9 @@ App.Pages.form_editor = async function() {
             el.addEventListener('input', (e) => {
                 const idx = parseInt(el.getAttribute('data-index'));
                 obj.choices[idx] = e.target.value;
-                updateMockup(obj, type);
+                // UI再描画せずにモックだけ更新するのもアリだが、今回は簡単のため
             });
+            el.addEventListener('blur', render);
         });
 
         document.querySelectorAll('.delete-choice-btn').forEach(el => {
@@ -362,34 +525,6 @@ App.Pages.form_editor = async function() {
                 render();
             });
         });
-    };
-
-    const updateMockup = (obj, type) => {
-        const mockupContainer = document.querySelector('.phone-mockup');
-        if (mockupContainer) {
-            mockupContainer.innerHTML = generateMockupHtml(obj, type);
-        }
-        // サイドバーのタイトルも更新
-        if (type === 'op' || type === 'ed' || type === 'question') {
-            const navItem = document.querySelector(`.editor-nav-item[data-id="${activePageId}"]`);
-            if (navItem) {
-                if (type === 'op') navItem.innerHTML = `<i class="ph ph-door-open" style="margin-right:8px; font-size:1.2rem;"></i> OP: ${obj.title || 'タイトルなし'}`;
-                if (type === 'ed') navItem.innerHTML = `<i class="ph ph-flag-checkered" style="margin-right:8px; font-size:1.2rem;"></i> ED: ${obj.title || 'タイトルなし'}`;
-                if (type === 'question') {
-                    const idx = formData.questions.findIndex(q => q.id === obj.id);
-                    navItem.innerHTML = `<span style="background:var(--primary-color); color:white; border-radius:4px; padding:2px 6px; font-size:0.75rem; margin-right:8px;">${idx + 1}</span> ${obj.title || '無題の質問'} <i class="ph ph-trash text-danger delete-q-btn" data-id="${obj.id}" style="margin-left:auto; cursor:pointer;"></i>`;
-                    // 再バインド
-                    navItem.querySelector('.delete-q-btn').addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        if (confirm('この質問を削除してもよろしいですか？')) {
-                            formData.questions = formData.questions.filter(q => q.id !== obj.id);
-                            activePageId = 'op';
-                            render();
-                        }
-                    });
-                }
-            }
-        }
     };
 
     render();
