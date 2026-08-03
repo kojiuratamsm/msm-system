@@ -10,7 +10,8 @@ window.onerror = function(message, source, lineno, colno, error) {
 // Supabase Configuration
 const supabaseUrl = 'https://xztaacxjlluzqzehendp.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh6dGFhY3hqbGx1enF6ZWhlbmRwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyMzM4NzMsImV4cCI6MjA4OTgwOTg3M30.79wvIPepXjvPZwLHOPX7KullShvdvCB7LS2gZO5CtuQ';
-let supabase = null;
+// Identifier collision prevention: Rename global client from 'supabase' to 'supabaseClient'
+let supabaseClient = null;
 
 let formData = null;
 let currentSlideIndex = 0;
@@ -22,9 +23,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!window.supabase) {
             throw new Error("Supabaseライブラリの読み込みに失敗しました。ネット環境を確認してください。");
         }
-        supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+        supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
 
-        const { data, error } = await supabase.from('customers').select('*').eq('service_type', 'meo_form');
+        const { data, error } = await supabaseClient.from('customers').select('*').eq('service_type', 'meo_form');
         if (error) throw error;
         
         if (!data || data.length === 0) {
@@ -357,7 +358,7 @@ async function submitForm() {
             submittedAt: new Date().toISOString(),
             device: navigator.userAgent
         };
-        await supabase.from('customers').insert([{ id: Date.now(), service_type: 'meo_form_response', data: responseData }]);
+        await supabaseClient.from('customers').insert([{ id: Date.now(), service_type: 'meo_form_response', data: responseData }]);
         
         await logStat('submission');
 
@@ -372,10 +373,10 @@ async function submitForm() {
 }
 
 function logStat(type, detailId = null) {
-    if (!supabase) return Promise.resolve();
+    if (!supabaseClient) return Promise.resolve();
     const id = Date.now() + Math.floor(Math.random() * 1000);
     const statData = { type: type, detail: detailId, timestamp: new Date().toISOString(), session: getSessionId() };
-    return supabase.from('customers').insert([{ id, service_type: 'meo_form_stats', data: statData }]);
+    return supabaseClient.from('customers').insert([{ id, service_type: 'meo_form_stats', data: statData }]);
 }
 
 function getSessionId() {
@@ -388,7 +389,6 @@ function getSessionId() {
 }
 
 function showError(msg) {
-    // 画面中央に大きな警告カードとして表示するよう改善
     const loader = document.getElementById('loading');
     if (loader) {
         loader.innerHTML = `
