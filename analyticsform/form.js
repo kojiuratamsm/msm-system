@@ -154,13 +154,15 @@ function renderForm() {
         </div>
     `;
 
-    // ED Slide (Index N+2)
+    // ED Slide (Index N+2) - window.close() closing trigger
     const edIdx = formData.questions.length + 2;
     html += `
         <div class="slide ${getAlignClass(formData.ed)}" id="slide-${edIdx}" data-type="ed">
             ${formData.ed.imageUrl ? `<div class="slide-img-container"><img src="${formData.ed.imageUrl}" class="slide-img"></div>` : ''}
             <div class="slide-title" style="${applyTheme(true)}">${formData.ed.title || ''}</div>
             <div class="slide-desc" style="${applyTheme(false)}">${(formData.ed.description || '').replace(/\n/g, '<br>')}</div>
+            <button class="btn-primary" onclick="closeFormWindow()">${formData.ed.buttonText || '終了する'}</button>
+            <div id="close-guide" style="font-size:0.8rem; color:var(--text-secondary); margin-top:12px; display:none; width: 100%;">※自動で画面が閉じない場合は、ブラウザのタブを閉じてください。</div>
         </div>
     `;
 
@@ -382,4 +384,11 @@ function showError(msg) {
         loader.innerHTML = `<div style="font-size:1.2rem; color:var(--text-primary); text-align:center; padding:20px;">${msg}</div>`;
         loader.style.opacity = '1';
     }
+}
+
+function closeFormWindow() {
+    window.close();
+    // ブラウザのセキュリティにより自動で閉じない場合のフォールバック表示
+    const guide = document.getElementById('close-guide');
+    if (guide) guide.style.display = 'block';
 }

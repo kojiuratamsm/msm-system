@@ -5,7 +5,7 @@ App.Pages.form_editor = async function() {
         return;
     }
 
-    // デフォルトのフォームデータ構造
+    // デフォルトのフォームデータ構造 (配置デフォルトは left)
     const defaultFormData = {
         title: "MEOキーワード分析フォーム",
         theme: {
@@ -19,14 +19,14 @@ App.Pages.form_editor = async function() {
             description: "あなたの店舗のMEOキーワードを分析します",
             imageUrl: "",
             buttonText: "診断をスタート",
-            align: "center"
+            align: "left"
         },
         ed: {
             title: "ご提出ありがとうございました！",
             description: "結果は担当者よりご連絡いたします。",
             imageUrl: "",
             buttonText: "終了する",
-            align: "center"
+            align: "left"
         },
         review: {
             title: "回答内容の確認",
@@ -56,6 +56,14 @@ App.Pages.form_editor = async function() {
     }
     if (!formData.theme) formData.theme = defaultFormData.theme;
     if (!formData.review) formData.review = defaultFormData.review;
+    
+    // 古いデータでalign未設定の場合はすべて左寄せにする
+    if (formData.op && !formData.op.align) formData.op.align = "left";
+    if (formData.ed && !formData.ed.align) formData.ed.align = "left";
+    if (formData.review && !formData.review.align) formData.review.align = "left";
+    formData.questions.forEach(q => {
+        if (!q.align) q.align = "left";
+    });
 
     let activePageId = 'op';
 
@@ -158,6 +166,19 @@ App.Pages.form_editor = async function() {
                     flex: 1; padding: 32px 24px; display: flex; flex-direction: column; justify-content: center; overflow-y: auto; z-index: 1;
                 }
                 
+                /* Alignment modifiers */
+                .align-left { text-align: left; align-items: flex-start; }
+                .align-center { text-align: center; align-items: center; }
+                .align-right { text-align: right; align-items: flex-end; }
+                .align-left .mockup-btn { margin-right: auto; margin-left: 0; }
+                .align-center .mockup-btn { margin-right: auto; margin-left: auto; }
+                .align-right .mockup-btn { margin-right: 0; margin-left: auto; }
+
+                /* Review / Scrollable mode inside mockup */
+                .phone-mockup-inner.scrollable {
+                    justify-content: flex-start !important;
+                }
+                
                 /* Content Editable Fields */
                 .mockup-editable {
                     outline: none; border: 1px dashed transparent; transition: border 0.2s; white-space: pre-wrap; word-wrap: break-word;
@@ -167,23 +188,15 @@ App.Pages.form_editor = async function() {
                     content: attr(data-placeholder); color: #aaa; pointer-events: none;
                 }
                 
-                .mockup-title { font-weight: 700; margin-bottom: 12px; line-height: 1.4; color: ${formData.theme.titleColor}; font-size: ${formData.theme.titleSize}; }
-                .mockup-desc { margin-bottom: 32px; line-height: 1.6; color: ${formData.theme.descColor}; font-size: ${formData.theme.descSize}; }
+                .mockup-title { font-weight: 700; margin-bottom: 12px; line-height: 1.4; color: ${formData.theme.titleColor}; font-size: ${formData.theme.titleSize}; width: 100%; }
+                .mockup-desc { margin-bottom: 32px; line-height: 1.6; color: ${formData.theme.descColor}; font-size: ${formData.theme.descSize}; width: 100%; }
                 
-                .mockup-btn { background: rgba(0,0,0,0.8); color: white; padding: 16px 24px; border-radius: 8px; font-weight: 600; text-align: center; font-size: 1.1rem; box-shadow: 0 8px 24px rgba(0,0,0,0.2); backdrop-filter: blur(4px); margin-top: auto; }
+                .mockup-btn { background: rgba(0,0,0,0.8); color: white; padding: 16px 24px; border-radius: 8px; font-weight: 600; text-align: center; font-size: 1.1rem; box-shadow: 0 8px 24px rgba(0,0,0,0.2); backdrop-filter: blur(4px); margin-top: 24px; cursor: pointer; width: auto; }
                 .mockup-input { width: 100%; border: none; border-bottom: 2px solid rgba(0,0,0,0.2); font-size: 1.2rem; padding: 8px 0; outline: none; margin-bottom: 24px; background: transparent; color: #333;}
                 .mockup-choice { padding: 16px; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; margin-bottom: 12px; font-weight: 500; color: #333; background: rgba(255,255,255,0.7); backdrop-filter: blur(8px); display: flex; align-items: center;}
                 .mockup-img { max-width: 100%; border-radius: 8px; margin-bottom: 24px; max-height: 200px; object-fit: cover;}
                 
                 .required-mark { color: #dc3545; margin-left: 4px; font-size: 0.9em; font-weight: normal; }
-                
-                /* Alignment modifiers */
-                .align-left { text-align: left; align-items: flex-start; }
-                .align-center { text-align: center; align-items: center; }
-                .align-right { text-align: right; align-items: flex-end; }
-                .align-left .mockup-btn { margin-right: auto; margin-left: 0; }
-                .align-center .mockup-btn { margin-right: auto; margin-left: auto; }
-                .align-right .mockup-btn { margin-right: 0; margin-left: auto; }
             </style>
             
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
@@ -300,8 +313,9 @@ App.Pages.form_editor = async function() {
     };
 
     const generateMockupHtml = (obj, type) => {
-        const alignClass = obj.align ? `align-${obj.align}` : 'align-center';
-        let html = `<div class="phone-mockup-inner ${alignClass}">`;
+        const alignClass = obj.align ? `align-${obj.align}` : 'align-left';
+        const scrollableClass = type === 'review' ? 'scrollable' : '';
+        let html = `<div class="phone-mockup-inner ${alignClass} ${scrollableClass}">`;
         
         if (obj.imageUrl) {
             html += `<img src="${obj.imageUrl}" class="mockup-img">`;
@@ -310,18 +324,19 @@ App.Pages.form_editor = async function() {
         html += `<div class="mockup-title mockup-editable" id="mock-title-node" data-prop="title" data-placeholder="タイトルを入力..." contenteditable="true">${obj.title || ''}</div>`;
         html += `<div class="mockup-desc mockup-editable" id="mock-desc-node" data-prop="description" data-placeholder="補足説明を入力 (任意)" contenteditable="true">${obj.description || ''}</div>`;
 
-        if (type === 'op' || type === 'ed' || type === 'review') {
-            html += `<div class="mockup-btn" id="mock-btn-node">${obj.buttonText || 'スタート'}</div>`;
+        // 提出ボタンが重複しないようにする (OP/EDのみ、Reviewは下部のみに描画)
+        if ((type === 'op' || type === 'ed') && type !== 'review') {
+            html += `<div class="mockup-btn" id="mock-btn-node" style="margin-top:auto;">${obj.buttonText || 'スタート'}</div>`;
         } else if (type === 'question') {
             if (obj.type === 'short_text' || obj.type === 'long_text') {
                 const placeholderVal = obj.placeholder !== undefined ? obj.placeholder : "こちらに回答を入力...";
                 html += `<div class="mockup-input mockup-editable" id="mock-placeholder-node" data-prop="placeholder" data-placeholder="プレースホルダーを入力..." contenteditable="true" style="border-bottom: 2px solid rgba(0,0,0,0.2); padding: 8px 0; color: #888; text-align: left; width: 100%;">${placeholderVal}</div>`;
             } else if (obj.type === 'dropdown') {
                 html += `
-                    <div class="mockup-choice" style="justify-content: space-between; width: 100%;">
-                        <span>選択してください...</span>
-                        <i class="ph ph-caret-down"></i>
-                    </div>
+                    <select class="mockup-input" style="border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; padding: 12px; background: rgba(255,255,255,0.7); backdrop-filter: blur(8px); width: 100%; cursor: pointer;">
+                        <option value="">選択してください...</option>
+                        ${(obj.choices || []).map(c => `<option>${c}</option>`).join('')}
+                    </select>
                 `;
             } else if (obj.type === 'multiple_choice') {
                 if (!obj.choices || obj.choices.length === 0) {
@@ -335,9 +350,9 @@ App.Pages.form_editor = async function() {
             }
         }
         
-        // 確認画面 (Review) のダミー回答プレビュー
+        // 確認画面 (Review) のプレビュー (下部にボタンを1つだけ設置)
         if (type === 'review') {
-            html += '<div style="width:100%; margin-bottom:24px; text-align:left;">';
+            html += '<div style="width:100%; margin-top:16px; margin-bottom:24px; text-align:left;">';
             formData.questions.forEach((q, idx) => {
                 html += `
                     <div style="background:rgba(255,255,255,0.7); padding:12px; border-radius:8px; margin-bottom:12px; border:1px solid rgba(0,0,0,0.05);">
@@ -347,7 +362,7 @@ App.Pages.form_editor = async function() {
                 `;
             });
             html += '</div>';
-            html += `<div class="mockup-btn" id="mock-review-btn-node" style="width:100%;">${obj.buttonText || 'この内容で提出する'}</div>`;
+            html += `<div class="mockup-btn" id="mock-review-btn-node" style="width:100%; margin-top: auto;">${obj.buttonText || 'この内容で提出する'}</div>`;
         }
 
         html += '</div>';
@@ -362,11 +377,18 @@ App.Pages.form_editor = async function() {
                 document.execCommand('insertText', false, text);
             });
             
+            // Enterキー押下時の最上部スクロール強制バグ防止
+            el.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    // イベント伝播を止め、親コンテナ等の自動スクロールを防止
+                    e.stopPropagation();
+                }
+            });
+
             el.addEventListener('input', (e) => {
                 const prop = el.getAttribute('data-prop');
                 obj[prop] = el.innerText;
                 
-                // 左メニューのテキスト同期（renderは呼ばずDOMの書き換えのみ）
                 if (prop === 'title') {
                     const navEl = document.getElementById(`nav-text-${activePageId}`);
                     if (navEl) {
@@ -375,7 +397,6 @@ App.Pages.form_editor = async function() {
                     }
                 }
                 
-                // 右側設定パネルの同期（フォーカスを奪わないようrender()は呼ばず直接 value を書き換える）
                 let rightInputId = '';
                 if (prop === 'title') rightInputId = 'set-title';
                 else if (prop === 'description') rightInputId = 'set-desc';
@@ -471,7 +492,7 @@ App.Pages.form_editor = async function() {
             `;
         }
 
-        // 配置設定（全ページ対応）
+        // 配置設定（デフォルトを left にフォールバック）
         const alignVal = obj.align || 'left';
         html += `
             <div class="form-group">
@@ -560,18 +581,15 @@ App.Pages.form_editor = async function() {
     };
 
     const bindSettingsEvents = (obj, type) => {
-        // 全体の再描画（render()）をせず、中央モックの特定のDOMだけを更新するDOM直書きロジック
         const bindInputNoRender = (inputId, mockNodeId, prop) => {
             const el = document.getElementById(inputId);
             if (el) {
                 el.addEventListener('input', (e) => {
                     obj[prop] = e.target.value;
-                    // 中央モックの更新
                     const mockNode = document.getElementById(mockNodeId);
                     if (mockNode) {
                         mockNode.innerText = e.target.value;
                     }
-                    // 左メニュータイトル同期（タイトルのみ）
                     if (prop === 'title') {
                         const navEl = document.getElementById(`nav-text-${activePageId}`);
                         if (navEl) {
@@ -592,7 +610,6 @@ App.Pages.form_editor = async function() {
             bindInputNoRender('set-placeholder', 'mock-placeholder-node', 'placeholder');
         }
         
-        // 配置変更 (align) はCSSクラスを変更するため再描画が必要だが、カーソル奪取の問題はないためrender()でOK
         const alignSelect = document.getElementById('set-align');
         if (alignSelect) {
             alignSelect.addEventListener('change', (e) => {
@@ -601,7 +618,6 @@ App.Pages.form_editor = async function() {
             });
         }
 
-        // テーマカラーやサイズ変更（カラーピッカーなどもフォーカス外れを防ぐためDOMへ直接スタイル適用）
         const tColor = document.getElementById('set-theme-tcolor');
         if(tColor) tColor.addEventListener('input', e => { 
             formData.theme.titleColor = e.target.value; 
@@ -627,7 +643,6 @@ App.Pages.form_editor = async function() {
             if(mockDesc) mockDesc.style.fontSize = e.target.value;
         });
 
-        // 画像削除
         const rmImgBtn = document.getElementById('remove-img-btn');
         if (rmImgBtn) {
             rmImgBtn.addEventListener('click', () => {
@@ -653,7 +668,6 @@ App.Pages.form_editor = async function() {
             });
         }
 
-        // 回答方式切り替えラジオ
         const allowMultipleRadio = document.getElementsByName('allow-multiple');
         if (allowMultipleRadio) {
             allowMultipleRadio.forEach(radio => {
