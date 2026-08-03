@@ -45,8 +45,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             if(formData.theme.descSize) root.style.setProperty('--desc-size', formData.theme.descSize);
         }
 
-        // 非同期でViewのログ保存
-        logStat('view').catch(e => console.error("View log failed:", e));
+        // 非同期でViewのログ保存 (内部でエラーをキャッチするため、呼び出し時の .catch() は不要)
+        logStat('view');
 
         renderForm();
 
@@ -199,7 +199,7 @@ function renderForm() {
 }
 
 function handleOpStart() {
-    logStat('start').catch(e => console.error(e));
+    logStat('start');
     goNext();
 }
 
@@ -310,7 +310,7 @@ function updateView() {
             const type = slide.getAttribute('data-type');
             if (type === 'question') {
                 const qId = slide.getAttribute('data-id');
-                logStat('reach', qId).catch(e => console.error(e));
+                logStat('reach', qId);
             } else if (type === 'review') {
                 renderReviewContent();
                 const nav = document.getElementById('nav-controls');
@@ -372,11 +372,15 @@ async function submitForm() {
     }
 }
 
-function logStat(type, detailId = null) {
-    if (!supabaseClient) return Promise.resolve();
-    const id = Date.now() + Math.floor(Math.random() * 1000);
-    const statData = { type: type, detail: detailId, timestamp: new Date().toISOString(), session: getSessionId() };
-    return supabaseClient.from('customers').insert([{ id, service_type: 'meo_form_stats', data: statData }]);
+async function logStat(type, detailId = null) {
+    try {
+        if (!supabaseClient) return;
+        const id = Date.now() + Math.floor(Math.random() * 1000);
+        const statData = { type: type, detail: detailId, timestamp: new Date().toISOString(), session: getSessionId() };
+        await supabaseClient.from('customers').insert([{ id, service_type: 'meo_form_stats', data: statData }]);
+    } catch (e) {
+        console.error("logStat error:", e);
+    }
 }
 
 function getSessionId() {
