@@ -1,3 +1,12 @@
+// Global Error Handler to display error on screen directly
+window.onerror = function(message, source, lineno, colno, error) {
+    const errorDiv = document.createElement('div');
+    errorDiv.style = "position:fixed; top:0; left:0; width:100%; background:red; color:white; padding:16px; z-index:99999; font-family:monospace; font-size:0.9rem; line-height:1.4; box-shadow:0 4px 12px rgba(0,0,0,0.3); word-break:break-all;";
+    errorDiv.innerHTML = `<strong>GLOBAL ERROR:</strong> ${message}<br><strong>URL:</strong> ${source}<br><strong>Line:</strong> ${lineno}:${colno}<br><strong>Stack:</strong> ${error ? error.stack : 'N/A'}`;
+    document.body.appendChild(errorDiv);
+    return false;
+};
+
 // Supabase Configuration
 const supabaseUrl = 'https://xztaacxjlluzqzehendp.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh6dGFhY3hqbGx1enF6ZWhlbmRwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyMzM4NzMsImV4cCI6MjA4OTgwOTg3M30.79wvIPepXjvPZwLHOPX7KullShvdvCB7LS2gZO5CtuQ';
@@ -154,7 +163,7 @@ function renderForm() {
         </div>
     `;
 
-    // ED Slide (Index N+2) - window.close() closing trigger
+    // ED Slide (Index N+2)
     const edIdx = formData.questions.length + 2;
     html += `
         <div class="slide ${getAlignClass(formData.ed)}" id="slide-${edIdx}" data-type="ed">
@@ -379,16 +388,21 @@ function getSessionId() {
 }
 
 function showError(msg) {
+    // 画面中央に大きな警告カードとして表示するよう改善
     const loader = document.getElementById('loading');
     if (loader) {
-        loader.innerHTML = `<div style="font-size:1.2rem; color:var(--text-primary); text-align:center; padding:20px;">${msg}</div>`;
+        loader.innerHTML = `
+            <div style="background:white; padding:32px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.1); max-width:90%; width:400px; text-align:center;">
+                <i class="ph ph-warning-circle" style="font-size:3rem; color:#dc3545; margin-bottom:16px; display:block;"></i>
+                <div style="font-size:1.1rem; font-weight:600; color:#333; margin-bottom:12px; line-height:1.4;">${msg}</div>
+            </div>
+        `;
         loader.style.opacity = '1';
     }
 }
 
 function closeFormWindow() {
     window.close();
-    // ブラウザのセキュリティにより自動で閉じない場合のフォールバック表示
     const guide = document.getElementById('close-guide');
     if (guide) guide.style.display = 'block';
 }
