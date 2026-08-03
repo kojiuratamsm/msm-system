@@ -223,13 +223,15 @@ App.Pages.form_editor = async function() {
 
             // 質問削除
             document.querySelectorAll('.delete-q-btn').forEach(el => {
-                el.stopPropagation();
-                const id = el.getAttribute('data-id');
-                if (confirm('この質問を削除してもよろしいですか？')) {
-                    formData.questions = formData.questions.filter(q => q.id !== id);
-                    if (activePageId === id) activePageId = 'op';
-                    render();
-                }
+                el.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const id = el.getAttribute('data-id');
+                    if (confirm('この質問を削除してもよろしいですか？')) {
+                        formData.questions = formData.questions.filter(q => q.id !== id);
+                        if (activePageId === id) activePageId = 'op';
+                        render();
+                    }
+                });
             });
 
             // 質問追加

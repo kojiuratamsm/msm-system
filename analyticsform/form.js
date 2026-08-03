@@ -1,7 +1,7 @@
 // Supabase Configuration
 const supabaseUrl = 'https://xztaacxjlluzqzehendp.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh6dGFhY3hqbGx1enF6ZWhlbmRwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyMzM4NzMsImV4cCI6MjA4OTgwOTg3M30.79wvIPepXjvPZwLHOPX7KullShvdvCB7LS2gZO5CtuQ';
-const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+let supabase = null;
 
 let formData = null;
 let currentSlideIndex = 0;
@@ -10,11 +10,16 @@ let slidesCount = 0;
 
 document.addEventListener('DOMContentLoaded', async () => {
     try {
+        if (!window.supabase) {
+            throw new Error("Supabaseライブラリの読み込みに失敗しました。ネット環境を確認してください。");
+        }
+        supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+
         const { data, error } = await supabase.from('customers').select('*').eq('service_type', 'meo_form');
         if (error) throw error;
         
         if (!data || data.length === 0) {
-            showError("現在利用できるフォームがありません。");
+            showError("現在利用できるフォームがありません。管理画面で「保存」を実行してください。");
             return;
         }
 
@@ -55,7 +60,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     } catch (err) {
         console.error(err);
-        showError("フォームの読み込みに失敗しました。時間をおいて再度お試しください。");
+        showError("フォームの読み込みに失敗しました。<br><small style='font-size:0.8rem;color:#999;'>" + err.message + "</small>");
     }
 });
 
@@ -357,6 +362,7 @@ async function submitForm() {
 }
 
 function logStat(type, detailId = null) {
+    if (!supabase) return Promise.resolve();
     const id = Date.now() + Math.floor(Math.random() * 1000);
     const statData = { type: type, detail: detailId, timestamp: new Date().toISOString(), session: getSessionId() };
     return supabase.from('customers').insert([{ id, service_type: 'meo_form_stats', data: statData }]);
