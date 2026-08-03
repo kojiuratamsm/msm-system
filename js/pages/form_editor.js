@@ -270,43 +270,38 @@ App.Pages.form_editor = async function() {
     };
 
     const generateMockupHtml = (obj, type) => {
-        let html = \`<div class="phone-mockup-inner">\`;
+        let html = '<div class="phone-mockup-inner">';
         if (obj.imageUrl) {
-            html += \`<img src="\${obj.imageUrl}" class="mockup-img">\`;
+            html += `<img src="${obj.imageUrl}" class="mockup-img">`;
         }
         
-        const reqMark = (type === 'question' && obj.required) ? \`<span class="required-mark">*</span>\` : '';
-        html += \`<div class="mockup-title mockup-editable" data-prop="title" data-placeholder="タイトルを入力..." contenteditable="true">\${obj.title || ''}</div>\`;
-        html += \`<div class="mockup-desc mockup-editable" data-prop="description" data-placeholder="補足説明を入力 (任意)" contenteditable="true">\${obj.description || ''}</div>\`;
+        html += `<div class="mockup-title mockup-editable" data-prop="title" data-placeholder="タイトルを入力..." contenteditable="true">${obj.title || ''}</div>`;
+        html += `<div class="mockup-desc mockup-editable" data-prop="description" data-placeholder="補足説明を入力 (任意)" contenteditable="true">${obj.description || ''}</div>`;
 
         if (type === 'op' || type === 'ed') {
-            html += \`<div style="margin-top:auto;"><div class="mockup-btn">\${obj.buttonText || 'ボタン'}</div></div>\`;
+            html += `<div style="margin-top:auto;"><div class="mockup-btn">${obj.buttonText || 'ボタン'}</div></div>`;
         } else if (type === 'question') {
             if (obj.type === 'short_text') {
-                html += \`<input type="text" class="mockup-input" placeholder="こちらに回答を入力..." disabled>\`;
+                html += '<input type="text" class="mockup-input" placeholder="こちらに回答を入力..." disabled>';
             } else if (obj.type === 'long_text') {
-                html += \`<input type="text" class="mockup-input" placeholder="こちらに回答を入力..." style="height:60px;" disabled>\`;
+                html += '<input type="text" class="mockup-input" placeholder="こちらに回答を入力..." style="height:60px;" disabled>';
             } else if (obj.type === 'multiple_choice' || obj.type === 'dropdown') {
                 if (!obj.choices || obj.choices.length === 0) {
-                    html += \`<div class="mockup-choice" style="opacity:0.5;">選択肢がありません</div>\`;
+                    html += '<div class="mockup-choice" style="opacity:0.5;">選択肢がありません</div>';
                 } else {
                     obj.choices.forEach((c, idx) => {
                         const alpha = String.fromCharCode(65 + idx);
-                        html += \`<div class="mockup-choice"><div class="choice-alpha" style="background:#e0e0e0; width:24px; height:24px; border-radius:4px; display:flex; align-items:center; justify-content:center; margin-right:12px; font-size:0.8rem; font-weight:700;">\${alpha}</div> \${c}</div>\`;
+                        html += `<div class="mockup-choice"><div class="choice-alpha" style="background:#e0e0e0; width:24px; height:24px; border-radius:4px; display:flex; align-items:center; justify-content:center; margin-right:12px; font-size:0.8rem; font-weight:700;">${alpha}</div> ${c}</div>`;
                     });
                 }
             }
         }
-        html += \`</div>\`;
-        
-        // 必須マークを擬似要素等ではなくDOM外から挿入（contenteditableに影響しないようにJSでタイトル内に付与）
+        html += '</div>';
         return html;
     };
 
     const bindMockupEditableEvents = (obj, type) => {
-        // 直接編集されたら、オブジェクトに反映
         document.querySelectorAll('.mockup-editable').forEach(el => {
-            // ペースト時にプレーンテキストにする
             el.addEventListener('paste', (e) => {
                 e.preventDefault();
                 const text = (e.originalEvent || e).clipboardData.getData('text/plain');
@@ -316,12 +311,10 @@ App.Pages.form_editor = async function() {
             el.addEventListener('input', (e) => {
                 const prop = el.getAttribute('data-prop');
                 obj[prop] = el.innerText;
-                // 右側の入力欄にも同期
                 const rightInput = document.getElementById(prop === 'title' ? 'set-title' : 'set-desc');
                 if (rightInput) rightInput.value = obj[prop];
             });
             
-            // 必須マークの表示ロジック
             if (type === 'question' && el.getAttribute('data-prop') === 'title') {
                 const updateMark = () => {
                     const markExists = el.querySelector('.required-mark');
@@ -332,119 +325,116 @@ App.Pages.form_editor = async function() {
                     }
                 };
                 updateMark();
-                
-                // inputイベントでマークが消されたら再付与する
                 el.addEventListener('blur', updateMark);
             }
         });
     };
 
     const generateSettingsHtml = (obj, type) => {
-        let html = \`<h3 style="margin-top:0; margin-bottom:24px; font-size:1.2rem;">\${type === 'op' ? 'OP画面の設定' : type === 'ed' ? 'ED画面の設定' : '質問の設定'}</h3>\`;
+        let html = `<h3 style="margin-top:0; margin-bottom:24px; font-size:1.2rem;">${type === 'op' ? 'OP画面の設定' : type === 'ed' ? 'ED画面の設定' : '質問の設定'}</h3>`;
         
-        html += \`
+        html += `
             <div class="form-group">
                 <label>画像 (任意)</label>
-                \`;
+                `;
         if (obj.imageUrl) {
-            html += \`
-                <div style="margin-bottom:8px;"><img src="\${obj.imageUrl}" style="max-width:100px; max-height:100px; border-radius:4px; object-fit:cover;"></div>
+            html += `
+                <div style="margin-bottom:8px;"><img src="${obj.imageUrl}" style="max-width:100px; max-height:100px; border-radius:4px; object-fit:cover;"></div>
                 <button class="btn btn-secondary btn-sm" onclick="document.getElementById('img-file-input').click()"><i class="ph ph-image"></i> 変更する</button>
                 <button class="btn btn-danger btn-sm" id="remove-img-btn" style="margin-left:8px;"><i class="ph ph-trash"></i></button>
-            \`;
+            `;
         } else {
-            html += \`<button class="btn btn-secondary btn-sm" id="img-upload-btn"><i class="ph ph-image"></i> 画像をアップロード</button>\`;
+            html += '<button class="btn btn-secondary btn-sm" id="img-upload-btn"><i class="ph ph-image"></i> 画像をアップロード</button>';
         }
-        html += \`<input type="file" id="img-file-input" accept="image/*" style="display:none;"></div>\`;
+        html += '<input type="file" id="img-file-input" accept="image/*" style="display:none;"></div>';
 
         if (type === 'question') {
-            html += \`
+            html += `
                 <div class="form-group">
                     <label>質問タイプ</label>
                     <select id="set-type" class="input-field">
-                        <option value="short_text" \${obj.type === 'short_text' ? 'selected' : ''}>記述式 (短文)</option>
-                        <option value="long_text" \${obj.type === 'long_text' ? 'selected' : ''}>記述式 (長文)</option>
-                        <option value="multiple_choice" \${obj.type === 'multiple_choice' ? 'selected' : ''}>選択肢 (複数/単一)</option>
-                        <option value="dropdown" \${obj.type === 'dropdown' ? 'selected' : ''}>プルダウン</option>
+                        <option value="short_text" ${obj.type === 'short_text' ? 'selected' : ''}>記述式 (短文)</option>
+                        <option value="long_text" ${obj.type === 'long_text' ? 'selected' : ''}>記述式 (長文)</option>
+                        <option value="multiple_choice" ${obj.type === 'multiple_choice' ? 'selected' : ''}>選択肢 (複数/単一)</option>
+                        <option value="dropdown" ${obj.type === 'dropdown' ? 'selected' : ''}>プルダウン</option>
                     </select>
                 </div>
-            \`;
+            `;
         }
 
-        html += \`
+        html += `
             <div class="form-group">
                 <label>タイトル (プレビューで直接編集可能)</label>
-                <textarea id="set-title" class="input-field" style="height:60px;">\${obj.title || ''}</textarea>
+                <textarea id="set-title" class="input-field" style="height:60px;">${obj.title || ''}</textarea>
             </div>
             <div class="form-group">
                 <label>補足説明 (プレビューで直接編集可能)</label>
-                <textarea id="set-desc" class="input-field" style="height:80px;">\${obj.description || ''}</textarea>
+                <textarea id="set-desc" class="input-field" style="height:80px;">${obj.description || ''}</textarea>
             </div>
-        \`;
+        `;
 
         if (type === 'op' || type === 'ed') {
-            html += \`
+            html += `
                 <div class="form-group">
                     <label>ボタンテキスト</label>
-                    <input type="text" id="set-btn-text" class="input-field" value="\${obj.buttonText}">
+                    <input type="text" id="set-btn-text" class="input-field" value="${obj.buttonText}">
                 </div>
-            \`;
+            `;
         }
 
         if (type === 'question') {
-            html += \`
+            html += `
                 <div class="form-group" style="display:flex; align-items:center; margin-top:24px; margin-bottom:24px; padding:12px; background:#f8f9fc; border-radius:8px;">
                     <label style="margin:0; flex:1; font-weight:600;">回答を必須にする</label>
-                    <input type="checkbox" id="set-required" style="width:20px; height:20px;" \${obj.required ? 'checked' : ''}>
+                    <input type="checkbox" id="set-required" style="width:20px; height:20px;" ${obj.required ? 'checked' : ''}>
                 </div>
-            \`;
+            `;
 
             if (obj.type === 'multiple_choice' || obj.type === 'dropdown') {
-                html += \`<div class="form-group"><label>選択肢設定</label><div id="choices-container">\`;
+                html += '<div class="form-group"><label>選択肢設定</label><div id="choices-container">';
                 const choices = obj.choices || [];
                 choices.forEach((c, idx) => {
-                    html += \`<div style="display:flex; gap:8px; margin-bottom:8px;">
-                                <input type="text" class="input-field set-choice-input" data-index="\${idx}" value="\${c}" style="margin-bottom:0;">
-                                <button class="btn btn-danger delete-choice-btn" data-index="\${idx}" style="padding:0 12px;"><i class="ph ph-trash"></i></button>
-                             </div>\`;
+                    html += `<div style="display:flex; gap:8px; margin-bottom:8px;">
+                                <input type="text" class="input-field set-choice-input" data-index="${idx}" value="${c}" style="margin-bottom:0;">
+                                <button class="btn btn-danger delete-choice-btn" data-index="${idx}" style="padding:0 12px;"><i class="ph ph-trash"></i></button>
+                             </div>`;
                 });
-                html += \`</div><button class="btn btn-secondary btn-sm" id="add-choice-btn" style="margin-top:8px; width:100%;"><i class="ph ph-plus"></i> 選択肢を追加</button></div>\`;
+                html += '</div><button class="btn btn-secondary btn-sm" id="add-choice-btn" style="margin-top:8px; width:100%;"><i class="ph ph-plus"></i> 選択肢を追加</button></div>';
             }
         }
         
-        // デザインテーマ設定 (OPページにのみ全体設定として表示するか、常に表示するか。今回は常に表示)
-        html += \`
+        html += `
             <hr style="margin:32px 0; border:none; border-top:1px solid #e0e0e0;">
             <h4 style="margin-bottom:16px;">🎨 デザイン設定 (全体)</h4>
             <div style="display:flex; gap:16px;">
                 <div class="form-group" style="flex:1;">
                     <label>タイトルの色</label>
-                    <input type="color" id="set-theme-tcolor" class="input-field" value="\${formData.theme.titleColor}" style="padding:0; height:40px;">
+                    <input type="color" id="set-theme-tcolor" class="input-field" value="${formData.theme.titleColor}" style="padding:0; height:40px;">
                 </div>
                 <div class="form-group" style="flex:1;">
                     <label>文字サイズ</label>
                     <select id="set-theme-tsize" class="input-field">
-                        <option value="1.2rem" \${formData.theme.titleSize==='1.2rem'?'selected':''}>小</option>
-                        <option value="1.5rem" \${formData.theme.titleSize==='1.5rem'?'selected':''}>中</option>
-                        <option value="1.8rem" \${formData.theme.titleSize==='1.8rem'?'selected':''}>大</option>
+                        <option value="1.2rem" ${formData.theme.titleSize==='1.2rem'?'selected':''}>小</option>
+                        <option value="1.5rem" ${formData.theme.titleSize==='1.5rem'?'selected':''}>中</option>
+                        <option value="1.8rem" ${formData.theme.titleSize==='1.8rem'?'selected':''}>大</option>
                     </select>
                 </div>
             </div>
             <div style="display:flex; gap:16px;">
                 <div class="form-group" style="flex:1;">
                     <label>補足説明の色</label>
-                    <input type="color" id="set-theme-dcolor" class="input-field" value="\${formData.theme.descColor}" style="padding:0; height:40px;">
+                    <input type="color" id="set-theme-dcolor" class="input-field" value="${formData.theme.descColor}" style="padding:0; height:40px;">
                 </div>
                 <div class="form-group" style="flex:1;">
                     <label>文字サイズ</label>
                     <select id="set-theme-dsize" class="input-field">
-                        <option value="0.9rem" \${formData.theme.descSize==='0.9rem'?'selected':''}>小</option>
-                        <option value="1rem" \${formData.theme.descSize==='1rem'?'selected':''}>中</option>
-                        <option value="1.1rem" \${formData.theme.descSize==='1.1rem'?'selected':''}>大</option>
+                        <option value="0.9rem" ${formData.theme.descSize==='0.9rem'?'selected':''}>小</option>
+                        <option value="1rem" ${formData.theme.descSize==='1rem'?'selected':''}>中</option>
+                        <option value="1.1rem" ${formData.theme.descSize==='1.1rem'?'selected':''}>大</option>
                     </select>
                 </div>
             </div>
-        \`;
+        `;
 
         return html;
     };
@@ -455,7 +445,7 @@ App.Pages.form_editor = async function() {
             if (el) {
                 el.addEventListener('input', (e) => {
                     obj[prop] = e.target.value;
-                    render(); // 文字反映
+                    render();
                 });
             }
         };
@@ -464,7 +454,6 @@ App.Pages.form_editor = async function() {
         bindInput('set-desc', 'description');
         if (type === 'op' || type === 'ed') bindInput('set-btn-text', 'buttonText');
         
-        // テーマ
         const tColor = document.getElementById('set-theme-tcolor');
         if(tColor) tColor.addEventListener('input', e => { formData.theme.titleColor = e.target.value; render(); });
         const dColor = document.getElementById('set-theme-dcolor');
@@ -474,7 +463,6 @@ App.Pages.form_editor = async function() {
         const dSize = document.getElementById('set-theme-dsize');
         if(dSize) dSize.addEventListener('change', e => { formData.theme.descSize = e.target.value; render(); });
 
-        // 画像削除
         const rmImgBtn = document.getElementById('remove-img-btn');
         if (rmImgBtn) {
             rmImgBtn.addEventListener('click', () => {
@@ -513,7 +501,6 @@ App.Pages.form_editor = async function() {
             el.addEventListener('input', (e) => {
                 const idx = parseInt(el.getAttribute('data-index'));
                 obj.choices[idx] = e.target.value;
-                // UI再描画せずにモックだけ更新するのもアリだが、今回は簡単のため
             });
             el.addEventListener('blur', render);
         });
