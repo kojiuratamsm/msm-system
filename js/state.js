@@ -116,6 +116,44 @@ const Store = {
         await supabase.from('customers').delete().eq('id', id);
     },
 
+    // MEO Form (Typeform-style)
+    async getMEOForm() {
+        const { data } = await supabase.from('customers').select('*').eq('service_type', 'meo_form');
+        if (data && data.length > 0) return { id: data[0].id, ...data[0].data };
+        return null;
+    },
+    async saveMEOForm(formData) {
+        const existing = await this.getMEOForm();
+        if (existing && existing.id) {
+            await supabase.from('customers').update({ data: formData }).eq('id', existing.id);
+            return existing.id;
+        } else {
+            const id = Date.now();
+            await supabase.from('customers').insert([{ id, service_type: 'meo_form', data: formData }]);
+            return id;
+        }
+    },
+    async addMEOFormResponse(responseData) {
+        const id = Date.now();
+        await supabase.from('customers').insert([{ id, service_type: 'meo_form_response', data: responseData }]);
+        return id;
+    },
+    async getMEOFormResponses() {
+        const { data } = await supabase.from('customers').select('*').eq('service_type', 'meo_form_response').order('id', { ascending: false });
+        return (data || []).map(r => ({ id: r.id, ...r.data }));
+    },
+    async logMEOFormStat(statType, detailId = null) {
+        // statType: 'view', 'start', 'reach', 'submission'
+        // detailId: reachの場合の質問IDなど
+        const id = Date.now();
+        const statData = { type: statType, detail: detailId, timestamp: new Date().toISOString() };
+        await supabase.from('customers').insert([{ id, service_type: 'meo_form_stats', data: statData }]);
+    },
+    async getMEOFormStats() {
+        const { data } = await supabase.from('customers').select('*').eq('service_type', 'meo_form_stats');
+        return (data || []).map(r => ({ id: r.id, ...r.data }));
+    },
+
     // Targets and KPIs
     async getTargetsKpis() {
         const { data } = await supabase.from('customers').select('*').eq('service_type', 'targets_kpis');

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>分析フォーム</title>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <link rel="stylesheet" href="form.css">
+</head>
+<body>
+    <div id="loading" class="loading-screen">
+        <i class="ph ph-spinner ph-spin"></i>
+    </div>
+    
+    <div id="form-container" class="form-container" style="display: none;">
+        <div id="slide-container" class="slide-container">
+            <!-- Slides will be injected here by JS -->
+        </div>
+        <div class="progress-bar-container">
+            <div id="progress-bar" class="progress-bar"></div>
+        </div>
+        <div class="navigation-controls" id="nav-controls" style="display:none;">
+            <button class="nav-btn" id="btn-prev" style="opacity: 0.5;"><i class="ph ph-caret-up"></i></button>
+            <button class="nav-btn" id="btn-next"><i class="ph ph-caret-down"></i></button>
+        </div>
+    </div>
+
+    <script src="form.js"></script>
+</body>
+</html>

@@ -24,7 +24,8 @@ const App = {
             'youtube_short': 'YouTube管理 (ショート)',
             'youtube_subtitles': 'YouTubeテロップ生成',
             'ai_planner': 'AI企画室',
-            'sales_leads': 'MEO営業リスト作成'
+            'sales_leads': 'MEO営業リスト作成',
+            'form_analytics': '分析フォーム'
         };
         document.getElementById('page-title').textContent = titleMap[target] || '';
 
@@ -188,7 +189,7 @@ const App = {
             
             // Sidebar will explicitly show all items to all users now.
             // When clicked, non-admins will see a rejection screen for restricted pages.
-            const allNavs = ['dashboard', 'services', 'customers', 'sales', 'finance', 'payroll', 'tasks', 'research', 'youtube', 'youtube_short', 'youtube_subtitles', 'ai_planner', 'sales_leads', 'meo_users', 'invites', 'settings'];
+            const allNavs = ['dashboard', 'services', 'customers', 'sales', 'finance', 'payroll', 'tasks', 'research', 'youtube', 'youtube_short', 'youtube_subtitles', 'ai_planner', 'sales_leads', 'form_analytics', 'meo_users', 'invites', 'settings'];
             allNavs.forEach(nav => {
                 const el = document.querySelector(`li[data-target="${nav}"]`);
                 if (el) el.style.display = 'flex';
@@ -202,7 +203,19 @@ const App = {
     }
 };
 
+// Load modular pages
+function loadScript(src) {
+    const script = document.createElement('script');
+    script.src = src;
+    document.body.appendChild(script);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+    loadScript('js/pages/sales_leads.js');
+    loadScript('js/pages/youtube.js');
+    loadScript('js/pages/form_analytics.js');
+    loadScript('js/pages/form_editor.js');
+
     // Add Mobile overlay
     const overlay = document.createElement('div');
     overlay.className = 'sidebar-overlay';
