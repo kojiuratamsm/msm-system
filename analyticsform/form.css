@@ -53,7 +53,7 @@ body::after {
     position: relative;
     max-width: 800px;
     margin: 0 auto;
-    opacity: 0; /* JSで0.5秒表示のためにフェードインさせる */
+    opacity: 0;
     transition: opacity 0.5s;
 }
 
@@ -99,6 +99,7 @@ body::after {
 .slide-img-container {
     text-align: center;
     margin-bottom: 32px;
+    width: 100%;
 }
 .slide-img {
     max-width: 100%;
@@ -114,6 +115,7 @@ body::after {
     margin-bottom: 16px;
     line-height: 1.4;
     white-space: pre-wrap;
+    width: 100%;
 }
 
 .slide-desc {
@@ -121,6 +123,7 @@ body::after {
     margin-bottom: 40px;
     line-height: 1.6;
     white-space: pre-wrap;
+    width: 100%;
 }
 
 .required-mark {
@@ -129,6 +132,14 @@ body::after {
     font-size: 0.9em;
     font-weight: normal;
 }
+
+/* Alignments */
+.align-left { text-align: left; align-items: flex-start; }
+.align-center { text-align: center; align-items: center; }
+.align-right { text-align: right; align-items: flex-end; }
+.align-left .btn-primary { margin-right: auto; margin-left: 0; }
+.align-center .btn-primary { margin-right: auto; margin-left: auto; }
+.align-right .btn-primary { margin-right: 0; margin-left: auto; }
 
 .btn-primary {
     background-color: rgba(0,0,0,0.8);
@@ -168,12 +179,38 @@ body::after {
     background: transparent;
     color: var(--text-primary);
     transition: border-color 0.3s;
+    text-align: left; /* 左詰め固定 */
 }
 .input-text:focus {
     border-bottom-color: var(--primary-color);
 }
 .input-text::placeholder {
     color: rgba(0,0,0,0.3);
+    text-align: left;
+}
+
+/* Pulldown Select Box Styles */
+.dropdown-select {
+    width: 100%;
+    padding: 16px 20px;
+    font-size: 1.2rem;
+    border: 1px solid rgba(0,0,0,0.1);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.7);
+    backdrop-filter: blur(8px);
+    color: var(--text-primary);
+    outline: none;
+    appearance: none;
+    -webkit-appearance: none;
+    cursor: pointer;
+    background-image: url("data:image/svg+xml;utf8,<svg fill='black' height='24' viewBox='0 0 24 24' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/><path d='M0 0h24v24H0z' fill='none'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 16px center;
+    transition: border-color 0.2s;
+}
+.dropdown-select:focus {
+    border-color: var(--primary-color);
+    background: rgba(255,255,255,0.9);
 }
 
 .choice-box {
@@ -189,6 +226,8 @@ body::after {
     transition: all 0.2s;
     font-size: 1.1rem;
     font-weight: 500;
+    width: 100%;
+    text-align: left;
 }
 .choice-box:hover {
     background: rgba(255,255,255,0.9);
@@ -285,6 +324,7 @@ body::after {
     backdrop-filter: blur(8px);
     border-radius: 8px;
     border: 1px solid rgba(0,0,0,0.05);
+    text-align: left;
 }
 .review-q {
     font-size: 0.9rem;

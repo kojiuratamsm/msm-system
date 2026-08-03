@@ -30,28 +30,32 @@ document.addEventListener('DOMContentLoaded', async () => {
             if(formData.theme.descSize) root.style.setProperty('--desc-size', formData.theme.descSize);
         }
 
-        logStat('view');
+        // 非同期でViewのログ保存（これが失敗しても全体の表示は止めない）
+        logStat('view').catch(e => console.error("View log failed:", e));
 
         renderForm();
 
-        // 0.5秒表示のための高速フェードイン
+        // 0.5秒で高速フェードイン表示
         setTimeout(() => {
-            document.getElementById('loading').style.opacity = '0';
+            const loader = document.getElementById('loading');
+            if (loader) loader.style.opacity = '0';
             setTimeout(() => {
-                document.getElementById('loading').style.display = 'none';
+                if (loader) loader.style.display = 'none';
                 const container = document.getElementById('form-container');
-                container.style.display = 'block';
-                // trigger reflow
-                void container.offsetWidth;
-                container.style.opacity = '1';
-                document.getElementById('nav-controls').style.display = 'flex';
+                if (container) {
+                    container.style.display = 'block';
+                    void container.offsetWidth;
+                    container.style.opacity = '1';
+                }
+                const nav = document.getElementById('nav-controls');
+                if (nav) nav.style.display = 'flex';
                 updateView();
             }, 500);
         }, 100);
 
     } catch (err) {
         console.error(err);
-        showError("フォームの読み込みに失敗しました。");
+        showError("フォームの読み込みに失敗しました。時間をおいて再度お試しください。");
     }
 });
 
@@ -62,87 +66,104 @@ function renderForm() {
     const applyTheme = (isTitle) => {
         if (!formData.theme) return '';
         if (isTitle) {
-            return \`color: \${formData.theme.titleColor || 'inherit'}; font-size: \${formData.theme.titleSize || 'inherit'};\`;
+            return `color: ${formData.theme.titleColor || 'inherit'}; font-size: ${formData.theme.titleSize || 'inherit'};`;
         } else {
-            return \`color: \${formData.theme.descColor || 'inherit'}; font-size: \${formData.theme.descSize || 'inherit'};\`;
+            return `color: ${formData.theme.descColor || 'inherit'}; font-size: ${formData.theme.descSize || 'inherit'};`;
         }
     };
 
+    const getAlignClass = (obj) => {
+        return obj && obj.align ? `align-${obj.align}` : 'align-center';
+    };
+
     // OP Slide (Index 0)
-    html += \`
-        <div class="slide" id="slide-0" data-type="op">
-            \${formData.op.imageUrl ? \`<div class="slide-img-container"><img src="\${formData.op.imageUrl}" class="slide-img"></div>\` : ''}
-            <div class="slide-title" style="\${applyTheme(true)}">\${formData.op.title || ''}</div>
-            <div class="slide-desc" style="\${applyTheme(false)}">\${(formData.op.description || '').replace(/\\n/g, '<br>')}</div>
-            <button class="btn-primary" onclick="handleOpStart()">\${formData.op.buttonText || 'スタート'}</button>
+    html += `
+        <div class="slide ${getAlignClass(formData.op)}" id="slide-0" data-type="op">
+            ${formData.op.imageUrl ? `<div class="slide-img-container"><img src="${formData.op.imageUrl}" class="slide-img"></div>` : ''}
+            <div class="slide-title" style="${applyTheme(true)}">${formData.op.title || ''}</div>
+            <div class="slide-desc" style="${applyTheme(false)}">${(formData.op.description || '').replace(/\n/g, '<br>')}</div>
+            <button class="btn-primary" onclick="handleOpStart()">${formData.op.buttonText || 'スタート'}</button>
         </div>
-    \`;
+    `;
 
     // Question Slides
     formData.questions.forEach((q, idx) => {
         const slideIdx = idx + 1;
-        html += \`<div class="slide" id="slide-\${slideIdx}" data-type="question" data-id="\${q.id}" data-required="\${q.required}">\`;
+        html += `<div class="slide align-left" id="slide-${slideIdx}" data-type="question" data-id="${q.id}" data-required="${q.required}">`;
         
         if (q.imageUrl) {
-            html += \`<div class="slide-img-container"><img src="\${q.imageUrl}" class="slide-img"></div>\`;
+            html += `<div class="slide-img-container" style="text-align:left;"><img src="${q.imageUrl}" class="slide-img"></div>`;
         }
-        const reqMark = q.required ? \`<span class="required-mark">*</span>\` : '';
-        html += \`<div class="slide-title" style="\${applyTheme(true)}">\${idx + 1}. \${q.title || ''}\${reqMark}</div>\`;
+        const reqMark = q.required ? '<span class="required-mark">*</span>' : '';
+        html += `<div class="slide-title" style="${applyTheme(true)}">${idx + 1}. ${q.title || ''}${reqMark}</div>`;
         if (q.description) {
-            html += \`<div class="slide-desc" style="\${applyTheme(false)}">\${q.description.replace(/\\n/g, '<br>')}</div>\`;
+            html += `<div class="slide-desc" style="${applyTheme(false)}">${q.description.replace(/\n/g, '<br>')}</div>`;
         }
 
+        const placeholderText = q.placeholder !== undefined ? q.placeholder : "こちらに回答を入力...";
+
         if (q.type === 'short_text') {
-            html += \`<input type="text" class="input-text q-input" data-id="\${q.id}" placeholder="こちらに回答を入力...">\`;
-            html += \`<div style="font-size:0.8rem; color:var(--text-secondary); margin-top:8px;">段落を追加するためには Shift ⇧ と Enter ↵ キーを同時に押して下さい</div>\`;
+            html += `<input type="text" class="input-text q-input" data-id="${q.id}" placeholder="${placeholderText}">`;
+            html += `<div style="font-size:0.8rem; color:var(--text-secondary); margin-top:8px;">段落を追加するためには Shift ⇧ と Enter ↵ キーを同時に押して下さい</div>`;
         } else if (q.type === 'long_text') {
-            html += \`<textarea class="input-text q-input" data-id="\${q.id}" placeholder="こちらに回答を入力..." style="resize:none; height:100px;"></textarea>\`;
-            html += \`<div style="font-size:0.8rem; color:var(--text-secondary); margin-top:8px;">段落を追加するためには Shift ⇧ と Enter ↵ キーを同時に押して下さい</div>\`;
-        } else if (q.type === 'multiple_choice' || q.type === 'dropdown') {
-            html += \`<div class="choices-container">\`;
+            html += `<textarea class="input-text q-input" data-id="${q.id}" placeholder="${placeholderText}" style="resize:none; height:100px;"></textarea>`;
+            html += `<div style="font-size:0.8rem; color:var(--text-secondary); margin-top:8px;">段落を追加するためには Shift ⇧ と Enter ↵ キーを同時に押して下さい</div>`;
+        } else if (q.type === 'dropdown') {
+            html += `<select class="dropdown-select q-select" data-id="${q.id}" onchange="handleDropdownSelect('${q.id}', this)">`;
+            html += `<option value="">選択してください...</option>`;
+            (q.choices || []).forEach(c => {
+                html += `<option value="${c}">${c}</option>`;
+            });
+            html += `</select>`;
+        } else if (q.type === 'multiple_choice') {
+            html += `<div class="choices-container" style="width:100%;">`;
             (q.choices || []).forEach((c, cIdx) => {
                 const alpha = String.fromCharCode(65 + cIdx);
-                html += \`
-                    <div class="choice-box" onclick="selectChoice('\${q.id}', '\${c}', this, \${q.type === 'multiple_choice'})">
-                        <div class="choice-alpha">\${alpha}</div> \${c}
+                html += `
+                    <div class="choice-box" onclick="selectChoice('${q.id}', '${c}', this, ${q.allowMultiple === true})">
+                        <div class="choice-alpha">${alpha}</div> ${c}
                     </div>
-                \`;
+                `;
             });
-            html += \`</div>\`;
+            html += `</div>`;
         }
         
-        html += \`<div class="error-msg" id="err-\${q.id}">必須項目です。回答を入力してください。</div>\`;
-        html += \`<div style="margin-top:32px;"><button class="btn-primary" onclick="goNext()">OK <i class="ph ph-check"></i></button></div>\`;
-        html += \`</div>\`;
+        html += `<div class="error-msg" id="err-${q.id}">必須項目です。回答を入力してください。</div>`;
+        
+        // 複数回答可能のときだけOKボタンを表示、単一の場合はクリック即遷移なので隠す（またはOKで進める）
+        const isMultiple = (q.type === 'multiple_choice' && q.allowMultiple === true);
+        if (isMultiple || q.type === 'short_text' || q.type === 'long_text') {
+            html += `<div style="margin-top:32px;"><button class="btn-primary" onclick="goNext()">OK <i class="ph ph-check"></i></button></div>`;
+        }
+        html += `</div>`;
     });
 
     // Review Slide (Index N+1)
     const reviewIdx = formData.questions.length + 1;
-    html += \`
-        <div class="slide scrollable" id="slide-\${reviewIdx}" data-type="review">
-            <div class="slide-title" style="\${applyTheme(true)}">回答内容の確認</div>
-            <div class="slide-desc" style="\${applyTheme(false)}">以下の内容でよろしいですか？</div>
-            <div id="review-content" style="margin-bottom:32px;"></div>
-            <button class="btn-primary" id="submit-btn" onclick="submitForm()">\${formData.ed.buttonText || '提出する'}</button>
+    html += `
+        <div class="slide scrollable ${getAlignClass(formData.review)}" id="slide-${reviewIdx}" data-type="review">
+            <div class="slide-title" style="${applyTheme(true)}">${formData.review.title || '回答内容の確認'}</div>
+            <div class="slide-desc" style="${applyTheme(false)}">${formData.review.description || '以下の内容でよろしいですか？'}</div>
+            <div id="review-content" style="margin-bottom:32px; width:100%;"></div>
+            <button class="btn-primary" id="submit-btn" onclick="submitForm()">${formData.review.buttonText || 'この内容で提出する'}</button>
         </div>
-    \`;
+    `;
 
     // ED Slide (Index N+2)
     const edIdx = formData.questions.length + 2;
-    html += \`
-        <div class="slide" id="slide-\${edIdx}" data-type="ed">
-            \${formData.ed.imageUrl ? \`<div class="slide-img-container"><img src="\${formData.ed.imageUrl}" class="slide-img"></div>\` : ''}
-            <div class="slide-title" style="\${applyTheme(true)}">\${formData.ed.title || ''}</div>
-            <div class="slide-desc" style="\${applyTheme(false)}">\${(formData.ed.description || '').replace(/\\n/g, '<br>')}</div>
+    html += `
+        <div class="slide ${getAlignClass(formData.ed)}" id="slide-${edIdx}" data-type="ed">
+            ${formData.ed.imageUrl ? `<div class="slide-img-container"><img src="${formData.ed.imageUrl}" class="slide-img"></div>` : ''}
+            <div class="slide-title" style="${applyTheme(true)}">${formData.ed.title || ''}</div>
+            <div class="slide-desc" style="${applyTheme(false)}">${(formData.ed.description || '').replace(/\n/g, '<br>')}</div>
         </div>
-    \`;
+    `;
 
     container.innerHTML = html;
     slidesCount = formData.questions.length + 3;
 
     document.querySelectorAll('.q-input').forEach(el => {
         el.addEventListener('keypress', (e) => {
-            // Shift+Enterは改行、Enter単体は次へ
             if (e.key === 'Enter' && !e.shiftKey && e.target.tagName !== 'TEXTAREA') {
                 goNext();
             }
@@ -161,8 +182,19 @@ function renderForm() {
 }
 
 function handleOpStart() {
-    logStat('start');
+    logStat('start').catch(e => console.error(e));
     goNext();
+}
+
+function handleDropdownSelect(qId, selectEl) {
+    const val = selectEl.value;
+    if (val) {
+        answers[qId] = val;
+        document.getElementById('err-' + qId).classList.remove('visible');
+        setTimeout(goNext, 300); // 選択したら自動で次へ
+    } else {
+        answers[qId] = "";
+    }
 }
 
 function selectChoice(qId, val, el, isMultiple) {
@@ -182,21 +214,22 @@ function selectChoice(qId, val, el, isMultiple) {
         const container = el.parentElement;
         container.querySelectorAll('.choice-box').forEach(box => box.classList.remove('selected'));
         el.classList.add('selected');
-        setTimeout(goNext, 300);
+        setTimeout(goNext, 300); // 単一選択なら自動遷移
     }
     document.getElementById('err-' + qId).classList.remove('visible');
 }
 
 function validateCurrentSlide() {
-    const slide = document.getElementById(\`slide-\${currentSlideIndex}\`);
-    if (slide.getAttribute('data-type') === 'question') {
+    const slide = document.getElementById(`slide-${currentSlideIndex}`);
+    if (slide && slide.getAttribute('data-type') === 'question') {
         const isRequired = slide.getAttribute('data-required') === 'true';
         const qId = slide.getAttribute('data-id');
         
         if (isRequired) {
             const val = answers[qId];
             if (!val || (Array.isArray(val) && val.length === 0) || (typeof val === 'string' && val.trim() === '')) {
-                document.getElementById('err-' + qId).classList.add('visible');
+                const errMsg = document.getElementById('err-' + qId);
+                if (errMsg) errMsg.classList.add('visible');
                 return false;
             }
         }
@@ -206,7 +239,7 @@ function validateCurrentSlide() {
 
 function goNext() {
     if (currentSlideIndex >= slidesCount - 1) return;
-    if (document.getElementById(\`slide-\${currentSlideIndex}\`).getAttribute('data-type') === 'ed') return;
+    if (document.getElementById(`slide-${currentSlideIndex}`).getAttribute('data-type') === 'ed') return;
     if (!validateCurrentSlide()) return;
     
     currentSlideIndex++;
@@ -215,13 +248,14 @@ function goNext() {
 
 function goPrev() {
     if (currentSlideIndex <= 0) return;
-    if (document.getElementById(\`slide-\${currentSlideIndex}\`).getAttribute('data-type') === 'ed') return;
+    if (document.getElementById(`slide-${currentSlideIndex}`).getAttribute('data-type') === 'ed') return;
     currentSlideIndex--;
     updateView();
 }
 
 function renderReviewContent() {
     const container = document.getElementById('review-content');
+    if (!container) return;
     let html = '';
     
     formData.questions.forEach((q, idx) => {
@@ -232,16 +266,16 @@ function renderReviewContent() {
             if (Array.isArray(ans)) {
                 if (ans.length > 0) displayAns = ans.join(', ');
             } else if (typeof ans === 'string' && ans.trim() !== '') {
-                displayAns = ans.replace(/\\n/g, '<br>');
+                displayAns = ans.replace(/\n/g, '<br>');
             }
         }
         
-        html += \`
+        html += `
             <div class="review-item">
-                <div class="review-q">\${idx + 1}. \${q.title}</div>
-                <div class="review-a">\${displayAns}</div>
+                <div class="review-q">${idx + 1}. ${q.title}</div>
+                <div class="review-a">${displayAns}</div>
             </div>
-        \`;
+        `;
     });
     
     container.innerHTML = html;
@@ -249,7 +283,8 @@ function renderReviewContent() {
 
 function updateView() {
     for (let i = 0; i < slidesCount; i++) {
-        const slide = document.getElementById(\`slide-\${i}\`);
+        const slide = document.getElementById(`slide-${i}`);
+        if (!slide) continue;
         if (i < currentSlideIndex) {
             slide.className = slide.className.replace('active', '').trim() + ' prev';
         } else if (i === currentSlideIndex) {
@@ -258,15 +293,17 @@ function updateView() {
             const type = slide.getAttribute('data-type');
             if (type === 'question') {
                 const qId = slide.getAttribute('data-id');
-                logStat('reach', qId);
+                logStat('reach', qId).catch(e => console.error(e));
             } else if (type === 'review') {
-                // Generate review HTML dynamically when entering review slide
                 renderReviewContent();
-                document.getElementById('nav-controls').style.display = 'none'; // レビュー・EDでは右下ナビゲーションを隠す
+                const nav = document.getElementById('nav-controls');
+                if (nav) nav.style.display = 'none';
             } else if (type === 'ed') {
-                document.getElementById('nav-controls').style.display = 'none';
+                const nav = document.getElementById('nav-controls');
+                if (nav) nav.style.display = 'none';
             } else {
-                document.getElementById('nav-controls').style.display = 'flex';
+                const nav = document.getElementById('nav-controls');
+                if (nav) nav.style.display = 'flex';
             }
 
             const input = slide.querySelector('.q-input');
@@ -279,16 +316,21 @@ function updateView() {
     }
 
     const progress = ((currentSlideIndex) / (slidesCount - 2)) * 100; // EDを除く
-    document.getElementById('progress-bar').style.width = \`\${Math.min(progress, 100)}%\`;
+    const progressBar = document.getElementById('progress-bar');
+    if (progressBar) progressBar.style.width = `${Math.min(progress, 100)}%`;
 
-    if(document.getElementById('nav-controls').style.display !== 'none') {
-        document.getElementById('btn-prev').style.opacity = currentSlideIndex === 0 ? '0.5' : '1';
-        document.getElementById('btn-next').style.opacity = '1';
+    const navControls = document.getElementById('nav-controls');
+    if(navControls && navControls.style.display !== 'none') {
+        const prevBtn = document.getElementById('btn-prev');
+        if (prevBtn) prevBtn.style.opacity = currentSlideIndex === 0 ? '0.5' : '1';
+        const nextBtn = document.getElementById('btn-next');
+        if (nextBtn) nextBtn.style.opacity = '1';
     }
 }
 
 async function submitForm() {
     const btn = document.getElementById('submit-btn');
+    if (!btn) return;
     btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> 送信中...';
     btn.disabled = true;
 
@@ -309,7 +351,7 @@ async function submitForm() {
     } catch (err) {
         console.error(err);
         alert('エラーが発生しました。時間をおいて再度お試しください。');
-        btn.innerHTML = formData.ed.buttonText || '提出する';
+        btn.innerHTML = formData.review.buttonText || '提出する';
         btn.disabled = false;
     }
 }
@@ -317,7 +359,7 @@ async function submitForm() {
 function logStat(type, detailId = null) {
     const id = Date.now() + Math.floor(Math.random() * 1000);
     const statData = { type: type, detail: detailId, timestamp: new Date().toISOString(), session: getSessionId() };
-    return supabase.from('customers').insert([{ id, service_type: 'meo_form_stats', data: statData }]).catch(e => console.error(e));
+    return supabase.from('customers').insert([{ id, service_type: 'meo_form_stats', data: statData }]);
 }
 
 function getSessionId() {
@@ -330,6 +372,9 @@ function getSessionId() {
 }
 
 function showError(msg) {
-    document.getElementById('loading').innerHTML = \`<div style="font-size:1.2rem; color:var(--text-primary);">\${msg}</div>\`;
-    document.getElementById('loading').style.opacity = '1';
+    const loader = document.getElementById('loading');
+    if (loader) {
+        loader.innerHTML = `<div style="font-size:1.2rem; color:var(--text-primary); text-align:center; padding:20px;">${msg}</div>`;
+        loader.style.opacity = '1';
+    }
 }

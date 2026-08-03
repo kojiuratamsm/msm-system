@@ -18,13 +18,21 @@ App.Pages.form_editor = async function() {
             title: "Googleマップ売上分析診断",
             description: "あなたの店舗のMEOキーワードを分析します",
             imageUrl: "",
-            buttonText: "診断をスタート"
+            buttonText: "診断をスタート",
+            align: "center"
         },
         ed: {
             title: "ご提出ありがとうございました！",
             description: "結果は担当者よりご連絡いたします。",
             imageUrl: "",
-            buttonText: "終了する"
+            buttonText: "終了する",
+            align: "center"
+        },
+        review: {
+            title: "回答内容の確認",
+            description: "以下の内容でよろしいですか？",
+            buttonText: "この内容で提出する",
+            align: "left"
         },
         questions: [
             {
@@ -34,7 +42,9 @@ App.Pages.form_editor = async function() {
                 description: "",
                 required: true,
                 choices: [],
-                imageUrl: ""
+                imageUrl: "",
+                allowMultiple: false,
+                placeholder: "こちらに回答を入力..."
             }
         ]
     };
@@ -44,6 +54,7 @@ App.Pages.form_editor = async function() {
         formData = JSON.parse(JSON.stringify(defaultFormData));
     }
     if (!formData.theme) formData.theme = defaultFormData.theme;
+    if (!formData.review) formData.review = defaultFormData.review;
 
     let activePageId = 'op';
 
@@ -72,6 +83,9 @@ App.Pages.form_editor = async function() {
             </button>
 
             <div class="editor-section-title" style="margin-top:32px; margin-bottom:16px; font-weight:600; color:var(--text-secondary);">Endings</div>
+            <div class="editor-nav-item ${activePageId === 'review' ? 'active' : ''}" data-id="review" style="margin-bottom:8px;">
+                <i class="ph ph-clipboard-text" style="margin-right:8px; font-size:1.2rem;"></i> <span class="nav-text">確認画面 (Review)</span>
+            </div>
             <div class="editor-nav-item ${activePageId === 'ed' ? 'active' : ''}" data-id="ed">
                 <i class="ph ph-flag-checkered" style="margin-right:8px; font-size:1.2rem;"></i> <span class="nav-text">ED: ${formData.ed.title || 'タイトルなし'}</span>
             </div>
@@ -90,6 +104,10 @@ App.Pages.form_editor = async function() {
             activeObj = formData.ed;
             mockupHtml = generateMockupHtml(activeObj, 'ed');
             settingsHtml = generateSettingsHtml(activeObj, 'ed');
+        } else if (activePageId === 'review') {
+            activeObj = formData.review;
+            mockupHtml = generateMockupHtml(activeObj, 'review');
+            settingsHtml = generateSettingsHtml(activeObj, 'review');
         } else {
             activeObj = formData.questions.find(q => q.id === activePageId);
             isQuestion = true;
@@ -151,12 +169,20 @@ App.Pages.form_editor = async function() {
                 .mockup-title { font-weight: 700; margin-bottom: 12px; line-height: 1.4; color: ${formData.theme.titleColor}; font-size: ${formData.theme.titleSize}; }
                 .mockup-desc { margin-bottom: 32px; line-height: 1.6; color: ${formData.theme.descColor}; font-size: ${formData.theme.descSize}; }
                 
-                .mockup-btn { background: rgba(0,0,0,0.8); color: white; padding: 16px 24px; border-radius: 8px; font-weight: 600; text-align: center; font-size: 1.1rem; box-shadow: 0 8px 24px rgba(0,0,0,0.2); backdrop-filter: blur(4px); }
+                .mockup-btn { background: rgba(0,0,0,0.8); color: white; padding: 16px 24px; border-radius: 8px; font-weight: 600; text-align: center; font-size: 1.1rem; box-shadow: 0 8px 24px rgba(0,0,0,0.2); backdrop-filter: blur(4px); margin-top: auto; }
                 .mockup-input { width: 100%; border: none; border-bottom: 2px solid rgba(0,0,0,0.2); font-size: 1.2rem; padding: 8px 0; outline: none; margin-bottom: 24px; background: transparent; color: #333;}
                 .mockup-choice { padding: 16px; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; margin-bottom: 12px; font-weight: 500; color: #333; background: rgba(255,255,255,0.7); backdrop-filter: blur(8px); display: flex; align-items: center;}
                 .mockup-img { max-width: 100%; border-radius: 8px; margin-bottom: 24px; max-height: 200px; object-fit: cover;}
                 
                 .required-mark { color: #dc3545; margin-left: 4px; font-size: 0.9em; font-weight: normal; }
+                
+                /* Alignment modifiers */
+                .align-left { text-align: left; align-items: flex-start; }
+                .align-center { text-align: center; align-items: center; }
+                .align-right { text-align: right; align-items: flex-end; }
+                .align-left .mockup-btn { margin-right: auto; margin-left: 0; }
+                .align-center .mockup-btn { margin-right: auto; margin-left: auto; }
+                .align-right .mockup-btn { margin-right: 0; margin-left: auto; }
             </style>
             
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
@@ -197,15 +223,13 @@ App.Pages.form_editor = async function() {
 
             // 質問削除
             document.querySelectorAll('.delete-q-btn').forEach(el => {
-                el.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    const id = el.getAttribute('data-id');
-                    if (confirm('この質問を削除してもよろしいですか？')) {
-                        formData.questions = formData.questions.filter(q => q.id !== id);
-                        if (activePageId === id) activePageId = 'op';
-                        render();
-                    }
-                });
+                el.stopPropagation();
+                const id = el.getAttribute('data-id');
+                if (confirm('この質問を削除してもよろしいですか？')) {
+                    formData.questions = formData.questions.filter(q => q.id !== id);
+                    if (activePageId === id) activePageId = 'op';
+                    render();
+                }
             });
 
             // 質問追加
@@ -224,7 +248,9 @@ App.Pages.form_editor = async function() {
                         description: "",
                         required: true,
                         choices: [],
-                        imageUrl: ""
+                        imageUrl: "",
+                        allowMultiple: false,
+                        placeholder: "こちらに回答を入力..."
                     });
                     activePageId = newId;
                     render();
@@ -270,7 +296,9 @@ App.Pages.form_editor = async function() {
     };
 
     const generateMockupHtml = (obj, type) => {
-        let html = '<div class="phone-mockup-inner">';
+        const alignClass = obj.align ? `align-${obj.align}` : 'align-center';
+        let html = `<div class="phone-mockup-inner ${alignClass}">`;
+        
         if (obj.imageUrl) {
             html += `<img src="${obj.imageUrl}" class="mockup-img">`;
         }
@@ -278,24 +306,46 @@ App.Pages.form_editor = async function() {
         html += `<div class="mockup-title mockup-editable" data-prop="title" data-placeholder="タイトルを入力..." contenteditable="true">${obj.title || ''}</div>`;
         html += `<div class="mockup-desc mockup-editable" data-prop="description" data-placeholder="補足説明を入力 (任意)" contenteditable="true">${obj.description || ''}</div>`;
 
-        if (type === 'op' || type === 'ed') {
-            html += `<div style="margin-top:auto;"><div class="mockup-btn">${obj.buttonText || 'ボタン'}</div></div>`;
+        if (type === 'op' || type === 'ed' || type === 'review') {
+            html += `<div class="mockup-btn">${obj.buttonText || 'スタート'}</div>`;
         } else if (type === 'question') {
-            if (obj.type === 'short_text') {
-                html += '<input type="text" class="mockup-input" placeholder="こちらに回答を入力..." disabled>';
-            } else if (obj.type === 'long_text') {
-                html += '<input type="text" class="mockup-input" placeholder="こちらに回答を入力..." style="height:60px;" disabled>';
-            } else if (obj.type === 'multiple_choice' || obj.type === 'dropdown') {
+            if (obj.type === 'short_text' || obj.type === 'long_text') {
+                const placeholderVal = obj.placeholder !== undefined ? obj.placeholder : "こちらに回答を入力...";
+                html += `<div class="mockup-input mockup-editable" data-prop="placeholder" data-placeholder="プレースホルダーを入力..." contenteditable="true" style="border-bottom: 2px solid rgba(0,0,0,0.2); padding: 8px 0; color: #888; text-align: left; width: 100%;">${placeholderVal}</div>`;
+            } else if (obj.type === 'dropdown') {
+                html += `
+                    <div class="mockup-choice" style="justify-content: space-between; width: 100%;">
+                        <span>選択してください...</span>
+                        <i class="ph ph-caret-down"></i>
+                    </div>
+                `;
+            } else if (obj.type === 'multiple_choice') {
                 if (!obj.choices || obj.choices.length === 0) {
-                    html += '<div class="mockup-choice" style="opacity:0.5;">選択肢がありません</div>';
+                    html += '<div class="mockup-choice" style="opacity:0.5; width: 100%;">選択肢がありません</div>';
                 } else {
                     obj.choices.forEach((c, idx) => {
                         const alpha = String.fromCharCode(65 + idx);
-                        html += `<div class="mockup-choice"><div class="choice-alpha" style="background:#e0e0e0; width:24px; height:24px; border-radius:4px; display:flex; align-items:center; justify-content:center; margin-right:12px; font-size:0.8rem; font-weight:700;">${alpha}</div> ${c}</div>`;
+                        html += `<div class="mockup-choice" style="width: 100%;"><div class="choice-alpha" style="background:#e0e0e0; width:24px; height:24px; border-radius:4px; display:flex; align-items:center; justify-content:center; margin-right:12px; font-size:0.8rem; font-weight:700;">${alpha}</div> ${c}</div>`;
                     });
                 }
             }
         }
+        
+        // 確認画面 (Review) のダミー回答プレビュー
+        if (type === 'review') {
+            html += '<div style="width:100%; margin-bottom:24px; text-align:left;">';
+            formData.questions.forEach((q, idx) => {
+                html += `
+                    <div style="background:rgba(255,255,255,0.7); padding:12px; border-radius:8px; margin-bottom:12px; border:1px solid rgba(0,0,0,0.05);">
+                        <div style="font-size:0.75rem; color:#666; font-weight:600;">${idx + 1}. ${q.title}</div>
+                        <div style="font-size:0.9rem; font-weight:500; margin-top:4px; color:#1a1a1a;">サンプル回答テキスト</div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            html += `<div class="mockup-btn" style="width:100%;">${obj.buttonText || 'この内容で提出する'}</div>`;
+        }
+
         html += '</div>';
         return html;
     };
@@ -311,7 +361,14 @@ App.Pages.form_editor = async function() {
             el.addEventListener('input', (e) => {
                 const prop = el.getAttribute('data-prop');
                 obj[prop] = el.innerText;
-                const rightInput = document.getElementById(prop === 'title' ? 'set-title' : 'set-desc');
+                
+                // 右側設定パネルの同期
+                let rightInputId = '';
+                if (prop === 'title') rightInputId = 'set-title';
+                else if (prop === 'description') rightInputId = 'set-desc';
+                else if (prop === 'placeholder') rightInputId = 'set-placeholder';
+                
+                const rightInput = document.getElementById(rightInputId);
                 if (rightInput) rightInput.value = obj[prop];
             });
             
@@ -331,22 +388,30 @@ App.Pages.form_editor = async function() {
     };
 
     const generateSettingsHtml = (obj, type) => {
-        let html = `<h3 style="margin-top:0; margin-bottom:24px; font-size:1.2rem;">${type === 'op' ? 'OP画面の設定' : type === 'ed' ? 'ED画面の設定' : '質問の設定'}</h3>`;
+        let titleLabel = 'タイトル';
+        if (type === 'op') titleLabel = 'OP画面のタイトル';
+        else if (type === 'ed') titleLabel = 'ED画面のタイトル';
+        else if (type === 'review') titleLabel = '確認画面のタイトル';
         
-        html += `
-            <div class="form-group">
-                <label>画像 (任意)</label>
-                `;
-        if (obj.imageUrl) {
+        let html = `<h3 style="margin-top:0; margin-bottom:24px; font-size:1.2rem;">${type === 'op' ? 'OP画面の設定' : type === 'ed' ? 'ED画面の設定' : type === 'review' ? '確認画面の設定' : '質問の設定'}</h3>`;
+        
+        // 画像アップロード
+        if (type !== 'review') {
             html += `
-                <div style="margin-bottom:8px;"><img src="${obj.imageUrl}" style="max-width:100px; max-height:100px; border-radius:4px; object-fit:cover;"></div>
-                <button class="btn btn-secondary btn-sm" onclick="document.getElementById('img-file-input').click()"><i class="ph ph-image"></i> 変更する</button>
-                <button class="btn btn-danger btn-sm" id="remove-img-btn" style="margin-left:8px;"><i class="ph ph-trash"></i></button>
-            `;
-        } else {
-            html += '<button class="btn btn-secondary btn-sm" id="img-upload-btn"><i class="ph ph-image"></i> 画像をアップロード</button>';
+                <div class="form-group">
+                    <label>画像 (任意)</label>
+                    `;
+            if (obj.imageUrl) {
+                html += `
+                    <div style="margin-bottom:8px;"><img src="${obj.imageUrl}" style="max-width:100px; max-height:100px; border-radius:4px; object-fit:cover;"></div>
+                    <button class="btn btn-secondary btn-sm" onclick="document.getElementById('img-file-input').click()"><i class="ph ph-image"></i> 変更する</button>
+                    <button class="btn btn-danger btn-sm" id="remove-img-btn" style="margin-left:8px;"><i class="ph ph-trash"></i></button>
+                `;
+            } else {
+                html += '<button class="btn btn-secondary btn-sm" id="img-upload-btn"><i class="ph ph-image"></i> 画像をアップロード</button>';
+            }
+            html += '<input type="file" id="img-file-input" accept="image/*" style="display:none;"></div>';
         }
-        html += '<input type="file" id="img-file-input" accept="image/*" style="display:none;"></div>';
 
         if (type === 'question') {
             html += `
@@ -364,20 +429,45 @@ App.Pages.form_editor = async function() {
 
         html += `
             <div class="form-group">
-                <label>タイトル (プレビューで直接編集可能)</label>
+                <label>${titleLabel} (プレビュー直接編集可)</label>
                 <textarea id="set-title" class="input-field" style="height:60px;">${obj.title || ''}</textarea>
             </div>
             <div class="form-group">
-                <label>補足説明 (プレビューで直接編集可能)</label>
+                <label>補足説明 (プレビュー直接編集可)</label>
                 <textarea id="set-desc" class="input-field" style="height:80px;">${obj.description || ''}</textarea>
             </div>
         `;
 
-        if (type === 'op' || type === 'ed') {
+        // 記述式の案内文字設定
+        if (type === 'question' && (obj.type === 'short_text' || obj.type === 'long_text')) {
+            const placeholderVal = obj.placeholder !== undefined ? obj.placeholder : "こちらに回答を入力...";
+            html += `
+                <div class="form-group">
+                    <label>案内文字 (プレースホルダー)</label>
+                    <input type="text" id="set-placeholder" class="input-field" value="${placeholderVal}">
+                </div>
+            `;
+        }
+
+        if (type === 'op' || type === 'ed' || type === 'review') {
             html += `
                 <div class="form-group">
                     <label>ボタンテキスト</label>
-                    <input type="text" id="set-btn-text" class="input-field" value="${obj.buttonText}">
+                    <input type="text" id="set-btn-text" class="input-field" value="${obj.buttonText || ''}">
+                </div>
+            `;
+        }
+
+        // OP/ED/Review の配置設定
+        if (type === 'op' || type === 'ed' || type === 'review') {
+            html += `
+                <div class="form-group">
+                    <label>文字の配置</label>
+                    <select id="set-align" class="input-field">
+                        <option value="left" ${obj.align === 'left' ? 'selected' : ''}>左寄せ</option>
+                        <option value="center" ${obj.align === 'center' ? 'selected' : ''}>中央揃え</option>
+                        <option value="right" ${obj.align === 'right' ? 'selected' : ''}>右寄せ</option>
+                    </select>
                 </div>
             `;
         }
@@ -389,6 +479,23 @@ App.Pages.form_editor = async function() {
                     <input type="checkbox" id="set-required" style="width:20px; height:20px;" ${obj.required ? 'checked' : ''}>
                 </div>
             `;
+
+            // 複数回答か単一回答かの設定
+            if (obj.type === 'multiple_choice') {
+                html += `
+                    <div class="form-group" style="padding:12px; background:#f8f9fc; border-radius:8px; margin-bottom:24px;">
+                        <label style="font-weight:600; margin-bottom:8px; display:block;">回答方式</label>
+                        <div style="display:flex; gap:16px;">
+                            <label style="margin:0; font-weight:normal; display:flex; align-items:center; gap:6px;">
+                                <input type="radio" name="allow-multiple" value="false" ${!obj.allowMultiple ? 'checked' : ''}> 単一回答
+                            </label>
+                            <label style="margin:0; font-weight:normal; display:flex; align-items:center; gap:6px;">
+                                <input type="radio" name="allow-multiple" value="true" ${obj.allowMultiple ? 'checked' : ''}> 複数回答可能
+                            </label>
+                        </div>
+                    </div>
+                `;
+            }
 
             if (obj.type === 'multiple_choice' || obj.type === 'dropdown') {
                 html += '<div class="form-group"><label>選択肢設定</label><div id="choices-container">';
@@ -403,6 +510,7 @@ App.Pages.form_editor = async function() {
             }
         }
         
+        // デザインテーマ設定
         html += `
             <hr style="margin:32px 0; border:none; border-top:1px solid #e0e0e0;">
             <h4 style="margin-bottom:16px;">🎨 デザイン設定 (全体)</h4>
@@ -452,8 +560,19 @@ App.Pages.form_editor = async function() {
 
         bindInput('set-title', 'title');
         bindInput('set-desc', 'description');
-        if (type === 'op' || type === 'ed') bindInput('set-btn-text', 'buttonText');
+        if (type === 'op' || type === 'ed' || type === 'review') bindInput('set-btn-text', 'buttonText');
+        if (type === 'question') bindInput('set-placeholder', 'placeholder');
         
+        // 配置変更
+        const alignSelect = document.getElementById('set-align');
+        if (alignSelect) {
+            alignSelect.addEventListener('change', (e) => {
+                obj.align = e.target.value;
+                render();
+            });
+        }
+
+        // テーマ
         const tColor = document.getElementById('set-theme-tcolor');
         if(tColor) tColor.addEventListener('input', e => { formData.theme.titleColor = e.target.value; render(); });
         const dColor = document.getElementById('set-theme-dcolor');
@@ -463,6 +582,7 @@ App.Pages.form_editor = async function() {
         const dSize = document.getElementById('set-theme-dsize');
         if(dSize) dSize.addEventListener('change', e => { formData.theme.descSize = e.target.value; render(); });
 
+        // 画像削除
         const rmImgBtn = document.getElementById('remove-img-btn');
         if (rmImgBtn) {
             rmImgBtn.addEventListener('click', () => {
@@ -485,6 +605,16 @@ App.Pages.form_editor = async function() {
             reqCheck.addEventListener('change', (e) => {
                 obj.required = e.target.checked;
                 render();
+            });
+        }
+
+        // 回答方式切り替えラジオ
+        const allowMultipleRadio = document.getElementsByName('allow-multiple');
+        if (allowMultipleRadio) {
+            allowMultipleRadio.forEach(radio => {
+                radio.addEventListener('change', (e) => {
+                    obj.allowMultiple = e.target.value === 'true';
+                });
             });
         }
 
