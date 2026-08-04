@@ -173,37 +173,16 @@ App.Pages.form_editor = async function() {
                 .phone-mockup-inner { 
                     flex: 1; padding: 32px 24px; display: flex; flex-direction: column; justify-content: center; overflow-y: auto; z-index: 1;
                 }
+                .phone-mockup-inner { flex: 1; padding: 32px 24px; display: flex; flex-direction: column; justify-content: center; overflow-y: auto; z-index: 1; }
                 
-                /* Alignment modifiers */
                 .align-left { text-align: left; align-items: flex-start; }
                 .align-center { text-align: center; align-items: center; }
                 .align-right { text-align: right; align-items: flex-end; }
-                .align-left .mockup-btn { margin-right: auto; margin-left: 0; }
-                .align-center .mockup-btn { margin-right: auto; margin-left: auto; }
-                .align-right .mockup-btn { margin-right: 0; margin-left: auto; }
-
-                /* Review / Scrollable mode inside mockup */
-                .phone-mockup-inner.scrollable {
-                    justify-content: flex-start !important;
-                }
-                
-                /* Content Editable Fields */
-                .mockup-editable {
-                    outline: none; border: 1px dashed transparent; transition: border 0.2s; white-space: pre-wrap; word-wrap: break-word;
-                }
-                .mockup-editable:hover, .mockup-editable:focus { border-color: rgba(0,0,0,0.2); background: rgba(255,255,255,0.3); border-radius: 4px; }
-                .mockup-editable[data-placeholder]:empty:before {
-                    content: attr(data-placeholder); color: #aaa; pointer-events: none;
-                }
-                
-                .mockup-title { font-weight: 700; margin-bottom: 12px; line-height: 1.4; color: ${formData.theme.titleColor}; font-size: ${formData.theme.titleSize}; width: 100%; }
-                .mockup-desc { margin-bottom: 32px; line-height: 1.6; color: ${formData.theme.descColor}; font-size: ${formData.theme.descSize}; width: 100%; }
                 
                 .mockup-btn { background: rgba(0,0,0,0.8); color: white; padding: 16px 24px; border-radius: 8px; font-weight: 600; text-align: center; font-size: 1.1rem; box-shadow: 0 8px 24px rgba(0,0,0,0.2); backdrop-filter: blur(4px); margin-top: 24px; cursor: pointer; width: auto; }
                 .mockup-input { width: 100%; border: none; border-bottom: 2px solid rgba(0,0,0,0.2); font-size: 1.2rem; padding: 8px 0; outline: none; margin-bottom: 24px; background: transparent; color: #333;}
                 .mockup-choice { padding: 16px; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; margin-bottom: 12px; font-weight: 500; color: #333; background: rgba(255,255,255,0.7); backdrop-filter: blur(8px); display: flex; align-items: center;}
                 .mockup-img { max-width: 100%; border-radius: 8px; margin-bottom: 24px; max-height: 200px; object-fit: cover;}
-                
                 .required-mark { color: #dc3545; margin-left: 4px; font-size: 1.2em; font-weight: bold; }
             </style>
             
@@ -217,24 +196,13 @@ App.Pages.form_editor = async function() {
             </div>
 
             <div class="editor-layout">
-                <div class="editor-left">
-                    ${leftNavHtml}
-                </div>
-                
-                <div class="editor-middle">
-                    <div class="phone-mockup">
-                        ${mockupHtml}
-                    </div>
-                </div>
-
-                <div class="editor-right">
-                    ${settingsHtml}
-                </div>
+                <div class="editor-left">${leftNavHtml}</div>
+                <div class="editor-middle"><div class="phone-mockup">${mockupHtml}</div></div>
+                <div class="editor-right">${settingsHtml}</div>
             </div>
         `;
 
         App.mount(html, () => {
-            // 左メニュークリック
             document.querySelectorAll('.editor-nav-item').forEach(el => {
                 el.addEventListener('click', (e) => {
                     if (e.target.classList.contains('delete-q-btn')) return;
@@ -243,7 +211,6 @@ App.Pages.form_editor = async function() {
                 });
             });
 
-            // 質問削除
             document.querySelectorAll('.delete-q-btn').forEach(el => {
                 el.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -256,34 +223,20 @@ App.Pages.form_editor = async function() {
                 });
             });
 
-            // 質問追加
             const addQBtn = document.getElementById('add-q-btn');
             if (addQBtn) {
                 addQBtn.addEventListener('click', () => {
-                    if (formData.questions.length >= 50) {
-                        alert('質問は最大50個までです。');
-                        return;
-                    }
                     const newId = "q" + Date.now();
                     formData.questions.push({
-                        id: newId,
-                        type: "short_text",
-                        title: "新しい質問",
-                        description: "",
-                        required: true,
-                        choices: [],
-                        imageUrl: "",
-                        allowMultiple: false,
-                        placeholder: "こちらに回答を入力...",
-                        align: "left",
-                        descAlign: "left"
+                        id: newId, type: "short_text", title: "新しい質問", description: "",
+                        required: true, choices: [], imageUrl: "", allowMultiple: false,
+                        placeholder: "こちらに回答を入力...", align: "left", descAlign: "left"
                     });
                     activePageId = newId;
                     render();
                 });
             }
 
-            // フォーム保存
             const saveBtn = document.getElementById('save-form-btn');
             if (saveBtn) {
                 saveBtn.addEventListener('click', async () => {
@@ -295,7 +248,6 @@ App.Pages.form_editor = async function() {
                 });
             }
 
-            // 画像アップロードのイベントバインド
             const imgUploadBtn = document.getElementById('img-upload-btn');
             const fileInput = document.getElementById('img-file-input');
             if (imgUploadBtn && fileInput) {
@@ -305,55 +257,43 @@ App.Pages.form_editor = async function() {
                     if (!file) return;
                     const reader = new FileReader();
                     reader.onload = (event) => {
-                        const base64Str = event.target.result;
-                        activeObj.imageUrl = base64Str;
+                        activeObj.imageUrl = event.target.result;
                         render();
                     };
                     reader.readAsDataURL(file);
                 });
             }
 
-            // モック直接編集のイベントバインド
             bindMockupEditableEvents(activeObj, isQuestion ? 'question' : activePageId);
-            
-            // 右パネルのイベントバインド
             bindSettingsEvents(activeObj, isQuestion ? 'question' : activePageId);
         });
     };
 
     const generateMockupHtml = (obj, type) => {
-        const alignClass = obj.align ? `align-${obj.align}` : 'align-left';
-        const scrollableClass = type === 'review' ? 'scrollable' : '';
-        let html = `<div class="phone-mockup-inner ${alignClass} ${scrollableClass}">`;
+        const alignClass = `align-${obj.align || 'left'}`;
+        let html = `<div class="phone-mockup-inner ${alignClass} ${type === 'review' ? 'scrollable' : ''}">`;
+        if (obj.imageUrl) html += `<img src="${obj.imageUrl}" class="mockup-img">`;
         
-        if (obj.imageUrl) {
-            html += `<img src="${obj.imageUrl}" class="mockup-img">`;
-        }
-        
-        // 必須マークの重複増殖バグ根本解決: 編集要素の外側にマークをレンダリングする
-        const isRequiredQuestion = (type === 'question' && obj.required);
-        const titleAlign = obj.align || 'left';
-        const descAlign = obj.descAlign || 'left';
+        const titleSize = obj.titleSize || formData.theme.titleSize || '1.5rem';
+        const descSize = obj.descSize || formData.theme.descSize || '1rem';
 
         html += `
-            <div style="display:flex; align-items:center; width:100%; justify-content: inherit; margin-bottom: 12px; color: ${formData.theme.titleColor}; font-size: ${formData.theme.titleSize};">
-                <div class="mockup-title mockup-editable" id="mock-title-node" data-prop="title" data-placeholder="タイトルを入力..." contenteditable="true" style="flex:1; margin-bottom:0; text-align: ${titleAlign}; font-size: inherit; color: inherit;">${obj.title || ''}</div>
-                ${isRequiredQuestion ? '<span class="required-mark" id="mock-req-mark" style="flex-shrink:0;">*</span>' : ''}
+            <div style="display:flex; align-items:center; width:100%; justify-content: inherit; margin-bottom: 12px; color: ${formData.theme.titleColor}; font-size: ${titleSize};">
+                <div class="mockup-editable" id="mock-title-node" data-prop="title" data-placeholder="タイトル..." contenteditable="true" style="flex:1; margin-bottom:0; font-size: inherit; color: inherit;">${obj.title || ''}</div>
+                ${(type === 'question' && obj.required) ? '<span class="required-mark">*</span>' : ''}
             </div>
+            <div class="mockup-editable" id="mock-desc-node" data-prop="description" data-placeholder="説明文..." contenteditable="true" style="width: 100%; margin-bottom: 32px; line-height: 1.6; color: ${formData.theme.descColor}; font-size: ${descSize};">${obj.description || ''}</div>
         `;
-        
-        html += `<div class="mockup-desc mockup-editable" id="mock-desc-node" data-prop="description" data-placeholder="補足説明を入力 (任意)" contenteditable="true" style="text-align: ${descAlign}; color: ${formData.theme.descColor}; font-size: ${formData.theme.descSize};">${obj.description || ''}</div>`;
 
         if ((type === 'op' || type === 'ed') && type !== 'review') {
-            html += `<div class="mockup-btn" id="mock-btn-node" style="margin-top:auto;">${obj.buttonText || 'スタート'}</div>`;
+            html += `<div class="mockup-btn" id="mock-btn-node">${obj.buttonText || 'スタート'}</div>`;
         } else if (type === 'question') {
             if (obj.type === 'short_text') {
                 const placeholderVal = obj.placeholder !== undefined ? obj.placeholder : "こちらに回答を入力...";
-                html += `<div class="mockup-editable" id="mock-placeholder-node" data-prop="placeholder" data-placeholder="プレースホルダーを入力..." contenteditable="true" style="border: 1px solid rgba(0,0,0,0.15); border-radius: 8px; background: rgba(0,0,0,0.03); padding: 12px; height: 48px; width: 100%; text-align: left; color: #888; font-size: 0.95rem; line-height: 1.4; display: flex; align-items: center;">${placeholderVal}</div>`;
+                html += `<div class="mockup-editable" id="mock-placeholder-node" data-prop="placeholder" data-placeholder="プレースホルダーを入力..." contenteditable="true" style="border: none; border-bottom: 2px solid rgba(0,0,0,0.15); background: transparent; padding: 12px 0; height: auto; width: 100%; text-align: left; color: #888; font-size: 1.2rem; line-height: 1.4; display: flex; align-items: center;">${placeholderVal}</div>`;
             } else if (obj.type === 'long_text') {
                 const placeholderVal = obj.placeholder !== undefined ? obj.placeholder : "こちらに回答を入力...";
-                // 長文プレビューを枠線ボックス型デザインにする
-                html += `<div class="mockup-editable" id="mock-placeholder-node" data-prop="placeholder" data-placeholder="プレースホルダーを入力..." contenteditable="true" style="border: 1px solid rgba(0,0,0,0.15); border-radius: 8px; background: rgba(0,0,0,0.03); padding: 12px; height: 80px; width: 100%; text-align: left; color: #888; font-size: 0.95rem; line-height: 1.4;">${placeholderVal}</div>`;
+                html += `<div class="mockup-editable" id="mock-placeholder-node" data-prop="placeholder" data-placeholder="プレースホルダーを入力..." contenteditable="true" style="border: none; border-bottom: 2px solid rgba(0,0,0,0.15); background: transparent; padding: 12px 0; height: auto; min-height: 44px; width: 100%; text-align: left; color: #888; font-size: 1.2rem; line-height: 1.5;">${placeholderVal}</div>`;
             } else if (obj.type === 'dropdown') {
                 html += `
                     <select class="mockup-input" style="border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; padding: 12px; background: rgba(255,255,255,0.7); backdrop-filter: blur(8px); width: 100%; cursor: pointer;">
@@ -373,7 +313,7 @@ App.Pages.form_editor = async function() {
             }
         }
         
-        // 確認画面 (Review) のプレビュー (下部にボタンを1つだけ設置)
+        // 確認画面 (Review) のプレビュー
         if (type === 'review') {
             html += '<div style="width:100%; margin-top:16px; margin-bottom:24px; text-align:left;">';
             formData.questions.forEach((q, idx) => {
@@ -388,8 +328,7 @@ App.Pages.form_editor = async function() {
             html += `<div class="mockup-btn" id="mock-review-btn-node" style="width:100%; margin-top: auto;">${obj.buttonText || 'この内容で提出する'}</div>`;
         }
 
-        html += '</div>';
-        return html;
+        return html + '</div>';
     };
 
     const bindMockupEditableEvents = (obj, type) => {
@@ -399,18 +338,14 @@ App.Pages.form_editor = async function() {
                 const text = (e.originalEvent || e).clipboardData.getData('text/plain');
                 document.execCommand('insertText', false, text);
             });
-            
-            // Enterキーによる強制スクロールを防止
             el.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    e.stopPropagation();
-                }
+                if (e.key === 'Enter') e.stopPropagation();
             });
-
             el.addEventListener('input', (e) => {
                 const prop = el.getAttribute('data-prop');
                 obj[prop] = el.innerText;
-                
+                const rightInput = document.getElementById('set-' + prop);
+                if (rightInput) rightInput.value = obj[prop];
                 if (prop === 'title') {
                     const navEl = document.getElementById(`nav-text-${activePageId}`);
                     if (navEl) {
@@ -418,14 +353,6 @@ App.Pages.form_editor = async function() {
                         navEl.innerText = prefix + (obj.title || 'タイトルなし');
                     }
                 }
-                
-                let rightInputId = '';
-                if (prop === 'title') rightInputId = 'set-title';
-                else if (prop === 'description') rightInputId = 'set-desc';
-                else if (prop === 'placeholder') rightInputId = 'set-placeholder';
-                
-                const rightInput = document.getElementById(rightInputId);
-                if (rightInput) rightInput.value = obj[prop];
             });
         });
     };
@@ -438,18 +365,12 @@ App.Pages.form_editor = async function() {
         
         let html = `<h3 style="margin-top:0; margin-bottom:24px; font-size:1.2rem;">${type === 'op' ? 'OP画面の設定' : type === 'ed' ? 'ED画面の設定' : type === 'review' ? '確認画面の設定' : '質問の設定'}</h3>`;
         
-        // 画像アップロード
         if (type !== 'review') {
-            html += `
-                <div class="form-group">
-                    <label>画像 (任意)</label>
-                    `;
+            html += `<div class="form-group"><label>画像 (任意)</label>`;
             if (obj.imageUrl) {
-                html += `
-                    <div style="margin-bottom:8px;"><img src="${obj.imageUrl}" style="max-width:100px; max-height:100px; border-radius:4px; object-fit:cover;"></div>
+                html += `<div style="margin-bottom:8px;"><img src="${obj.imageUrl}" style="max-width:100px; max-height:100px; border-radius:4px; object-fit:cover;"></div>
                     <button class="btn btn-secondary btn-sm" onclick="document.getElementById('img-file-input').click()"><i class="ph ph-image"></i> 変更する</button>
-                    <button class="btn btn-danger btn-sm" id="remove-img-btn" style="margin-left:8px;"><i class="ph ph-trash"></i></button>
-                `;
+                    <button class="btn btn-danger btn-sm" id="remove-img-btn" style="margin-left:8px;"><i class="ph ph-trash"></i></button>`;
             } else {
                 html += '<button class="btn btn-secondary btn-sm" id="img-upload-btn"><i class="ph ph-image"></i> 画像をアップロード</button>';
             }
@@ -471,89 +392,82 @@ App.Pages.form_editor = async function() {
         }
 
         html += `
-            <div class="form-group">
-                <label>${titleLabel} (プレビュー直接編集可)</label>
-                <textarea id="set-title" class="input-field" style="height:60px;">${obj.title || ''}</textarea>
-            </div>
-            <div class="form-group">
-                <label>補足説明 (プレビュー直接編集可)</label>
-                <textarea id="set-desc" class="input-field" style="height:80px;">${obj.description || ''}</textarea>
-            </div>
+            <div class="form-group"><label>${titleLabel} (プレビュー直接編集可)</label><textarea id="set-title" class="input-field" style="height:60px;">${obj.title || ''}</textarea></div>
+            <div class="form-group"><label>補足説明 (プレビュー直接編集可)</label><textarea id="set-desc" class="input-field" style="height:80px;">${obj.description || ''}</textarea></div>
         `;
 
-        // 記述式の案内文字設定
         if (type === 'question' && (obj.type === 'short_text' || obj.type === 'long_text')) {
             const placeholderVal = obj.placeholder !== undefined ? obj.placeholder : "こちらに回答を入力...";
-            html += `
-                <div class="form-group">
-                    <label>案内文字 (プレースホルダー)</label>
-                    <input type="text" id="set-placeholder" class="input-field" value="${placeholderVal}">
-                </div>
-            `;
+            html += `<div class="form-group"><label>案内文字 (プレースホルダー)</label><input type="text" id="set-placeholder" class="input-field" value="${placeholderVal}"></div>`;
         }
 
         if (type === 'op' || type === 'ed' || type === 'review') {
-            html += `
-                <div class="form-group">
-                    <label>ボタンテキスト</label>
-                    <input type="text" id="set-btn-text" class="input-field" value="${obj.buttonText || ''}">
-                </div>
-            `;
+            html += `<div class="form-group"><label>ボタンテキスト</label><input type="text" id="set-btn-text" class="input-field" value="${obj.buttonText || ''}"></div>`;
         }
 
-        // 配置設定（タイトルと補足を個別設定可能に拡張）
-        const alignVal = obj.align || 'left';
-        const descAlignVal = obj.descAlign || 'left';
         html += `
             <div style="display:flex; gap:16px;">
                 <div class="form-group" style="flex:1;">
                     <label>タイトルの配置</label>
                     <select id="set-align" class="input-field">
-                        <option value="left" ${alignVal === 'left' ? 'selected' : ''}>左寄せ</option>
-                        <option value="center" ${alignVal === 'center' ? 'selected' : ''}>中央</option>
-                        <option value="right" ${alignVal === 'right' ? 'selected' : ''}>右寄せ</option>
+                        <option value="left" ${obj.align === 'left' ? 'selected' : ''}>左寄せ</option>
+                        <option value="center" ${obj.align === 'center' ? 'selected' : ''}>中央</option>
+                        <option value="right" ${obj.align === 'right' ? 'selected' : ''}>右寄せ</option>
                     </select>
                 </div>
                 <div class="form-group" style="flex:1;">
-                    <label>補足説明の配置</label>
+                    <label>タイトルサイズ</label>
+                    <select id="set-title-size" class="input-field">
+                        <option value="">デフォルト</option>
+                        <option value="1.2rem" ${obj.titleSize === '1.2rem' ? 'selected' : ''}>小</option>
+                        <option value="1.5rem" ${obj.titleSize === '1.5rem' ? 'selected' : ''}>中</option>
+                        <option value="1.8rem" ${obj.titleSize === '1.8rem' ? 'selected' : ''}>大</option>
+                        <option value="2.2rem" ${obj.titleSize === '2.2rem' ? 'selected' : ''}>特大</option>
+                    </select>
+                </div>
+            </div>
+            <div style="display:flex; gap:16px;">
+                <div class="form-group" style="flex:1;">
+                    <label>説明の配置</label>
                     <select id="set-desc-align" class="input-field">
-                        <option value="left" ${descAlignVal === 'left' ? 'selected' : ''}>左寄せ</option>
-                        <option value="center" ${descAlignVal === 'center' ? 'selected' : ''}>中央</option>
-                        <option value="right" ${descAlignVal === 'right' ? 'selected' : ''}>右寄せ</option>
+                        <option value="left" ${obj.descAlign === 'left' ? 'selected' : ''}>左寄せ</option>
+                        <option value="center" ${obj.descAlign === 'center' ? 'selected' : ''}>中央</option>
+                        <option value="right" ${obj.descAlign === 'right' ? 'selected' : ''}>右寄せ</option>
+                    </select>
+                </div>
+                <div class="form-group" style="flex:1;">
+                    <label>説明サイズ</label>
+                    <select id="set-desc-size" class="input-field">
+                        <option value="">デフォルト</option>
+                        <option value="0.9rem" ${obj.descSize === '0.9rem' ? 'selected' : ''}>小</option>
+                        <option value="1.05rem" ${obj.descSize === '1.05rem' ? 'selected' : ''}>中</option>
+                        <option value="1.2rem" ${obj.descSize === '1.2rem' ? 'selected' : ''}>大</option>
                     </select>
                 </div>
             </div>
         `;
-
+        
         if (type === 'question') {
-            html += `
-                <div class="form-group" style="display:flex; align-items:center; margin-top:24px; margin-bottom:24px; padding:12px; background:#f8f9fc; border-radius:8px;">
-                    <label style="margin:0; flex:1; font-weight:600;">回答を必須にする</label>
-                    <input type="checkbox" id="set-required" style="width:20px; height:20px;" ${obj.required ? 'checked' : ''}>
-                </div>
-            `;
-
-            // 複数回答か単一回答かの設定
+            html += `<div class="form-group" style="display:flex; align-items:center; margin-top:24px; margin-bottom:24px; padding:12px; background:#f8f9fc; border-radius:8px;">
+                        <label style="margin:0; flex:1; font-weight:600;">回答を必須にする</label>
+                        <input type="checkbox" id="set-required" style="width:20px; height:20px;" ${obj.required ? 'checked' : ''}>
+                    </div>`;
             if (obj.type === 'multiple_choice') {
-                html += `
-                    <div class="form-group" style="padding:12px; background:#f8f9fc; border-radius:8px; margin-bottom:24px;">
-                        <label style="font-weight:600; margin-bottom:8px; display:block;">回答方式</label>
-                        <div style="display:flex; gap:16px;">
-                            <label style="margin:0; font-weight:normal; display:flex; align-items:center; gap:6px;">
-                                <input type="radio" name="allow-multiple" value="false" ${!obj.allowMultiple ? 'checked' : ''}> 単一回答
-                            </label>
-                            <label style="margin:0; font-weight:normal; display:flex; align-items:center; gap:6px;">
-                                <input type="radio" name="allow-multiple" value="true" ${obj.allowMultiple ? 'checked' : ''}> 複数回答可能
-                            </label>
-                        </div>
-                    </div>
-                `;
+                html += `<div class="form-group" style="padding:12px; background:#f8f9fc; border-radius:8px; margin-bottom:24px;">
+                            <label style="font-weight:600; margin-bottom:8px; display:block;">回答方式</label>
+                            <div style="display:flex; gap:16px;">
+                                <label style="margin:0; font-weight:normal; display:flex; align-items:center; gap:6px;">
+                                    <input type="radio" name="allow-multiple" value="false" ${!obj.allowMultiple ? 'checked' : ''}> 単一回答
+                                </label>
+                                <label style="margin:0; font-weight:normal; display:flex; align-items:center; gap:6px;">
+                                    <input type="radio" name="allow-multiple" value="true" ${obj.allowMultiple ? 'checked' : ''}> 複数回答可能
+                                </label>
+                            </div>
+                        </div>`;
             }
-
             if (obj.type === 'multiple_choice' || obj.type === 'dropdown') {
                 html += '<div class="form-group"><label>選択肢設定</label><div id="choices-container">';
-                const choices = obj.choices || [];
-                choices.forEach((c, idx) => {
+                (obj.choices || []).forEach((c, idx) => {
                     html += `<div style="display:flex; gap:8px; margin-bottom:8px;">
                                 <input type="text" class="input-field set-choice-input" data-index="${idx}" value="${c}" style="margin-bottom:0;">
                                 <button class="btn btn-danger delete-choice-btn" data-index="${idx}" style="padding:0 12px;"><i class="ph ph-trash"></i></button>
@@ -563,14 +477,11 @@ App.Pages.form_editor = async function() {
             }
         }
         
-        // デザインテーマ設定
-        html += `
-            <hr style="margin:32px 0; border:none; border-top:1px solid #e0e0e0;">
+        html += `<hr style="margin:32px 0; border:none; border-top:1px solid #e0e0e0;">
             <h4 style="margin-bottom:16px;">🎨 デザイン設定 (全体)</h4>
             <div style="display:flex; gap:16px;">
                 <div class="form-group" style="flex:1;">
-                    <label>タイトルの色</label>
-                    <input type="color" id="set-theme-tcolor" class="input-field" value="${formData.theme.titleColor}" style="padding:0; height:40px;">
+                    <label>タイトルの色</label><input type="color" id="set-theme-tcolor" class="input-field" value="${formData.theme.titleColor}" style="padding:0; height:40px;">
                 </div>
                 <div class="form-group" style="flex:1;">
                     <label>文字サイズ</label>
@@ -583,8 +494,7 @@ App.Pages.form_editor = async function() {
             </div>
             <div style="display:flex; gap:16px;">
                 <div class="form-group" style="flex:1;">
-                    <label>補足説明の色</label>
-                    <input type="color" id="set-theme-dcolor" class="input-field" value="${formData.theme.descColor}" style="padding:0; height:40px;">
+                    <label>補足説明の色</label><input type="color" id="set-theme-dcolor" class="input-field" value="${formData.theme.descColor}" style="padding:0; height:40px;">
                 </div>
                 <div class="form-group" style="flex:1;">
                     <label>文字サイズ</label>
@@ -596,7 +506,6 @@ App.Pages.form_editor = async function() {
                 </div>
             </div>
         `;
-
         return html;
     };
 
@@ -607,9 +516,7 @@ App.Pages.form_editor = async function() {
                 el.addEventListener('input', (e) => {
                     obj[prop] = e.target.value;
                     const mockNode = document.getElementById(mockNodeId);
-                    if (mockNode) {
-                        mockNode.innerText = e.target.value;
-                    }
+                    if (mockNode) mockNode.innerText = e.target.value;
                     if (prop === 'title') {
                         const navEl = document.getElementById(`nav-text-${activePageId}`);
                         if (navEl) {
@@ -630,25 +537,30 @@ App.Pages.form_editor = async function() {
             bindInputNoRender('set-placeholder', 'mock-placeholder-node', 'placeholder');
         }
         
-        // タイトル配置変更
-        const alignSelect = document.getElementById('set-align');
-        if (alignSelect) {
-            alignSelect.addEventListener('change', (e) => {
-                obj.align = e.target.value;
-                const mockNode = document.getElementById('mock-title-node');
-                if (mockNode) mockNode.style.textAlign = e.target.value;
+        const setVal = (id, prop, callback) => {
+            const el = document.getElementById(id);
+            if(el) el.addEventListener('change', (e) => {
+                obj[prop] = e.target.value;
+                if(callback) callback(e.target.value);
             });
-        }
+        };
 
-        // 補足配置変更
-        const descAlignSelect = document.getElementById('set-desc-align');
-        if (descAlignSelect) {
-            descAlignSelect.addEventListener('change', (e) => {
-                obj.descAlign = e.target.value;
-                const mockNode = document.getElementById('mock-desc-node');
-                if (mockNode) mockNode.style.textAlign = e.target.value;
-            });
-        }
+        setVal('set-align', 'align', val => {
+            const mockNode = document.getElementById('mock-title-node');
+            if (mockNode) mockNode.style.textAlign = val;
+        });
+        setVal('set-desc-align', 'descAlign', val => {
+            const mockNode = document.getElementById('mock-desc-node');
+            if (mockNode) mockNode.style.textAlign = val;
+        });
+        setVal('set-title-size', 'titleSize', val => {
+            const mockNode = document.getElementById('mock-title-node');
+            if (mockNode) mockNode.style.fontSize = val || formData.theme.titleSize || 'inherit';
+        });
+        setVal('set-desc-size', 'descSize', val => {
+            const mockNode = document.getElementById('mock-desc-node');
+            if (mockNode) mockNode.style.fontSize = val || formData.theme.descSize || 'inherit';
+        });
 
         const tColor = document.getElementById('set-theme-tcolor');
         if(tColor) tColor.addEventListener('input', e => { 

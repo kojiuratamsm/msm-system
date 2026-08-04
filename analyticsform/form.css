@@ -168,34 +168,37 @@ body::after {
     box-shadow: none;
 }
 
-/* Beautiful Box design for Short text input and textareas */
+/* Beautiful Underline design for Short text input and textareas */
 .input-text {
     width: 100%;
-    font-size: 1.2rem;
-    border: 1px solid rgba(0,0,0,0.15);
-    background: rgba(0,0,0,0.03);
-    border-radius: 8px;
-    padding: 16px;
+    font-size: 1.4rem;
+    border: none;
+    border-bottom: 2px solid rgba(0,0,0,0.15);
+    background: transparent;
+    border-radius: 0;
+    padding: 12px 0;
     outline: none;
     color: var(--text-primary);
-    transition: border-color 0.3s, background-color 0.3s;
+    transition: border-color 0.3s;
     text-align: left;
-    height: 56px; /* Box height for inputs */
+    height: auto;
 }
 .input-text:focus {
-    border-color: var(--primary-color);
-    background: rgba(255,255,255,0.9);
-    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15);
+    border-bottom-color: var(--primary-color);
+    box-shadow: none;
 }
 .input-text::placeholder {
     color: rgba(0,0,0,0.3);
     text-align: left;
 }
 
-/* Long text (Textarea height) */
+/* Long text */
 textarea.input-text {
-    height: 120px;
+    height: auto;
+    min-height: 44px;
     resize: none;
+    overflow-y: hidden;
+    line-height: 1.5;
 }
 
 /* Pulldown Select Box Styles */
@@ -356,7 +359,7 @@ textarea.input-text {
         width: 100%;
     }
     .slide {
-        padding: 40px 20px;
+        padding: 40px 16px;
     }
     .slide.scrollable {
         padding-top: 60px;
@@ -370,14 +373,12 @@ textarea.input-text {
         margin-bottom: 24px;
     }
     .input-text {
-        font-size: 1.1rem;
-        height: 52px;
-        padding: 12px;
+        font-size: 1.2rem;
+        padding: 8px 0;
     }
     textarea.input-text {
-        font-size: 1.1rem;
-        height: 100px;
-        padding: 12px;
+        font-size: 1.2rem;
+        padding: 8px 0;
     }
     .choice-box {
         padding: 12px 16px;

@@ -44,8 +44,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             if(formData.theme.descSize) root.style.setProperty('--desc-size', formData.theme.descSize);
         }
 
-        // 非同期でViewのログ保存
-        logStat('view');
+        // 非同期でViewのログ保存（リロード時はカウントしない）
+        if (!sessionStorage.getItem('meo_form_view_logged')) {
+            logStat('view');
+            sessionStorage.setItem('meo_form_view_logged', 'true');
+        }
 
         renderForm();
 
@@ -82,7 +85,9 @@ function renderForm() {
         if (!formData.theme) return '';
         const alignVal = isTitle ? (pageObj.align || 'left') : (pageObj.descAlign || 'left');
         const colorVal = isTitle ? (formData.theme.titleColor || 'inherit') : (formData.theme.descColor || 'inherit');
-        const sizeVal = isTitle ? (formData.theme.titleSize || 'inherit') : (formData.theme.descSize || 'inherit');
+        const sizeVal = isTitle 
+            ? (pageObj.titleSize || formData.theme.titleSize || 'inherit') 
+            : (pageObj.descSize || formData.theme.descSize || 'inherit');
         return `color: ${colorVal}; font-size: ${sizeVal}; text-align: ${alignVal}; width: 100%;`;
     };
 
@@ -198,7 +203,10 @@ function renderForm() {
 }
 
 function handleOpStart() {
-    logStat('start');
+    if (!sessionStorage.getItem('meo_form_start_logged')) {
+        logStat('start');
+        sessionStorage.setItem('meo_form_start_logged', 'true');
+    }
     goNext();
 }
 
@@ -312,7 +320,11 @@ function updateView() {
             const type = slide.getAttribute('data-type');
             if (type === 'question') {
                 const qId = slide.getAttribute('data-id');
-                logStat('reach', qId);
+                const reachKey = 'meo_form_reach_' + qId;
+                if (!sessionStorage.getItem(reachKey)) {
+                    logStat('reach', qId);
+                    sessionStorage.setItem(reachKey, 'true');
+                }
             } else if (type === 'review') {
                 renderReviewContent();
                 const nav = document.getElementById('nav-controls');
