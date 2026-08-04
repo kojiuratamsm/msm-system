@@ -153,6 +153,10 @@ const Store = {
         const { data } = await supabase.from('customers').select('*').eq('service_type', 'meo_form_stats');
         return (data || []).map(r => ({ id: r.id, ...r.data }));
     },
+    async clearMEOFormStatsAndResponses() {
+        await supabase.from('customers').delete().eq('service_type', 'meo_form_stats');
+        await supabase.from('customers').delete().eq('service_type', 'meo_form_response');
+    },
 
     // Targets and KPIs
     async getTargetsKpis() {

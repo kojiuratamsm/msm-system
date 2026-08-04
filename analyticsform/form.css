@@ -69,7 +69,7 @@ body::after {
     left: 0;
     width: 100%;
     height: 100%;
-    padding: 60px 24px;
+    padding: 60px 40px;
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -111,7 +111,7 @@ body::after {
 }
 
 .slide-title {
-    font-size: 1.5rem;
+    font-size: 1.8rem;
     font-weight: 700;
     margin-bottom: 16px;
     line-height: 1.4;
@@ -120,7 +120,7 @@ body::after {
 }
 
 .slide-desc {
-    font-size: 1rem;
+    font-size: 1.1rem;
     margin-bottom: 40px;
     line-height: 1.6;
     white-space: pre-wrap;
@@ -342,7 +342,63 @@ body::after {
     white-space: pre-wrap;
 }
 
+/* Mobile responsive UI enhancements */
 @media (max-width: 768px) {
-    .slide-title { font-size: 1.4rem; }
-    .input-text { font-size: 1.2rem; }
+    .form-container {
+        max-width: 100%;
+        width: 100%;
+    }
+    .slide {
+        padding: 40px 20px;
+    }
+    .slide.scrollable {
+        padding-top: 60px;
+        padding-bottom: 100px;
+    }
+    .slide-title {
+        font-size: 1.4rem;
+    }
+    .slide-desc {
+        font-size: 0.95rem;
+        margin-bottom: 24px;
+    }
+    .input-text {
+        font-size: 1.2rem;
+    }
+    .choice-box {
+        padding: 12px 16px;
+        font-size: 1rem;
+        margin-bottom: 8px;
+    }
+    .choice-alpha {
+        width: 24px;
+        height: 24px;
+        margin-right: 12px;
+        font-size: 0.8rem;
+    }
+    .review-item {
+        padding: 12px;
+        margin-bottom: 12px;
+    }
+    .review-q {
+        font-size: 0.8rem;
+    }
+    .review-a {
+        font-size: 1rem;
+    }
+    .btn-primary {
+        width: 100%;
+        text-align: center;
+        padding: 14px 20px;
+        font-size: 1.1rem;
+    }
+    .navigation-controls {
+        bottom: 16px;
+        right: 16px;
+    }
+    .nav-btn {
+        width: 40px;
+        height: 40px;
+        font-size: 1.2rem;
+    }
 }

@@ -9,6 +9,7 @@ App.Pages.form_analytics = async function() {
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
             <h2 style="margin:0; font-size:1.5rem; font-weight:700;"><i class="ph ph-chart-bar" style="margin-right:8px; color:var(--primary-color);"></i>分析フォーム</h2>
             <div>
+                <button class="btn btn-danger" id="reset-stats-btn" style="margin-right:8px;"><i class="ph ph-trash"></i> データをリセット</button>
                 <button class="btn btn-secondary" onclick="window.open('/analyticsform/', '_blank')" style="margin-right:8px;"><i class="ph ph-arrow-square-out"></i> フォームを開く</button>
                 <button class="btn btn-primary" onclick="App.navigate('form_editor')"><i class="ph ph-pencil-simple"></i> フォームを編集</button>
             </div>
@@ -18,6 +19,29 @@ App.Pages.form_analytics = async function() {
             <p>データを読み込み中...</p>
         </div>
     `);
+
+    // リセットボタンの処理バインド
+    setTimeout(() => {
+        const resetBtn = document.getElementById('reset-stats-btn');
+        if (resetBtn) {
+            resetBtn.addEventListener('click', async () => {
+                if (confirm('【警告】これまでのテスト回答データやアクセス統計ログ（Views, Starts等）がすべて削除されます。よろしいですか？')) {
+                    resetBtn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> リセット中...';
+                    resetBtn.disabled = true;
+                    try {
+                        await Store.clearMEOFormStatsAndResponses();
+                        alert('データをすべてリセットしました。');
+                        App.Pages.form_analytics(); // 画面再描画
+                    } catch (e) {
+                        console.error(e);
+                        alert('リセット中にエラーが発生しました。');
+                        resetBtn.innerHTML = '<i class="ph ph-trash"></i> データをリセット';
+                        resetBtn.disabled = false;
+                    }
+                }
+            });
+        }
+    }, 100);
 
     // データの取得
     const [formData, statsData] = await Promise.all([
