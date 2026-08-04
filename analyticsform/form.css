@@ -168,44 +168,34 @@ body::after {
     box-shadow: none;
 }
 
-/* Short text input (Underline design) */
+/* Beautiful Box design for Short text input and textareas */
 .input-text {
     width: 100%;
-    font-size: 1.5rem;
-    border: none;
-    border-bottom: 2px solid rgba(0,0,0,0.2);
-    padding: 12px 0;
+    font-size: 1.2rem;
+    border: 1px solid rgba(0,0,0,0.15);
+    background: rgba(0,0,0,0.03);
+    border-radius: 8px;
+    padding: 16px;
     outline: none;
-    background: transparent;
     color: var(--text-primary);
-    transition: border-color 0.3s;
+    transition: border-color 0.3s, background-color 0.3s;
     text-align: left;
+    height: 56px; /* Box height for inputs */
 }
 .input-text:focus {
-    border-bottom-color: var(--primary-color);
+    border-color: var(--primary-color);
+    background: rgba(255,255,255,0.9);
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15);
 }
 .input-text::placeholder {
     color: rgba(0,0,0,0.3);
     text-align: left;
 }
 
-/* Long text (Beautiful Box design as Typeform) */
+/* Long text (Textarea height) */
 textarea.input-text {
-    border: 1px solid rgba(0,0,0,0.15);
-    background: rgba(0,0,0,0.03);
-    border-radius: 8px;
-    padding: 16px;
-    font-size: 1.2rem;
-    line-height: 1.5;
     height: 120px;
     resize: none;
-    transition: border-color 0.3s, background-color 0.3s;
-    text-align: left;
-    width: 100%;
-}
-textarea.input-text:focus {
-    border-color: var(--primary-color);
-    background: rgba(255,255,255,0.9);
 }
 
 /* Pulldown Select Box Styles */
@@ -380,7 +370,9 @@ textarea.input-text:focus {
         margin-bottom: 24px;
     }
     .input-text {
-        font-size: 1.2rem;
+        font-size: 1.1rem;
+        height: 52px;
+        padding: 12px;
     }
     textarea.input-text {
         font-size: 1.1rem;

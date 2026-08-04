@@ -349,7 +349,7 @@ App.Pages.form_editor = async function() {
         } else if (type === 'question') {
             if (obj.type === 'short_text') {
                 const placeholderVal = obj.placeholder !== undefined ? obj.placeholder : "こちらに回答を入力...";
-                html += `<div class="mockup-input mockup-editable" id="mock-placeholder-node" data-prop="placeholder" data-placeholder="プレースホルダーを入力..." contenteditable="true" style="border-bottom: 2px solid rgba(0,0,0,0.2); padding: 8px 0; color: #888; text-align: left; width: 100%;">${placeholderVal}</div>`;
+                html += `<div class="mockup-editable" id="mock-placeholder-node" data-prop="placeholder" data-placeholder="プレースホルダーを入力..." contenteditable="true" style="border: 1px solid rgba(0,0,0,0.15); border-radius: 8px; background: rgba(0,0,0,0.03); padding: 12px; height: 48px; width: 100%; text-align: left; color: #888; font-size: 0.95rem; line-height: 1.4; display: flex; align-items: center;">${placeholderVal}</div>`;
             } else if (obj.type === 'long_text') {
                 const placeholderVal = obj.placeholder !== undefined ? obj.placeholder : "こちらに回答を入力...";
                 // 長文プレビューを枠線ボックス型デザインにする
