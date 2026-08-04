@@ -133,6 +133,20 @@ const Store = {
             return id;
         }
     },
+    async getMEOFormSecrets() {
+        const { data } = await supabase.from('customers').select('*').eq('service_type', 'meo_form_secrets');
+        if (data && data.length > 0) return { id: data[0].id, ...data[0].data };
+        return { utageApiKey: '', utageScenarioId: '', googleCalendarId: '' };
+    },
+    async saveMEOFormSecrets(secretsData) {
+        const existing = await this.getMEOFormSecrets();
+        if (existing && existing.id) {
+            await supabase.from('customers').update({ data: secretsData }).eq('id', existing.id);
+        } else {
+            const id = Date.now();
+            await supabase.from('customers').insert([{ id, service_type: 'meo_form_secrets', data: secretsData }]);
+        }
+    },
     async addMEOFormResponse(responseData) {
         const id = Date.now();
         await supabase.from('customers').insert([{ id, service_type: 'meo_form_response', data: responseData }]);

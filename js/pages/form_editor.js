@@ -61,6 +61,8 @@ App.Pages.form_editor = async function() {
     if (!formData.theme) formData.theme = defaultFormData.theme;
     if (!formData.review) formData.review = defaultFormData.review;
     
+    let secretsData = await Store.getMEOFormSecrets();
+    
     // 古いデータでalign未設定の場合はすべて左寄せにする
     if (formData.op && !formData.op.align) formData.op.align = "left";
     if (formData.op && !formData.op.descAlign) formData.op.descAlign = "left";
@@ -310,6 +312,17 @@ App.Pages.form_editor = async function() {
                         html += `<div class="mockup-choice" style="width: 100%;"><div class="choice-alpha" style="background:#e0e0e0; width:24px; height:24px; border-radius:4px; display:flex; align-items:center; justify-content:center; margin-right:12px; font-size:0.8rem; font-weight:700;">${alpha}</div> ${c}</div>`;
                     });
                 }
+            } else if (obj.type === 'calendar_booking') {
+                html += `
+                    <div style="width:100%; border:1px solid rgba(0,0,0,0.1); border-radius:12px; padding:16px; background:rgba(255,255,255,0.8); backdrop-filter:blur(8px); text-align:center;">
+                        <div style="font-weight:600; margin-bottom:12px; color:#333;"><i class="ph ph-calendar-blank" style="margin-right:4px; color:#0d6efd;"></i>日程調整カレンダー</div>
+                        <div style="display:grid; grid-template-columns: repeat(7, 1fr); gap:6px; margin-bottom:12px;">
+                            ${['日','月','火','水','木','金','土'].map(d => `<div style="font-size:0.75rem; color:#666; font-weight:600;">${d}</div>`).join('')}
+                            ${Array.from({length: 14}).map((_, i) => `<div style="font-size:0.8rem; padding:6px; border-radius:4px; background:#f0f0f0; color:#aaa; font-weight:500;">${i+1}</div>`).join('')}
+                        </div>
+                        <div style="font-size:0.75rem; color:#888;">※ 本番環境では空き枠時間がリアルタイムに選択可能になります。</div>
+                    </div>
+                `;
             }
         }
         
@@ -386,6 +399,7 @@ App.Pages.form_editor = async function() {
                         <option value="long_text" ${obj.type === 'long_text' ? 'selected' : ''}>記述式 (長文)</option>
                         <option value="multiple_choice" ${obj.type === 'multiple_choice' ? 'selected' : ''}>選択肢 (複数/単一)</option>
                         <option value="dropdown" ${obj.type === 'dropdown' ? 'selected' : ''}>プルダウン</option>
+                        <option value="calendar_booking" ${obj.type === 'calendar_booking' ? 'selected' : ''}>カレンダー日程調整</option>
                     </select>
                 </div>
             `;
@@ -399,6 +413,32 @@ App.Pages.form_editor = async function() {
         if (type === 'question' && (obj.type === 'short_text' || obj.type === 'long_text')) {
             const placeholderVal = obj.placeholder !== undefined ? obj.placeholder : "こちらに回答を入力...";
             html += `<div class="form-group"><label>案内文字 (プレースホルダー)</label><input type="text" id="set-placeholder" class="input-field" value="${placeholderVal}"></div>`;
+        }
+
+        if (type === 'question' && obj.type === 'calendar_booking') {
+            const duration = obj.duration || 30;
+            const startHour = obj.startHour || '09:00';
+            const endHour = obj.endHour || '18:00';
+            html += `
+                <div class="form-group">
+                    <label>面談の所要時間 (分)</label>
+                    <select id="set-booking-duration" class="input-field">
+                        <option value="30" ${duration == 30 ? 'selected' : ''}>30分</option>
+                        <option value="45" ${duration == 45 ? 'selected' : ''}>45分</option>
+                        <option value="60" ${duration == 60 ? 'selected' : ''}>60分</option>
+                    </select>
+                </div>
+                <div style="display:flex; gap:16px;">
+                    <div class="form-group" style="flex:1;">
+                        <label>開始時間</label>
+                        <input type="time" id="set-booking-start" class="input-field" value="${startHour}">
+                    </div>
+                    <div class="form-group" style="flex:1;">
+                        <label>終了時間</label>
+                        <input type="time" id="set-booking-end" class="input-field" value="${endHour}">
+                    </div>
+                </div>
+            `;
         }
 
         if (type === 'op' || type === 'ed' || type === 'review') {
@@ -505,6 +545,21 @@ App.Pages.form_editor = async function() {
                     </select>
                 </div>
             </div>
+            <hr style="margin:32px 0; border:none; border-top:1px solid #e0e0e0;">
+            <h4 style="margin-bottom:16px;">🔌 UTAGE & カレンダー連携設定</h4>
+            <div class="form-group">
+                <label>UTAGE APIキー</label>
+                <input type="password" id="set-secret-utage-key" class="input-field" value="${secretsData.utageApiKey || ''}" placeholder="APIキーを入力..." style="font-family:monospace;">
+            </div>
+            <div class="form-group">
+                <label>UTAGE シナリオID</label>
+                <input type="text" id="set-secret-utage-scenario" class="input-field" value="${secretsData.utageScenarioId || ''}" placeholder="シナリオIDを入力...">
+            </div>
+            <div class="form-group">
+                <label>GoogleカレンダーID</label>
+                <input type="text" id="set-secret-gcal-id" class="input-field" value="${secretsData.googleCalendarId || ''}" placeholder="example@gmail.com">
+            </div>
+            <button class="btn btn-secondary btn-sm" id="save-secrets-btn" style="width:100%; margin-bottom:24px;"><i class="ph ph-plug"></i> 連携設定を保存</button>
         `;
         return html;
     };
@@ -645,6 +700,37 @@ App.Pages.form_editor = async function() {
                 render();
             });
         });
+
+        // カレンダー調整の設定変更ハンドラ
+        setVal('set-booking-duration', 'duration', () => render());
+        const startBookingInput = document.getElementById('set-booking-start');
+        if (startBookingInput) {
+            startBookingInput.addEventListener('change', (e) => {
+                obj.startHour = e.target.value;
+            });
+        }
+        const endBookingInput = document.getElementById('set-booking-end');
+        if (endBookingInput) {
+            endBookingInput.addEventListener('change', (e) => {
+                obj.endHour = e.target.value;
+            });
+        }
+
+        // API連携設定の保存ハンドラ
+        const saveSecretsBtn = document.getElementById('save-secrets-btn');
+        if (saveSecretsBtn) {
+            saveSecretsBtn.addEventListener('click', async () => {
+                saveSecretsBtn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> 保存中...';
+                secretsData.utageApiKey = document.getElementById('set-secret-utage-key').value;
+                secretsData.utageScenarioId = document.getElementById('set-secret-utage-scenario').value;
+                secretsData.googleCalendarId = document.getElementById('set-secret-gcal-id').value;
+                await Store.saveMEOFormSecrets(secretsData);
+                saveSecretsBtn.innerHTML = '<i class="ph ph-check"></i> 保存完了';
+                setTimeout(() => {
+                    saveSecretsBtn.innerHTML = '<i class="ph ph-plug"></i> 連携設定を保存';
+                }, 2000);
+            });
+        }
     };
 
     render();

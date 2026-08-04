@@ -52,6 +52,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         renderForm();
 
+        // カレンダー日程調整設問の初期読み込み
+        document.querySelectorAll('.booking-widget-container').forEach(container => {
+            const qId = container.id.replace('booking-', '');
+            const q = formData.questions.find(x => x.id === qId);
+            loadCalendarBookingSlots(q, container);
+        });
+
         // 0.5秒で高速フェードイン表示
         setTimeout(() => {
             const loader = document.getElementById('loading');
@@ -146,6 +153,15 @@ function renderForm() {
                 `;
             });
             html += `</div>`;
+        } else if (q.type === 'calendar_booking') {
+            html += `
+                <div class="booking-widget-container" id="booking-${q.id}" style="width:100%;">
+                    <div style="display:flex; justify-content:center; align-items:center; padding:32px;">
+                        <i class="ph ph-spinner ph-spin" style="font-size:2rem; color:var(--primary-color);"></i>
+                        <span style="margin-left:12px; font-weight:500;">空き日程を取得中...</span>
+                    </div>
+                </div>
+            `;
         }
         
         html += `<div class="error-msg" id="err-${q.id}">必須項目です。回答を入力してください。</div>`;
@@ -366,17 +382,37 @@ async function submitForm() {
     btn.disabled = true;
 
     try {
-        // 完了ステータス 'completed' で回答を保存
-        await saveResponseProgress('completed');
+        const bookingQuestion = (formData.questions || []).find(q => q.type === 'calendar_booking');
+        const responseId = sessionStorage.getItem('meo_form_response_id');
         
-        await logStat('submission');
+        if (bookingQuestion) {
+            // カレンダー連携＋UTAGE連携用APIを呼び出す
+            const res = await fetch('/api/booking', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    formId: formData.id || 'default',
+                    qId: bookingQuestion.id,
+                    answers: answers,
+                    responseId: responseId
+                })
+            });
+            const data = await res.json();
+            if (!data.success) {
+                throw new Error(data.error || '予約処理に失敗しました。');
+            }
+        } else {
+            // 通常のフォーム提出処理
+            await saveResponseProgress('completed');
+            await logStat('submission');
+        }
 
         currentSlideIndex++;
         updateView();
-    } catch (err) {
-        console.error(err);
-        alert('エラーが発生しました。時間をおいて再度お試しください。');
-        btn.innerHTML = formData.review.buttonText || '提出する';
+    } catch (e) {
+        console.error("submitForm error:", e);
+        alert(e.message || "送信中にエラーが発生しました。もう一度お試しください。");
+        btn.innerHTML = 'この内容で提出する';
         btn.disabled = false;
     }
 }
@@ -452,3 +488,100 @@ function closeFormWindow() {
     const guide = document.getElementById('close-guide');
     if (guide) guide.style.display = 'block';
 }
+
+// カレンダー日程調整関連の関数
+async function loadCalendarBookingSlots(q, container) {
+    try {
+        // カレンダーの空き時間スロットをバックエンドAPI経由で取得
+        const formId = formData.id || 'default';
+        const res = await fetch(`/api/calendar?formId=${encodeURIComponent(formId)}&qId=${encodeURIComponent(q.id)}`);
+        const data = await res.json();
+        
+        if (data.error) {
+            container.innerHTML = `<div style="color:#dc3545; font-weight:600; padding:16px;">日程の取得に失敗しました: ${data.error}</div>`;
+            return;
+        }
+
+        container.dataset.slots = JSON.stringify(data.availableSlots || {});
+        renderBookingUI(q, container, data.availableSlots || {});
+    } catch (e) {
+        console.error("loadCalendarBookingSlots error:", e);
+        container.innerHTML = `<div style="color:#dc3545; font-weight:600; padding:16px;">エラーが発生しました。</div>`;
+    }
+}
+
+function renderBookingUI(q, container, availableSlots) {
+    const dates = Object.keys(availableSlots).sort();
+    if (dates.length === 0) {
+        container.innerHTML = `<div style="padding:24px; color:#666; font-weight:500;">選択可能な空き日程がありません。別の手段でお問い合わせください。</div>`;
+        return;
+    }
+
+    let selectedDate = dates[0];
+    
+    const updateTimeSlots = (date) => {
+        const slots = availableSlots[date] || [];
+        const slotsGrid = container.querySelector('.booking-slots-grid');
+        if (slots.length === 0) {
+            slotsGrid.innerHTML = `<div style="color:#888; font-size:0.9rem; padding:12px; grid-column: 1/-1;">この日は空き時間がありません</div>`;
+            return;
+        }
+        slotsGrid.innerHTML = slots.map(time => {
+            const isSelected = (answers[q.id] === `${date} ${time}`);
+            return `<div class="booking-slot-btn ${isSelected ? 'selected' : ''}" onclick="selectBookingTime('${q.id}', '${date}', '${time}', this)">${time}</div>`;
+        }).join('');
+    };
+
+    container.innerHTML = `
+        <div class="booking-widget">
+            <div class="booking-days-container">
+                ${dates.map((d, idx) => {
+                    const dateObj = new Date(d);
+                    const dayOfWeek = ['日','月','火','水','木','金','土'][dateObj.getDay()];
+                    const dateLabel = `${dateObj.getMonth()+1}/${dateObj.getDate()}`;
+                    return `
+                        <div class="booking-day-card ${d === selectedDate ? 'active' : ''}" data-date="${d}" onclick="selectBookingDate('${q.id}', '${d}', this)">
+                            <div class="day-name">${dayOfWeek}</div>
+                            <div class="day-val">${dateLabel}</div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+            <div class="booking-slots-title" style="font-weight:600; margin-top:20px; margin-bottom:12px; font-size:0.95rem; color:#333; text-align:left;">時間を選択してください</div>
+            <div class="booking-slots-grid">
+            </div>
+        </div>
+    `;
+
+    updateTimeSlots(selectedDate);
+}
+
+window.selectBookingDate = function(qId, date, cardEl) {
+    const container = document.getElementById(`booking-${qId}`);
+    container.querySelectorAll('.booking-day-card').forEach(el => el.classList.remove('active'));
+    cardEl.classList.add('active');
+    
+    const slotsGrid = container.querySelector('.booking-slots-grid');
+    const slots = JSON.parse(container.dataset.slots)[date] || [];
+    if (slots.length === 0) {
+        slotsGrid.innerHTML = `<div style="color:#888; font-size:0.9rem; padding:12px; grid-column: 1/-1;">この日は空き時間がありません</div>`;
+        return;
+    }
+    slotsGrid.innerHTML = slots.map(time => {
+        const isSelected = (answers[qId] === `${date} ${time}`);
+        return `<div class="booking-slot-btn ${isSelected ? 'selected' : ''}" onclick="selectBookingTime('${qId}', '${date}', '${time}', this)">${time}</div>`;
+    }).join('');
+};
+
+window.selectBookingTime = function(qId, date, time, btnEl) {
+    const container = document.getElementById(`booking-${qId}`);
+    container.querySelectorAll('.booking-slot-btn').forEach(el => el.classList.remove('selected'));
+    btnEl.classList.add('selected');
+    
+    answers[qId] = `${date} ${time}`;
+    document.getElementById('err-' + qId).classList.remove('visible');
+    
+    // 選択されたら少し遅延させて自動で次のスライドへ
+    setTimeout(goNext, 300);
+};
+
