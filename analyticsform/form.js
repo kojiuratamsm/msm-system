@@ -10,7 +10,6 @@ window.onerror = function(message, source, lineno, colno, error) {
 // Supabase Configuration
 const supabaseUrl = 'https://xztaacxjlluzqzehendp.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh6dGFhY3hqbGx1enF6ZWhlbmRwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyMzM4NzMsImV4cCI6MjA4OTgwOTg3M30.79wvIPepXjvPZwLHOPX7KullShvdvCB7LS2gZO5CtuQ';
-// Identifier collision prevention: Rename global client from 'supabase' to 'supabaseClient'
 let supabaseClient = null;
 
 let formData = null;
@@ -45,7 +44,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if(formData.theme.descSize) root.style.setProperty('--desc-size', formData.theme.descSize);
         }
 
-        // 非同期でViewのログ保存 (内部でエラーをキャッチするため、呼び出し時の .catch() は不要)
+        // 非同期でViewのログ保存
         logStat('view');
 
         renderForm();
@@ -78,13 +77,13 @@ function renderForm() {
     const container = document.getElementById('slide-container');
     let html = '';
 
-    const applyTheme = (isTitle) => {
+    // タイトルと説明の個別の配置・フォントスタイルを適用するヘルパー
+    const applyThemeStyle = (isTitle, pageObj) => {
         if (!formData.theme) return '';
-        if (isTitle) {
-            return `color: ${formData.theme.titleColor || 'inherit'}; font-size: ${formData.theme.titleSize || 'inherit'};`;
-        } else {
-            return `color: ${formData.theme.descColor || 'inherit'}; font-size: ${formData.theme.descSize || 'inherit'};`;
-        }
+        const alignVal = isTitle ? (pageObj.align || 'left') : (pageObj.descAlign || 'left');
+        const colorVal = isTitle ? (formData.theme.titleColor || 'inherit') : (formData.theme.descColor || 'inherit');
+        const sizeVal = isTitle ? (formData.theme.titleSize || 'inherit') : (formData.theme.descSize || 'inherit');
+        return `color: ${colorVal}; font-size: ${sizeVal}; text-align: ${alignVal}; width: 100%;`;
     };
 
     const getAlignClass = (obj) => {
@@ -95,8 +94,8 @@ function renderForm() {
     html += `
         <div class="slide ${getAlignClass(formData.op)}" id="slide-0" data-type="op">
             ${formData.op.imageUrl ? `<div class="slide-img-container"><img src="${formData.op.imageUrl}" class="slide-img"></div>` : ''}
-            <div class="slide-title" style="${applyTheme(true)}">${formData.op.title || ''}</div>
-            <div class="slide-desc" style="${applyTheme(false)}">${(formData.op.description || '').replace(/\n/g, '<br>')}</div>
+            <div class="slide-title" style="${applyThemeStyle(true, formData.op)}">${formData.op.title || ''}</div>
+            <div class="slide-desc" style="${applyThemeStyle(false, formData.op)}">${(formData.op.description || '').replace(/\n/g, '<br>')}</div>
             <button class="btn-primary" onclick="handleOpStart()">${formData.op.buttonText || 'スタート'}</button>
         </div>
     `;
@@ -111,19 +110,19 @@ function renderForm() {
             html += `<div class="slide-img-container"><img src="${q.imageUrl}" class="slide-img"></div>`;
         }
         const reqMark = q.required ? '<span class="required-mark">*</span>' : '';
-        html += `<div class="slide-title" style="${applyTheme(true)}">${idx + 1}. ${q.title || ''}${reqMark}</div>`;
+        html += `<div class="slide-title" style="${applyThemeStyle(true, q)}">${idx + 1}. ${q.title || ''}${reqMark}</div>`;
         if (q.description) {
-            html += `<div class="slide-desc" style="${applyTheme(false)}">${q.description.replace(/\n/g, '<br>')}</div>`;
+            html += `<div class="slide-desc" style="${applyThemeStyle(false, q)}">${q.description.replace(/\n/g, '<br>')}</div>`;
         }
 
         const placeholderText = q.placeholder !== undefined ? q.placeholder : "こちらに回答を入力...";
 
         if (q.type === 'short_text') {
             html += `<input type="text" class="input-text q-input" data-id="${q.id}" placeholder="${placeholderText}">`;
-            html += `<div style="font-size:0.8rem; color:var(--text-secondary); margin-top:8px; width: 100%;">段落を追加するためには Shift ⇧ と Enter ↵ キーを同時に押して下さい</div>`;
+            html += `<div style="font-size:0.8rem; color:var(--text-secondary); margin-top:8px; width: 100%; text-align: left;">段落を追加するためには Shift ⇧ と Enter ↵ キーを同時に押して下さい</div>`;
         } else if (q.type === 'long_text') {
-            html += `<textarea class="input-text q-input" data-id="${q.id}" placeholder="${placeholderText}" style="resize:none; height:100px;"></textarea>`;
-            html += `<div style="font-size:0.8rem; color:var(--text-secondary); margin-top:8px; width: 100%;">段落を追加するためには Shift ⇧ と Enter ↵ キーを同時に押して下さい</div>`;
+            html += `<textarea class="input-text q-input" data-id="${q.id}" placeholder="${placeholderText}"></textarea>`;
+            html += `<div style="font-size:0.8rem; color:var(--text-secondary); margin-top:8px; width: 100%; text-align: left;">段落を追加するためには Shift ⇧ と Enter ↵ キーを同時に押して下さい</div>`;
         } else if (q.type === 'dropdown') {
             html += `<select class="dropdown-select q-select" data-id="${q.id}" onchange="handleDropdownSelect('${q.id}', this)">`;
             html += `<option value="">選択してください...</option>`;
@@ -157,8 +156,8 @@ function renderForm() {
     const reviewIdx = formData.questions.length + 1;
     html += `
         <div class="slide scrollable ${getAlignClass(formData.review)}" id="slide-${reviewIdx}" data-type="review">
-            <div class="slide-title" style="${applyTheme(true)}">${formData.review.title || '回答内容の確認'}</div>
-            <div class="slide-desc" style="${applyTheme(false)}">${formData.review.description || '以下の内容でよろしいですか？'}</div>
+            <div class="slide-title" style="${applyThemeStyle(true, formData.review)}">${formData.review.title || '回答内容の確認'}</div>
+            <div class="slide-desc" style="${applyThemeStyle(false, formData.review)}">${formData.review.description || '以下の内容でよろしいですか？'}</div>
             <div id="review-content" style="margin-bottom:32px; width:100%;"></div>
             <button class="btn-primary" id="submit-btn" onclick="submitForm()">${formData.review.buttonText || 'この内容で提出する'}</button>
         </div>
@@ -169,8 +168,8 @@ function renderForm() {
     html += `
         <div class="slide ${getAlignClass(formData.ed)}" id="slide-${edIdx}" data-type="ed">
             ${formData.ed.imageUrl ? `<div class="slide-img-container"><img src="${formData.ed.imageUrl}" class="slide-img"></div>` : ''}
-            <div class="slide-title" style="${applyTheme(true)}">${formData.ed.title || ''}</div>
-            <div class="slide-desc" style="${applyTheme(false)}">${(formData.ed.description || '').replace(/\n/g, '<br>')}</div>
+            <div class="slide-title" style="${applyThemeStyle(true, formData.ed)}">${formData.ed.title || ''}</div>
+            <div class="slide-desc" style="${applyThemeStyle(false, formData.ed)}">${(formData.ed.description || '').replace(/\n/g, '<br>')}</div>
             <button class="btn-primary" onclick="closeFormWindow()">${formData.ed.buttonText || '終了する'}</button>
             <div id="close-guide" style="font-size:0.8rem; color:var(--text-secondary); margin-top:12px; display:none; width: 100%;">※自動で画面が閉じない場合は、ブラウザのタブを閉じてください。</div>
         </div>
@@ -261,6 +260,9 @@ function goNext() {
     
     currentSlideIndex++;
     updateView();
+    
+    // 進むたびに、回答内容をリアルタイムで一時保存（離脱ステータス 'abandoned'）
+    saveResponseProgress('abandoned').catch(e => console.error("Temp save failed:", e));
 }
 
 function goPrev() {
@@ -352,13 +354,8 @@ async function submitForm() {
     btn.disabled = true;
 
     try {
-        const responseData = {
-            formId: formData.id || 'default',
-            answers: answers,
-            submittedAt: new Date().toISOString(),
-            device: navigator.userAgent
-        };
-        await supabaseClient.from('customers').insert([{ id: Date.now(), service_type: 'meo_form_response', data: responseData }]);
+        // 完了ステータス 'completed' で回答を保存
+        await saveResponseProgress('completed');
         
         await logStat('submission');
 
@@ -369,6 +366,39 @@ async function submitForm() {
         alert('エラーが発生しました。時間をおいて再度お試しください。');
         btn.innerHTML = formData.review.buttonText || '提出する';
         btn.disabled = false;
+    }
+}
+
+// 途中経過または完了時の回答データをリアルタイムで上書き保存・更新するメソッド
+async function saveResponseProgress(status = 'abandoned') {
+    try {
+        if (!supabaseClient) return;
+
+        // セッションごとのユニークIDの永続化
+        let responseId = sessionStorage.getItem('meo_form_response_id');
+        if (!responseId) {
+            responseId = String(Date.now() + Math.floor(Math.random() * 1000));
+            sessionStorage.setItem('meo_form_response_id', responseId);
+        }
+
+        const responseData = {
+            id: responseId,
+            formId: formData.id || 'default',
+            answers: answers,
+            submittedAt: new Date().toISOString(),
+            status: status, // 'abandoned' or 'completed'
+            device: navigator.userAgent
+        };
+
+        // UPSERT (idをキーにして上書き)
+        await supabaseClient.from('customers').upsert([{ 
+            id: parseInt(responseId), 
+            service_type: 'meo_form_response', 
+            data: responseData 
+        }]);
+
+    } catch (e) {
+        console.error("saveResponseProgress error:", e);
     }
 }
 

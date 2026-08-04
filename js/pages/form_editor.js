@@ -5,7 +5,7 @@ App.Pages.form_editor = async function() {
         return;
     }
 
-    // デフォルトのフォームデータ構造 (配置デフォルトは left)
+    // デフォルトのフォームデータ構造 (配置デフォルトはすべて left)
     const defaultFormData = {
         title: "MEOキーワード分析フォーム",
         theme: {
@@ -19,20 +19,23 @@ App.Pages.form_editor = async function() {
             description: "あなたの店舗のMEOキーワードを分析します",
             imageUrl: "",
             buttonText: "診断をスタート",
-            align: "left"
+            align: "left",
+            descAlign: "left"
         },
         ed: {
             title: "ご提出ありがとうございました！",
             description: "結果は担当者よりご連絡いたします。",
             imageUrl: "",
             buttonText: "終了する",
-            align: "left"
+            align: "left",
+            descAlign: "left"
         },
         review: {
             title: "回答内容の確認",
             description: "以下の内容でよろしいですか？",
             buttonText: "この内容で提出する",
-            align: "left"
+            align: "left",
+            descAlign: "left"
         },
         questions: [
             {
@@ -45,7 +48,8 @@ App.Pages.form_editor = async function() {
                 imageUrl: "",
                 allowMultiple: false,
                 placeholder: "こちらに回答を入力...",
-                align: "left"
+                align: "left",
+                descAlign: "left"
             }
         ]
     };
@@ -59,10 +63,14 @@ App.Pages.form_editor = async function() {
     
     // 古いデータでalign未設定の場合はすべて左寄せにする
     if (formData.op && !formData.op.align) formData.op.align = "left";
+    if (formData.op && !formData.op.descAlign) formData.op.descAlign = "left";
     if (formData.ed && !formData.ed.align) formData.ed.align = "left";
+    if (formData.ed && !formData.ed.descAlign) formData.ed.descAlign = "left";
     if (formData.review && !formData.review.align) formData.review.align = "left";
+    if (formData.review && !formData.review.descAlign) formData.review.descAlign = "left";
     formData.questions.forEach(q => {
         if (!q.align) q.align = "left";
+        if (!q.descAlign) q.descAlign = "left";
     });
 
     let activePageId = 'op';
@@ -196,7 +204,7 @@ App.Pages.form_editor = async function() {
                 .mockup-choice { padding: 16px; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; margin-bottom: 12px; font-weight: 500; color: #333; background: rgba(255,255,255,0.7); backdrop-filter: blur(8px); display: flex; align-items: center;}
                 .mockup-img { max-width: 100%; border-radius: 8px; margin-bottom: 24px; max-height: 200px; object-fit: cover;}
                 
-                .required-mark { color: #dc3545; margin-left: 4px; font-size: 0.9em; font-weight: normal; }
+                .required-mark { color: #dc3545; margin-left: 4px; font-size: 1.2em; font-weight: bold; }
             </style>
             
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
@@ -267,7 +275,8 @@ App.Pages.form_editor = async function() {
                         imageUrl: "",
                         allowMultiple: false,
                         placeholder: "こちらに回答を入力...",
-                        align: "left"
+                        align: "left",
+                        descAlign: "left"
                     });
                     activePageId = newId;
                     render();
@@ -321,16 +330,30 @@ App.Pages.form_editor = async function() {
             html += `<img src="${obj.imageUrl}" class="mockup-img">`;
         }
         
-        html += `<div class="mockup-title mockup-editable" id="mock-title-node" data-prop="title" data-placeholder="タイトルを入力..." contenteditable="true">${obj.title || ''}</div>`;
-        html += `<div class="mockup-desc mockup-editable" id="mock-desc-node" data-prop="description" data-placeholder="補足説明を入力 (任意)" contenteditable="true">${obj.description || ''}</div>`;
+        // 必須マークの重複増殖バグ根本解決: 編集要素の外側にマークをレンダリングする
+        const isRequiredQuestion = (type === 'question' && obj.required);
+        const titleAlign = obj.align || 'left';
+        const descAlign = obj.descAlign || 'left';
 
-        // 提出ボタンが重複しないようにする (OP/EDのみ、Reviewは下部のみに描画)
+        html += `
+            <div style="display:flex; align-items:center; width:100%; justify-content: inherit; margin-bottom: 12px; color: ${formData.theme.titleColor}; font-size: ${formData.theme.titleSize};">
+                <div class="mockup-title mockup-editable" id="mock-title-node" data-prop="title" data-placeholder="タイトルを入力..." contenteditable="true" style="flex:1; margin-bottom:0; text-align: ${titleAlign}; font-size: inherit; color: inherit;">${obj.title || ''}</div>
+                ${isRequiredQuestion ? '<span class="required-mark" id="mock-req-mark" style="flex-shrink:0;">*</span>' : ''}
+            </div>
+        `;
+        
+        html += `<div class="mockup-desc mockup-editable" id="mock-desc-node" data-prop="description" data-placeholder="補足説明を入力 (任意)" contenteditable="true" style="text-align: ${descAlign}; color: ${formData.theme.descColor}; font-size: ${formData.theme.descSize};">${obj.description || ''}</div>`;
+
         if ((type === 'op' || type === 'ed') && type !== 'review') {
             html += `<div class="mockup-btn" id="mock-btn-node" style="margin-top:auto;">${obj.buttonText || 'スタート'}</div>`;
         } else if (type === 'question') {
-            if (obj.type === 'short_text' || obj.type === 'long_text') {
+            if (obj.type === 'short_text') {
                 const placeholderVal = obj.placeholder !== undefined ? obj.placeholder : "こちらに回答を入力...";
                 html += `<div class="mockup-input mockup-editable" id="mock-placeholder-node" data-prop="placeholder" data-placeholder="プレースホルダーを入力..." contenteditable="true" style="border-bottom: 2px solid rgba(0,0,0,0.2); padding: 8px 0; color: #888; text-align: left; width: 100%;">${placeholderVal}</div>`;
+            } else if (obj.type === 'long_text') {
+                const placeholderVal = obj.placeholder !== undefined ? obj.placeholder : "こちらに回答を入力...";
+                // 長文プレビューを枠線ボックス型デザインにする
+                html += `<div class="mockup-editable" id="mock-placeholder-node" data-prop="placeholder" data-placeholder="プレースホルダーを入力..." contenteditable="true" style="border: 1px solid rgba(0,0,0,0.15); border-radius: 8px; background: rgba(0,0,0,0.03); padding: 12px; height: 80px; width: 100%; text-align: left; color: #888; font-size: 0.95rem; line-height: 1.4;">${placeholderVal}</div>`;
             } else if (obj.type === 'dropdown') {
                 html += `
                     <select class="mockup-input" style="border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; padding: 12px; background: rgba(255,255,255,0.7); backdrop-filter: blur(8px); width: 100%; cursor: pointer;">
@@ -377,10 +400,9 @@ App.Pages.form_editor = async function() {
                 document.execCommand('insertText', false, text);
             });
             
-            // Enterキー押下時の最上部スクロール強制バグ防止
+            // Enterキーによる強制スクロールを防止
             el.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') {
-                    // イベント伝播を止め、親コンテナ等の自動スクロールを防止
                     e.stopPropagation();
                 }
             });
@@ -405,19 +427,6 @@ App.Pages.form_editor = async function() {
                 const rightInput = document.getElementById(rightInputId);
                 if (rightInput) rightInput.value = obj[prop];
             });
-            
-            if (type === 'question' && el.getAttribute('data-prop') === 'title') {
-                const updateMark = () => {
-                    const markExists = el.querySelector('.required-mark');
-                    if (obj.required && !markExists) {
-                        el.insertAdjacentHTML('beforeend', '<span class="required-mark" contenteditable="false">*</span>');
-                    } else if (!obj.required && markExists) {
-                        markExists.remove();
-                    }
-                };
-                updateMark();
-                el.addEventListener('blur', updateMark);
-            }
         });
     };
 
@@ -492,16 +501,27 @@ App.Pages.form_editor = async function() {
             `;
         }
 
-        // 配置設定（デフォルトを left にフォールバック）
+        // 配置設定（タイトルと補足を個別設定可能に拡張）
         const alignVal = obj.align || 'left';
+        const descAlignVal = obj.descAlign || 'left';
         html += `
-            <div class="form-group">
-                <label>文字の配置</label>
-                <select id="set-align" class="input-field">
-                    <option value="left" ${alignVal === 'left' ? 'selected' : ''}>左寄せ</option>
-                    <option value="center" ${alignVal === 'center' ? 'selected' : ''}>中央揃え</option>
-                    <option value="right" ${alignVal === 'right' ? 'selected' : ''}>右寄せ</option>
-                </select>
+            <div style="display:flex; gap:16px;">
+                <div class="form-group" style="flex:1;">
+                    <label>タイトルの配置</label>
+                    <select id="set-align" class="input-field">
+                        <option value="left" ${alignVal === 'left' ? 'selected' : ''}>左寄せ</option>
+                        <option value="center" ${alignVal === 'center' ? 'selected' : ''}>中央</option>
+                        <option value="right" ${alignVal === 'right' ? 'selected' : ''}>右寄せ</option>
+                    </select>
+                </div>
+                <div class="form-group" style="flex:1;">
+                    <label>補足説明の配置</label>
+                    <select id="set-desc-align" class="input-field">
+                        <option value="left" ${descAlignVal === 'left' ? 'selected' : ''}>左寄せ</option>
+                        <option value="center" ${descAlignVal === 'center' ? 'selected' : ''}>中央</option>
+                        <option value="right" ${descAlignVal === 'right' ? 'selected' : ''}>右寄せ</option>
+                    </select>
+                </div>
             </div>
         `;
 
@@ -610,11 +630,23 @@ App.Pages.form_editor = async function() {
             bindInputNoRender('set-placeholder', 'mock-placeholder-node', 'placeholder');
         }
         
+        // タイトル配置変更
         const alignSelect = document.getElementById('set-align');
         if (alignSelect) {
             alignSelect.addEventListener('change', (e) => {
                 obj.align = e.target.value;
-                render();
+                const mockNode = document.getElementById('mock-title-node');
+                if (mockNode) mockNode.style.textAlign = e.target.value;
+            });
+        }
+
+        // 補足配置変更
+        const descAlignSelect = document.getElementById('set-desc-align');
+        if (descAlignSelect) {
+            descAlignSelect.addEventListener('change', (e) => {
+                obj.descAlign = e.target.value;
+                const mockNode = document.getElementById('mock-desc-node');
+                if (mockNode) mockNode.style.textAlign = e.target.value;
             });
         }
 

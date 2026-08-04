@@ -31,7 +31,7 @@ App.Pages.form_analytics = async function() {
                     try {
                         await Store.clearMEOFormStatsAndResponses();
                         alert('データをすべてリセットしました。');
-                        App.Pages.form_analytics(); // 画面再描画
+                        App.Pages.form_analytics();
                     } catch (e) {
                         console.error(e);
                         alert('リセット中にエラーが発生しました。');
@@ -44,9 +44,10 @@ App.Pages.form_analytics = async function() {
     }, 100);
 
     // データの取得
-    const [formData, statsData] = await Promise.all([
+    const [formData, statsData, responsesData] = await Promise.all([
         Store.getMEOForm(),
-        Store.getMEOFormStats()
+        Store.getMEOFormStats(),
+        Store.getMEOFormResponses()
     ]);
 
     if (!formData) {
@@ -64,7 +65,7 @@ App.Pages.form_analytics = async function() {
     let views = 0;
     let starts = 0;
     let submissions = 0;
-    const reaches = {}; // questionId -> count
+    const reaches = {};
 
     statsData.forEach(stat => {
         if (stat.type === 'view') views++;
@@ -99,12 +100,12 @@ App.Pages.form_analytics = async function() {
     `;
 
     // 離脱率の計算とファネル表示
-    let funnelHtml = `<div class="card" style="padding:24px;">
-        <h3 style="margin-top:0; margin-bottom:24px;">設問ごとの到達・離脱状況 (ファネル分析)</h3>
-        <div style="display:flex; flex-direction:column; gap:12px;">
+    let funnelHtml = `
+        <div class="card" style="padding:24px; margin-bottom:32px;">
+            <h3 style="margin-top:0; margin-bottom:24px; font-size:1.1rem; font-weight:700;">設問ごとの到達・離脱状況 (ファネル分析)</h3>
+            <div style="display:flex; flex-direction:column; gap:12px;">
     `;
 
-    // ファネルの各ステップ (OP -> Q1 -> Q2 ... -> ED)
     const steps = [];
     steps.push({ title: 'OP (開始)', count: starts, max: starts });
     
@@ -131,14 +132,91 @@ App.Pages.form_analytics = async function() {
                 <div style="width:120px; text-align:right; font-weight:700; margin-left:16px;">
                     ${step.count.toLocaleString()} <span style="color:var(--text-secondary); font-size:0.8rem; font-weight:normal;">(${percentage}%)</span>
                 </div>
-                <div style="width:100px; text-align:right;">
+                <div style="width:120px; text-align:right;">
                     ${dropText}
                 </div>
             </div>
         `;
     });
-
     funnelHtml += `</div></div>`;
 
-    document.getElementById('analytics-content').innerHTML = kpiHtml + funnelHtml;
+    // 回答者データ一覧テーブルの実装 (途中離脱の赤表示対応)
+    let responsesHtml = `
+        <div class="card" style="padding:24px; text-align:left;">
+            <h3 style="margin-top:0; margin-bottom:24px; font-size:1.1rem; font-weight:700;">📋 回答データ一覧</h3>
+            <div style="overflow-x:auto;">
+                <table class="table" style="width:100%; border-collapse:collapse; min-width:800px;">
+                    <thead>
+                        <tr style="border-bottom:2px solid #eef2f7; background:#f8f9fc;">
+                            <th style="padding:12px; text-align:left; font-size:0.85rem; color:#666;">日時</th>
+                            <th style="padding:12px; text-align:left; font-size:0.85rem; color:#666;">ステータス</th>
+                            ${formData.questions.map((q, idx) => `
+                                <th style="padding:12px; text-align:left; font-size:0.85rem; color:#666; max-width:200px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${q.title}">
+                                    Q${idx+1}. ${q.title}
+                                </th>
+                            `).join('')}
+                        </tr>
+                    </thead>
+                    <tbody>
+    `;
+
+    if (responsesData.length === 0) {
+        responsesHtml += `
+            <tr>
+                <td colspan="${formData.questions.length + 2}" style="padding:32px; text-align:center; color:#aaa; font-size:0.9rem;">
+                    まだ回答データがありません。
+                </td>
+            </tr>
+        `;
+    } else {
+        responsesData.forEach(resp => {
+            const isCompleted = resp.status === 'completed';
+            const rowColor = isCompleted ? '#1a1a1a' : '#dc3545'; // 完了者は黒、離脱者は赤
+            const statusLabel = isCompleted 
+                ? '<span style="background:#e6f4ea; color:#137333; padding:4px 8px; border-radius:4px; font-size:0.75rem; font-weight:600;">完了</span>' 
+                : '<span style="background:#fce8e6; color:#c5221f; padding:4px 8px; border-radius:4px; font-size:0.75rem; font-weight:600;">途中離脱</span>';
+
+            const formattedDate = resp.submittedAt 
+                ? new Date(resp.submittedAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) 
+                : '不明';
+
+            responsesHtml += `
+                <tr style="border-bottom:1px solid #eef2f7; color:${rowColor}; font-weight:500;">
+                    <td style="padding:12px; font-size:0.85rem; white-space:nowrap;">${formattedDate}</td>
+                    <td style="padding:12px; font-size:0.85rem; white-space:nowrap;">${statusLabel}</td>
+                    ${formData.questions.map(q => {
+                        let ans = resp.answers[q.id];
+                        let displayAns = '-';
+                        if (ans !== undefined && ans !== null) {
+                            if (Array.isArray(ans)) {
+                                displayAns = ans.length > 0 ? ans.join(', ') : '-';
+                            } else if (typeof ans === 'string' && ans.trim() !== '') {
+                                displayAns = ans;
+                            }
+                        }
+                        return `
+                            <td style="padding:12px; font-size:0.85rem; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${displayAns}">
+                                ${displayAns}
+                            </td>
+                        `;
+                    }).join('')}
+                </tr>
+            `;
+        });
+    }
+
+    responsesHtml += `
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+
+    document.getElementById('analytics-content').innerHTML = `
+        <div style="text-align:left;">
+            ${kpiHtml}
+            ${funnelHtml}
+            ${responsesHtml}
+        </div>
+    `;
 };
