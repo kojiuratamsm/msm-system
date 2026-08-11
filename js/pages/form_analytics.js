@@ -143,7 +143,10 @@ App.Pages.form_analytics = async function() {
     // 回答者データ一覧テーブルの実装 (途中離脱の赤表示対応)
     let responsesHtml = `
         <div class="card" style="padding:24px; text-align:left;">
-            <h3 style="margin-top:0; margin-bottom:24px; font-size:1.1rem; font-weight:700;">📋 回答データ一覧</h3>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+                <h3 style="margin:0; font-size:1.1rem; font-weight:700;">📋 回答データ一覧</h3>
+                <button class="btn btn-secondary btn-sm" id="download-csv-btn" style="display:flex; align-items:center; gap:8px;"><i class="ph ph-download-simple"></i> CSVダウンロード</button>
+            </div>
             <div style="overflow-x:auto;">
                 <table class="table" style="width:100%; border-collapse:collapse; min-width:800px;">
                     <thead>
@@ -219,4 +222,58 @@ App.Pages.form_analytics = async function() {
             ${responsesHtml}
         </div>
     `;
+
+    // CSVダウンロードボタンのクリックハンドラ
+    const downloadCsvBtn = document.getElementById('download-csv-btn');
+    if (downloadCsvBtn) {
+        downloadCsvBtn.addEventListener('click', () => {
+            if (responsesData.length === 0) {
+                alert('ダウンロードする回答データがありません。');
+                return;
+            }
+            
+            // CSVヘッダー
+            const headers = ['日時', 'ステータス'];
+            formData.questions.forEach((q, idx) => {
+                headers.push(`Q${idx+1}: ${q.title}`);
+            });
+            const csvRows = [headers.map(h => `"${h.replace(/"/g, '""')}"`).join(',')];
+
+            // CSVデータ行
+            responsesData.forEach(resp => {
+                const formattedDate = resp.submittedAt 
+                    ? new Date(resp.submittedAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) 
+                    : '不明';
+                const statusStr = resp.status === 'completed' ? '完了' : '途中離脱';
+                const row = [formattedDate, statusStr];
+
+                formData.questions.forEach(q => {
+                    const ans = resp.answers[q.id];
+                    let ansStr = '-';
+                    if (ans !== undefined && ans !== null) {
+                        if (Array.isArray(ans)) {
+                            ansStr = ans.length > 0 ? ans.join(', ') : '-';
+                        } else {
+                            ansStr = String(ans);
+                        }
+                    }
+                    row.push(ansStr);
+                });
+                csvRows.push(row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(','));
+            });
+
+            // UTF-8 BOM付与でExcel文字化け防止
+            const csvContent = "\ufeff" + csvRows.join("\r\n");
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `meo_form_responses_${new Date().toISOString().split('T')[0]}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+    }
 };
