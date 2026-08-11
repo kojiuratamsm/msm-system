@@ -48,6 +48,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!sessionStorage.getItem('meo_form_view_logged')) {
             logStat('view');
             sessionStorage.setItem('meo_form_view_logged', 'true');
+            
+            // Chatworkアクセス通知
+            const urlParams = new URLSearchParams(window.location.search);
+            const ref = urlParams.get('ref') || '';
+            fetch('/api/chatwork', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: 'access', ref: ref, formData: formData })
+            }).catch(e => console.error('Chatwork access notification failed', e));
         }
 
         renderForm();
@@ -406,6 +415,15 @@ async function submitForm() {
             await saveResponseProgress('completed');
             await logStat('submission');
         }
+
+        // Chatwork送信完了通知
+        const urlParams = new URLSearchParams(window.location.search);
+        const ref = urlParams.get('ref') || '';
+        fetch('/api/chatwork', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: 'submit', ref: ref, answers: answers, formData: formData })
+        }).catch(e => console.error('Chatwork submit notification failed', e));
 
         currentSlideIndex++;
         updateView();

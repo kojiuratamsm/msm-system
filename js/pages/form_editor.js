@@ -90,7 +90,11 @@ App.Pages.form_editor = async function() {
             leftNavHtml += `
                 <div class="editor-nav-item ${activePageId === q.id ? 'active' : ''}" data-id="${q.id}">
                     <span class="q-badge">${index + 1}</span> <span class="nav-text" id="nav-text-${q.id}">${q.title || '無題の質問'}</span>
-                    <i class="ph ph-trash delete-q-btn" data-id="${q.id}"></i>
+                    <div style="display:flex; gap:4px; align-items:center;">
+                        ${index > 0 ? `<i class="ph ph-caret-up move-q-btn" data-dir="up" data-index="${index}" style="cursor:pointer; color:#888;"></i>` : ''}
+                        ${index < formData.questions.length - 1 ? `<i class="ph ph-caret-down move-q-btn" data-dir="down" data-index="${index}" style="cursor:pointer; color:#888;"></i>` : ''}
+                        <i class="ph ph-trash delete-q-btn" data-id="${q.id}" style="margin-left:4px;"></i>
+                    </div>
                 </div>
             `;
         });
@@ -207,7 +211,7 @@ App.Pages.form_editor = async function() {
         App.mount(html, () => {
             document.querySelectorAll('.editor-nav-item').forEach(el => {
                 el.addEventListener('click', (e) => {
-                    if (e.target.classList.contains('delete-q-btn')) return;
+                    if (e.target.classList.contains('delete-q-btn') || e.target.classList.contains('move-q-btn')) return;
                     activePageId = el.getAttribute('data-id');
                     render();
                 });
@@ -222,6 +226,24 @@ App.Pages.form_editor = async function() {
                         if (activePageId === id) activePageId = 'op';
                         render();
                     }
+                });
+            });
+
+            document.querySelectorAll('.move-q-btn').forEach(el => {
+                el.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const index = parseInt(el.getAttribute('data-index'));
+                    const dir = el.getAttribute('data-dir');
+                    if (dir === 'up' && index > 0) {
+                        const temp = formData.questions[index];
+                        formData.questions[index] = formData.questions[index - 1];
+                        formData.questions[index - 1] = temp;
+                    } else if (dir === 'down' && index < formData.questions.length - 1) {
+                        const temp = formData.questions[index];
+                        formData.questions[index] = formData.questions[index + 1];
+                        formData.questions[index + 1] = temp;
+                    }
+                    render();
                 });
             });
 
@@ -284,7 +306,7 @@ App.Pages.form_editor = async function() {
                 <div class="mockup-editable" id="mock-title-node" data-prop="title" data-placeholder="タイトル..." contenteditable="true" style="flex:1; margin-bottom:0; font-size: inherit; color: inherit;">${obj.title || ''}</div>
                 ${(type === 'question' && obj.required) ? '<span class="required-mark">*</span>' : ''}
             </div>
-            <div class="mockup-editable" id="mock-desc-node" data-prop="description" data-placeholder="説明文..." contenteditable="true" style="width: 100%; margin-bottom: 32px; line-height: 1.6; color: ${formData.theme.descColor}; font-size: ${descSize};">${obj.description || ''}</div>
+            <div class="mockup-editable" id="mock-desc-node" data-prop="description" data-placeholder="説明文..." contenteditable="true" style="width: 100%; margin-bottom: 32px; line-height: 1.6; color: ${formData.theme.descColor}; font-size: ${descSize}; white-space: pre-wrap;">${obj.description || ''}</div>
         `;
 
         if ((type === 'op' || type === 'ed') && type !== 'review') {
@@ -546,7 +568,7 @@ App.Pages.form_editor = async function() {
                 </div>
             </div>
             <hr style="margin:32px 0; border:none; border-top:1px solid #e0e0e0;">
-            <h4 style="margin-bottom:16px;">🔌 UTAGE & カレンダー連携設定</h4>
+            <h4 style="margin-bottom:16px;">🔌 外部連携設定 (UTAGE/カレンダー/Chatwork)</h4>
             <div class="form-group">
                 <label>UTAGE APIキー</label>
                 <input type="password" id="set-secret-utage-key" class="input-field" value="${secretsData.utageApiKey || ''}" placeholder="APIキーを入力..." style="font-family:monospace;">
@@ -558,6 +580,32 @@ App.Pages.form_editor = async function() {
             <div class="form-group">
                 <label>GoogleカレンダーID</label>
                 <input type="text" id="set-secret-gcal-id" class="input-field" value="${secretsData.googleCalendarId || ''}" placeholder="example@gmail.com">
+            </div>
+            
+            <hr style="margin:32px 0; border:none; border-top:1px solid #e0e0e0;">
+            <h4 style="margin-bottom:16px;">📈 流入経路（パラメータ）URL発行</h4>
+            <div class="form-group">
+                <label>流入経路名（例: facebook, line_step1）</label>
+                <div style="display:flex; gap:8px;">
+                    <input type="text" id="tracking-source-name" class="input-field" placeholder="経路名を入力..." style="flex:1;">
+                    <button class="btn btn-secondary btn-sm" id="generate-tracking-url-btn" style="white-space:nowrap;">URL発行</button>
+                </div>
+            </div>
+            <div class="form-group" id="generated-url-container" style="display:none;">
+                <label>発行されたURL</label>
+                <input type="text" id="generated-tracking-url" class="input-field" readonly style="background:#f5f5f5; color:#666;">
+                <div style="font-size:0.8rem; color:#666; margin-top:4px;">※このURLをコピーして広告やリンク先に使用してください</div>
+            </div>
+
+            <hr style="margin:32px 0; border:none; border-top:1px solid #e0e0e0;">
+            <h4 style="margin-bottom:16px;">💬 Chatwork通知設定</h4>
+            <div class="form-group">
+                <label>Chatwork APIトークン</label>
+                <input type="password" id="set-secret-chatwork-key" class="input-field" value="${secretsData.chatworkApiKey || ''}" placeholder="トークンを入力..." style="font-family:monospace;">
+            </div>
+            <div class="form-group">
+                <label>Chatwork ルームID (rid)</label>
+                <input type="text" id="set-secret-chatwork-room" class="input-field" value="${secretsData.chatworkRoomId || ''}" placeholder="ルームIDを入力...">
             </div>
             <button class="btn btn-secondary btn-sm" id="save-secrets-btn" style="width:100%; margin-bottom:24px;"><i class="ph ph-plug"></i> 連携設定を保存</button>
         `;
@@ -724,11 +772,40 @@ App.Pages.form_editor = async function() {
                 secretsData.utageApiKey = document.getElementById('set-secret-utage-key').value;
                 secretsData.utageScenarioId = document.getElementById('set-secret-utage-scenario').value;
                 secretsData.googleCalendarId = document.getElementById('set-secret-gcal-id').value;
+                secretsData.chatworkApiKey = document.getElementById('set-secret-chatwork-key').value;
+                secretsData.chatworkRoomId = document.getElementById('set-secret-chatwork-room').value;
                 await Store.saveMEOFormSecrets(secretsData);
                 saveSecretsBtn.innerHTML = '<i class="ph ph-check"></i> 保存完了';
                 setTimeout(() => {
                     saveSecretsBtn.innerHTML = '<i class="ph ph-plug"></i> 連携設定を保存';
                 }, 2000);
+            });
+        }
+
+        // トラッキングURL生成ハンドラ
+        const generateUrlBtn = document.getElementById('generate-tracking-url-btn');
+        if (generateUrlBtn) {
+            generateUrlBtn.addEventListener('click', () => {
+                const sourceName = document.getElementById('tracking-source-name').value.trim();
+                if (!sourceName) {
+                    alert('流入経路名を入力してください。');
+                    return;
+                }
+                const baseUrl = window.location.href.replace('/index.html', '/analyticsform/index.html');
+                const url = new URL(baseUrl);
+                url.searchParams.set('ref', sourceName);
+                
+                const urlInput = document.getElementById('generated-tracking-url');
+                urlInput.value = url.toString();
+                document.getElementById('generated-url-container').style.display = 'block';
+                
+                // クリップボードにコピー
+                urlInput.select();
+                document.execCommand('copy');
+                
+                const originalText = generateUrlBtn.innerText;
+                generateUrlBtn.innerText = 'コピーしました！';
+                setTimeout(() => { generateUrlBtn.innerText = originalText; }, 2000);
             });
         }
     };
