@@ -26,10 +26,16 @@ module.exports = async (req, res) => {
         const secretsData = (secretsRes && secretsRes.length > 0) ? secretsRes[0].data : {};
         
         const cwToken = secretsData.chatworkApiKey;
-        const cwRoomId = secretsData.chatworkRoomId;
+        const rawRoomId = secretsData.chatworkRoomId;
 
-        if (!cwToken || !cwRoomId) {
+        if (!cwToken || !rawRoomId) {
             return res.status(200).json({ success: false, error: 'Chatwork連携が設定されていません。' });
+        }
+
+        const cwRoomId = String(rawRoomId).replace(/\D/g, ''); // 数字以外の文字(ridなど)を除去
+
+        if (!cwRoomId) {
+            return res.status(400).json({ error: '無効なルームIDです。' });
         }
 
         const now = new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
