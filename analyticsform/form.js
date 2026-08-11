@@ -140,10 +140,9 @@ function renderForm() {
 
         if (q.type === 'short_text') {
             html += `<input type="text" class="input-text q-input" data-id="${q.id}" placeholder="${placeholderText}">`;
-            html += `<div style="font-size:0.8rem; color:var(--text-secondary); margin-top:8px; width: 100%; text-align: left;">段落を追加するためには Shift ⇧ と Enter ↵ キーを同時に押して下さい</div>`;
         } else if (q.type === 'long_text') {
-            html += `<textarea class="input-text q-input" data-id="${q.id}" placeholder="${placeholderText}"></textarea>`;
-            html += `<div style="font-size:0.8rem; color:var(--text-secondary); margin-top:8px; width: 100%; text-align: left;">段落を追加するためには Shift ⇧ と Enter ↵ キーを同時に押して下さい</div>`;
+            html += `<textarea class="input-text q-input" data-id="${q.id}" placeholder="${placeholderText}" style="height:48px; min-height:48px; resize:none; overflow-y:hidden;"></textarea>`;
+            html += `<div style="font-size:0.8rem; color:var(--text-secondary); margin-top:8px; width: 100%; text-align: left;">改行するには Enter ↵ キーを押してください</div>`;
         } else if (q.type === 'dropdown') {
             html += `<select class="dropdown-select q-select" data-id="${q.id}" onchange="handleDropdownSelect('${q.id}', this)">`;
             html += `<option value="">選択してください...</option>`;
@@ -217,6 +216,10 @@ function renderForm() {
         el.addEventListener('input', (e) => {
             answers[e.target.getAttribute('data-id')] = e.target.value;
             document.getElementById('err-' + e.target.getAttribute('data-id')).classList.remove('visible');
+            if (e.target.tagName === 'TEXTAREA') {
+                e.target.style.height = 'auto';
+                e.target.style.height = e.target.scrollHeight + 'px';
+            }
         });
     });
 
@@ -364,7 +367,13 @@ function updateView() {
 
             const input = slide.querySelector('.q-input');
             if (input) {
-                setTimeout(() => input.focus(), 600);
+                setTimeout(() => {
+                    input.focus();
+                    if (input.tagName === 'TEXTAREA') {
+                        input.style.height = 'auto';
+                        input.style.height = input.scrollHeight + 'px';
+                    }
+                }, 600);
             }
         } else {
             slide.className = slide.className.replace('active', '').replace('prev', '').trim();

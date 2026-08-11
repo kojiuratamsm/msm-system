@@ -317,7 +317,7 @@ App.Pages.form_editor = async function() {
                 html += `<div class="mockup-editable" id="mock-placeholder-node" data-prop="placeholder" data-placeholder="プレースホルダーを入力..." contenteditable="true" style="border: none; border-bottom: 2px solid rgba(0,0,0,0.15); background: transparent; padding: 12px 0; height: auto; width: 100%; text-align: left; color: #888; font-size: 1.2rem; line-height: 1.4; display: flex; align-items: center;">${placeholderVal}</div>`;
             } else if (obj.type === 'long_text') {
                 const placeholderVal = obj.placeholder !== undefined ? obj.placeholder : "こちらに回答を入力...";
-                html += `<div class="mockup-editable" id="mock-placeholder-node" data-prop="placeholder" data-placeholder="プレースホルダーを入力..." contenteditable="true" style="border: none; border-bottom: 2px solid rgba(0,0,0,0.15); background: transparent; padding: 12px 0; height: auto; min-height: 44px; width: 100%; text-align: left; color: #888; font-size: 1.2rem; line-height: 1.5;">${placeholderVal}</div>`;
+                html += `<div class="mockup-editable" id="mock-placeholder-node" data-prop="placeholder" data-placeholder="プレースホルダーを入力..." contenteditable="true" style="border: none; border-bottom: 2px solid rgba(0,0,0,0.15); background: transparent; padding: 12px 0; height: auto; width: 100%; text-align: left; color: #888; font-size: 1.2rem; line-height: 1.4; display: flex; align-items: center;">${placeholderVal}</div>`;
             } else if (obj.type === 'dropdown') {
                 html += `
                     <select class="mockup-input" style="border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; padding: 12px; background: rgba(255,255,255,0.7); backdrop-filter: blur(8px); width: 100%; cursor: pointer;">

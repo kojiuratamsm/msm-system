@@ -194,11 +194,12 @@ body::after {
 
 /* Long text */
 textarea.input-text {
-    height: auto;
-    min-height: 44px;
+    height: 48px;
+    min-height: 48px;
     resize: none;
     overflow-y: hidden;
     line-height: 1.5;
+    padding: 12px 0;
 }
 
 /* Pulldown Select Box Styles */
