@@ -23,6 +23,7 @@ body {
     justify-content: center;
     align-items: center;
     position: relative;
+    touch-action: manipulation; /* ダブルタップズームの禁止 */
 }
 
 /* Beautiful Gradient Background */
