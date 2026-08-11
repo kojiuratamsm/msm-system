@@ -141,7 +141,7 @@ function renderForm() {
         if (q.type === 'short_text') {
             html += `<input type="text" class="input-text q-input" data-id="${q.id}" placeholder="${placeholderText}">`;
         } else if (q.type === 'long_text') {
-            html += `<textarea class="input-text q-input" data-id="${q.id}" placeholder="${placeholderText}" style="height:48px; min-height:48px; resize:none; overflow-y:hidden;"></textarea>`;
+            html += `<textarea class="input-text q-input" data-id="${q.id}" placeholder="${placeholderText}" rows="1" style="height:48px; min-height:48px; resize:none; overflow-y:hidden;"></textarea>`;
             html += `<div style="font-size:0.8rem; color:var(--text-secondary); margin-top:8px; width: 100%; text-align: left;">改行するには Enter ↵ キーを押してください</div>`;
         } else if (q.type === 'dropdown') {
             html += `<select class="dropdown-select q-select" data-id="${q.id}" onchange="handleDropdownSelect('${q.id}', this)">`;
