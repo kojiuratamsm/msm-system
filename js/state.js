@@ -265,6 +265,46 @@ const Store = {
         } catch(e) {
             console.error('Error updating settings', e);
         }
+    },
+
+    // === MSM AI OFFICE (AI社員稼働状況ボード) ===
+    // 全社員の状態をひとまとまりのJSONとして customers テーブルに保存する
+    // (service_type='ai_office_state' の1行のみを使う。settings と同じパターン)
+    async getAiOfficeState() {
+        try {
+            const { data, error } = await supabase.from('customers').select('*').eq('service_type', 'ai_office_state');
+            if (error || !data || data.length === 0) return null;
+            return { id: data[0].id, ...data[0].data };
+        } catch (e) {
+            console.error('Error fetching AI Office state', e);
+            return null;
+        }
+    },
+    async updateAiOfficeState(stateData) {
+        try {
+            const { data } = await supabase.from('customers').select('id').eq('service_type', 'ai_office_state');
+            if (data && data.length > 0) {
+                await supabase.from('customers').update({ data: stateData }).eq('id', data[0].id);
+            } else {
+                await supabase.from('customers').insert([{ id: Date.now(), service_type: 'ai_office_state', data: stateData }]);
+            }
+        } catch (e) {
+            console.error('Error updating AI Office state', e);
+        }
+    },
+    // コマンド (「〇〇 投稿」等) をキューとして保存。Claude側がポーリングして処理する。
+    async postAiOfficeCommand(text, requestedBy) {
+        const id = Date.now();
+        await supabase.from('customers').insert([{
+            id,
+            service_type: 'ai_office_command',
+            data: { text, requestedBy: requestedBy || 'unknown', status: 'pending', createdAt: new Date().toISOString() }
+        }]);
+        return id;
+    },
+    async getAiOfficeCommands() {
+        const { data } = await supabase.from('customers').select('*').eq('service_type', 'ai_office_command').order('id', { ascending: false }).limit(20);
+        return (data || []).map(r => ({ id: r.id, ...r.data }));
     }
 };
 
