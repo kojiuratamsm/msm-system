@@ -522,9 +522,13 @@ function showError(msg) {
 }
 
 function closeFormWindow() {
-    window.close();
-    const guide = document.getElementById('close-guide');
-    if (guide) guide.style.display = 'block';
+    if (formData && formData.ed && formData.ed.redirectUrl && formData.ed.redirectUrl.trim() !== '') {
+        window.location.href = formData.ed.redirectUrl.trim();
+    } else {
+        window.close();
+        const guide = document.getElementById('close-guide');
+        if (guide) guide.style.display = 'block';
+    }
 }
 
 // カレンダー日程調整関連の関数

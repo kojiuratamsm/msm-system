@@ -185,7 +185,7 @@ App.Pages.form_editor = async function() {
                 .align-center { text-align: center; align-items: center; }
                 .align-right { text-align: right; align-items: flex-end; }
                 
-                .mockup-btn { background: rgba(0,0,0,0.8); color: white; padding: 16px 24px; border-radius: 8px; font-weight: 600; text-align: center; font-size: 1.1rem; box-shadow: 0 8px 24px rgba(0,0,0,0.2); backdrop-filter: blur(4px); margin-top: 24px; cursor: pointer; width: auto; }
+                .mockup-btn { background: rgba(0,0,0,0.8); color: white; padding: 16px 24px; border-radius: 8px; font-weight: 600; text-align: center; font-size: 1.1rem; box-shadow: 0 8px 24px rgba(0,0,0,0.2); backdrop-filter: blur(4px); margin-top: 24px; cursor: pointer; width: 100%; box-sizing: border-box; }
                 .mockup-input { width: 100%; border: none; border-bottom: 2px solid rgba(0,0,0,0.2); font-size: 1.2rem; padding: 8px 0; outline: none; margin-bottom: 24px; background: transparent; color: #333;}
                 .mockup-choice { padding: 16px; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; margin-bottom: 12px; font-weight: 500; color: #333; background: rgba(255,255,255,0.7); backdrop-filter: blur(8px); display: flex; align-items: center;}
                 .mockup-img { max-width: 100%; border-radius: 8px; margin-bottom: 24px; max-height: 200px; object-fit: cover;}
@@ -465,6 +465,9 @@ App.Pages.form_editor = async function() {
 
         if (type === 'op' || type === 'ed' || type === 'review') {
             html += `<div class="form-group"><label>ボタンテキスト</label><input type="text" id="set-btn-text" class="input-field" value="${obj.buttonText || ''}"></div>`;
+            if (type === 'ed') {
+                html += `<div class="form-group"><label>リダイレクトURL (空欄の場合は画面を閉じます)</label><input type="url" id="set-redirect-url" class="input-field" value="${obj.redirectUrl || ''}" placeholder="https://example.com/thankyou"></div>`;
+            }
         }
 
         html += `
@@ -635,6 +638,9 @@ App.Pages.form_editor = async function() {
         bindInputNoRender('set-desc', 'mock-desc-node', 'description');
         if (type === 'op' || type === 'ed' || type === 'review') {
             bindInputNoRender('set-btn-text', activePageId === 'review' ? 'mock-review-btn-node' : 'mock-btn-node', 'buttonText');
+            if (type === 'ed') {
+                bindInputNoRender('set-redirect-url', null, 'redirectUrl');
+            }
         }
         if (type === 'question') {
             bindInputNoRender('set-placeholder', 'mock-placeholder-node', 'placeholder');
