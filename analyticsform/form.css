@@ -169,6 +169,16 @@ body::after {
     box-shadow: none;
 }
 
+/* OPページ:「今月◯名が診断を受けています」の表示(赤文字) */
+.diagnosis-count-text {
+    color: #dc3545;
+    font-weight: 700;
+    font-size: 0.95rem;
+    margin-top: 14px;
+    text-align: center;
+    width: 100%;
+}
+
 /* Beautiful Underline design for Short text input and textareas */
 .input-text {
     width: 100%;
@@ -373,6 +383,9 @@ textarea.input-text {
     .slide-desc {
         font-size: 0.95rem;
         margin-bottom: 24px;
+    }
+    .diagnosis-count-text {
+        font-size: 0.85rem;
     }
     .input-text {
         font-size: 1.2rem;

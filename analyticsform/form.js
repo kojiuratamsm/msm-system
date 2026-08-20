@@ -103,6 +103,73 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 });
 
+// ============================================================================
+// 「今月◯名が診断を受けています」の表示人数を計算する
+// コージさんからの直接指示による仕様(2026-08-20)。サーバー保存やcronは使わず、
+// 「今日の日付」から毎回その場で計算する完全な計算式にしている(= 自動で
+// 日々変わり、1日になれば自動的にリセットされる。データベースの更新処理も
+// 手動更新も不要)。同じ月・同じ日であれば、誰がいつ見ても同じ人数になる。
+//
+// 絶対ルール(コージさん指示、2026-08-20):
+//   ・1ヶ月のMAXは32〜45名の範囲におさまる(月末までにその範囲内であればOK)
+//   ・日付が変わっているのに人数が変わらないのはNG(必ず毎日変化する)
+//   ・翌日が前日より低い数値になるのはNG(必ず増える。減らない)
+//   ・1日あたりの振り幅は1〜2名(いきなり大きく増えるのはNG)
+//   ・それ以外は自動ランダムでよい
+// ============================================================================
+function getMonthlyDiagnosisCount(targetDate) {
+    const date = targetDate || new Date();
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1; // 1-12
+    const dayOfMonth = date.getDate();
+    const daysInMonth = new Date(year, month, 0).getDate();
+
+    // 年月ごとに固定されるseed → 同じ月なら常に同じ数列(一貫性のため)。
+    // 月が変われば別のseedになるので、結果として毎月自動的にリセット・再生成される。
+    const seed = year * 100 + month;
+
+    // シンプルな決定論的擬似乱数生成器(mulberry32)
+    function mulberry32(a) {
+        return function () {
+            a |= 0; a = (a + 0x6D2B79F5) | 0;
+            let t = Math.imul(a ^ (a >>> 15), 1 | a);
+            t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+    }
+    const rand = mulberry32(seed);
+
+    // 1日目の人数(2〜4名からランダムに決定。例:1日は2名〜)
+    const startVal = 2 + Math.floor(rand() * 3);
+
+    // 2日目以降、前日より1〜2名ずつ積み上げていく。
+    // 「残り日数ぶんを最速(+2/日)で増やしても45名を超えない」
+    // 「残り日数ぶんを最遅(+1/日)で増やしても32名を下回らない」
+    // という条件を毎日チェックしながら増加数を選ぶことで、月末に必ず
+    // 32〜45名の範囲へ着地するようにしている。
+    const counts = [null, startVal];
+    for (let day = 2; day <= daysInMonth; day++) {
+        const remainingAfter = daysInMonth - day;
+        const prev = counts[day - 1];
+        const candidates = [1, 2].filter(inc => {
+            const v = prev + inc;
+            return (v + remainingAfter * 1 <= 45) && (v + remainingAfter * 2 >= 32);
+        });
+        let inc;
+        if (candidates.length === 2) {
+            inc = rand() < 0.6 ? 1 : 2; // なだらかに増えるよう+1をやや優先
+        } else if (candidates.length === 1) {
+            inc = candidates[0];
+        } else {
+            // 通常はここに来ないはずの保険(範囲内に収まる側を優先)
+            inc = (prev + 1 + remainingAfter * 2 >= 32) ? 1 : 2;
+        }
+        counts[day] = prev + inc;
+    }
+
+    return counts[Math.min(dayOfMonth, daysInMonth)];
+}
+
 function renderForm() {
     const container = document.getElementById('slide-container');
     let html = '';
@@ -129,6 +196,7 @@ function renderForm() {
             <div class="slide-title" style="${applyThemeStyle(true, formData.op)}">${formData.op.title || ''}</div>
             <div class="slide-desc" style="${applyThemeStyle(false, formData.op)}">${(formData.op.description || '').replace(/\n/g, '<br>')}</div>
             <button class="btn-primary" onclick="handleOpStart()">${formData.op.buttonText || 'スタート'}</button>
+            <div class="diagnosis-count-text">【今月${getMonthlyDiagnosisCount()}名が診断を受けています】</div>
         </div>
     `;
 

@@ -26,7 +26,8 @@ const App = {
             'youtube_subtitles': 'YouTubeテロップ生成',
             'ai_planner': 'AI企画室',
             'sales_leads': 'MEO営業リスト作成',
-            'form_analytics': '分析フォーム'
+            'form_analytics': '分析フォーム',
+            'threads': 'Threads運用代行'
         };
         document.getElementById('page-title').textContent = titleMap[target] || '';
 
