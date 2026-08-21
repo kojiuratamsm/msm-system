@@ -77,6 +77,38 @@ function aioFormatTime(iso) {
     }
 }
 
+// コマンド本文に含まれる社員名から、対象社員ID(複数の場合あり)を推測する。
+// 「中村」は営業事業部(nakamura_s)とMEO事業部(nakamura_meo)の2名が該当し文面だけでは
+// 一意に特定できないため、両方を対象として扱う(誤って片方だけを稼働中にしない)。
+const AIO_NAME_TO_IDS = {
+    '小島': ['kojima'],
+    '高橋': ['takahashi'],
+    '三浦': ['miura'],
+    '田中': ['tanaka_m'],
+    '中村': ['nakamura_s', 'nakamura_meo'],
+    '佐藤': ['sato'],
+    '湯浅': ['yuasa'],
+    '国貞': ['kunisada'],
+    '青木': ['aoki'],
+    '遠藤': ['endo'],
+    '久保': ['kubo']
+};
+
+function aioDetectMentionedIds(text) {
+    const ids = [];
+    Object.keys(AIO_NAME_TO_IDS).forEach(name => {
+        if (text.indexOf(name) !== -1) ids.push.apply(ids, AIO_NAME_TO_IDS[name]);
+    });
+    return ids;
+}
+
+// リサーチ系のキーワードを含む場合は「リサーチ中」、それ以外は「稼働中」として
+// 即時表示する(あくまで見た目上の初期反応で、実際の処理はスケジュールタスクが行う)。
+function aioGuessCategory(text) {
+    const researchKw = ['リサーチ', '調査', '分析', '市場', '競合', 'トレンド', 'YouTube', 'Threads', 'SNS', '数値'];
+    return researchKw.some(k => text.indexOf(k) !== -1) ? 'research' : 'active';
+}
+
 function aioRenderCommandRow(cmd) {
     const s = aioCmdStatusInfo(cmd);
     return `
@@ -244,7 +276,43 @@ App.Pages.ai_office = async function() {
                     const user = Auth.getCurrentUser();
                     await Store.postAiOfficeCommand(text, user ? user.email : 'unknown');
                     input.value = '';
-                    alert('コマンドを送信しました。通常は1時間以内に自動処理されます。処理状況は下の「コマンド履歴」に反映されます。今すぐ処理してほしい場合は、Claudeとのチャットでお声がけください。');
+
+                    // ここから: 送信直後の見た目上の即時反応。
+                    // 実際の処理はスケジュールタスク(1時間ごと)が行うが、送信した瞬間に
+                    // 「何も動いていないように見える」ことがないよう、該当社員(と小島)を
+                    // 先に「稼働中/リサーチ中」表示に切り替えておく。あくまで受付表示であり、
+                    // 実処理の完了を意味しない旨はログにも明記する。
+                    try {
+                        const currentState = (await Store.getAiOfficeState()) || AIO_DEFAULT_STATE;
+                        const employees = (currentState.employees || AIO_DEFAULT_STATE.employees).map(e => Object.assign({}, e));
+                        const mentionedIds = aioDetectMentionedIds(text);
+                        const category = aioGuessCategory(text);
+                        const optimisticStatus = category === 'research' ? 'research' : 'active';
+
+                        employees.forEach(e => {
+                            if (e.id === 'kojima') e.status = 'active';
+                            if (mentionedIds.indexOf(e.id) !== -1) e.status = optimisticStatus;
+                        });
+
+                        const mentionedNames = mentionedIds
+                            .map(id => { const e = employees.find(x => x.id === id); return e ? e.name : null; })
+                            .filter((v, i, arr) => v && arr.indexOf(v) === i);
+                        const targetLabel = mentionedNames.length ? mentionedNames.join('・') : '担当未特定';
+                        const nowLabel = aioFormatTime(new Date().toISOString());
+                        const newLogEntry = { time: nowLabel, text: `📥 コマンド受信(${targetLabel}宛): 「${text}」 ※小島が確認中。実際の対応はスケジュールタスクが処理を開始し次第、履歴に反映されます` };
+                        const activityLog = [newLogEntry].concat(currentState.activityLog || []).slice(0, 30);
+
+                        await Store.updateAiOfficeState(Object.assign({}, currentState, {
+                            employees: employees,
+                            activityLog: activityLog,
+                            updatedAt: new Date().toISOString()
+                        }));
+                    } catch (optErr) {
+                        // 見た目上の即時反応が失敗しても、コマンド自体は送信済みなので致命的ではない
+                        console.error('optimistic status update failed', optErr);
+                    }
+
+                    alert('コマンドを送信しました。担当者を「稼働中」表示に切り替えました。実際の処理は通常1時間以内に自動実行されます。今すぐ処理してほしい場合は、Claudeとのチャットでお声がけください。');
                     tick();
                 } catch (e) {
                     console.error(e);
@@ -253,16 +321,16 @@ App.Pages.ai_office = async function() {
                     sendBtn.disabled = false;
                 }
             });
-            // 日本語入力(IME)で漢字変換を確定するためのEnterまで「送信」と誤判定しないようにする。
-            // compositionstart〜compositionend の間(変換中)は isComposing=true にしておき、
-            // その間のEnterキーは無視する(e.isComposingだけだとブラウザによって挙動が揺れるため、
-            // 自前でも状態を持たせて二重にガードしている)。
+
+            // 日本語入力(IME)で漢字変換を確定するEnterキーを、誤って送信ボタンの
+            // クリックとして扱わないようにする。変換確定中(isComposing)や、
+            // それを検知できない古いブラウザ向けの keyCode===229 判定もあわせて行う。
             let isComposing = false;
             input.addEventListener('compositionstart', () => { isComposing = true; });
             input.addEventListener('compositionend', () => { isComposing = false; });
             input.addEventListener('keydown', (e) => {
                 if (e.key !== 'Enter') return;
-                if (isComposing || e.isComposing || e.keyCode === 229) return; // IME変換確定のEnterは無視
+                if (isComposing || e.isComposing || e.keyCode === 229) return;
                 sendBtn.click();
             });
         }
