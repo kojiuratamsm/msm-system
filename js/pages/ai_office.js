@@ -253,8 +253,17 @@ App.Pages.ai_office = async function() {
                     sendBtn.disabled = false;
                 }
             });
+            // 日本語入力(IME)で漢字変換を確定するためのEnterまで「送信」と誤判定しないようにする。
+            // compositionstart〜compositionend の間(変換中)は isComposing=true にしておき、
+            // その間のEnterキーは無視する(e.isComposingだけだとブラウザによって挙動が揺れるため、
+            // 自前でも状態を持たせて二重にガードしている)。
+            let isComposing = false;
+            input.addEventListener('compositionstart', () => { isComposing = true; });
+            input.addEventListener('compositionend', () => { isComposing = false; });
             input.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') sendBtn.click();
+                if (e.key !== 'Enter') return;
+                if (isComposing || e.isComposing || e.keyCode === 229) return; // IME変換確定のEnterは無視
+                sendBtn.click();
             });
         }
     }
