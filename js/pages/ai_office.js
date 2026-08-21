@@ -53,6 +53,44 @@ const AIO_DEFAULT_STATE = {
     ]
 };
 
+function aioEsc(s) {
+    return (s === undefined || s === null) ? '' : String(s).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// コマンド(ai_office_command)の status/category から、社員カードと同じ6段階のバッジ表示に変換する
+function aioCmdStatusInfo(cmd) {
+    const status = (cmd && cmd.status) || 'pending';
+    if (status === 'pending') return AIO_STATUS_LABEL.idle;           // 待機中(まだ着手前)
+    if (status === 'in_progress') return (cmd.category === 'research') ? AIO_STATUS_LABEL.research : AIO_STATUS_LABEL.active;
+    if (status === 'waiting') return AIO_STATUS_LABEL.waiting;        // 確認待ち(代表確認 or サイト修正のためチャット依頼へ誘導)
+    if (status === 'error') return AIO_STATUS_LABEL.error;
+    if (status === 'done') return AIO_STATUS_LABEL.done;
+    return AIO_STATUS_LABEL.idle;
+}
+
+function aioFormatTime(iso) {
+    if (!iso) return '';
+    try {
+        return new Date(iso).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    } catch (e) {
+        return '';
+    }
+}
+
+function aioRenderCommandRow(cmd) {
+    const s = aioCmdStatusInfo(cmd);
+    return `
+    <div class="aio-cmditem">
+      <div class="aio-cmditem-head">
+        <span class="aio-status ${s.cls}">${s.emoji} ${s.text}</span>
+        <span class="aio-cmditem-time">${aioFormatTime(cmd.createdAt)}${cmd.requestedBy ? ' / ' + aioEsc(cmd.requestedBy) : ''}</span>
+      </div>
+      <div class="aio-cmditem-text">${aioEsc(cmd.text)}</div>
+      ${cmd.result ? `<div class="aio-cmditem-result">💬 ${aioEsc(cmd.result)}</div>` : ''}
+      ${cmd.note ? `<div class="aio-cmditem-note">📌 ${aioEsc(cmd.note)}</div>` : ''}
+    </div>`;
+}
+
 function aioRenderFlow(flow) {
     if (!flow || !flow.length) return '';
     const rows = flow.map((s, i) => {
@@ -80,7 +118,7 @@ function aioRenderEmployee(e) {
     </div>`;
 }
 
-function aioBuildOfficeHTML(state) {
+function aioBuildOfficeHTML(state, commands) {
     const employees = (state && state.employees) || AIO_DEFAULT_STATE.employees;
     const activityLog = (state && state.activityLog) || AIO_DEFAULT_STATE.activityLog;
     const banner = state ? state.banner : null;
@@ -148,7 +186,12 @@ function aioBuildOfficeHTML(state) {
           <input type="text" id="aio-cmd-input" class="input-field" placeholder="例: 〇〇 投稿">
           <button class="btn-primary" id="aio-cmd-send" style="margin-top:0; white-space:nowrap;">送信</button>
         </div>
-        <p>送信したコマンドはSupabaseに記録され、Claude(チャット、または該当のスケジュールタスク)が確認して実行します。即時実行されるとは限りません。</p>
+        <p>送信したコマンドは、1時間ごとに自動実行されるスケジュールタスクが確認・処理します(即時ではありません。今すぐ処理してほしい場合は、コージさんからClaudeとのチャットで一言お声がけください)。対応できるのは「リサーチ・分析・文章ドラフト」「各事業部への指示・確認事項の整理」です。サイトの修正・機能追加の指示は自動処理の対象外のため、コージさんとのチャットで直接ご依頼ください。</p>
+      </div>
+
+      <div class="aio-cmdhistory">
+        <h3>🗂️ コマンド履歴</h3>
+        ${(!commands || commands.length === 0) ? `<p style="color:var(--text-tertiary); font-size:0.85rem;">まだ送信したコマンドはありません。</p>` : commands.map(aioRenderCommandRow).join('')}
       </div>
     </div>`;
 
@@ -161,9 +204,14 @@ App.Pages.ai_office = async function() {
     async function tick() {
         const root = document.getElementById('aio-root');
         if (!root) { if (window._aioTimer) { clearInterval(window._aioTimer); window._aioTimer = null; } return; }
-        let state = null;
-        try { state = await Store.getAiOfficeState(); } catch (e) { console.error(e); }
-        root.innerHTML = aioBuildOfficeHTML(state || AIO_DEFAULT_STATE);
+        let state = null, commands = [];
+        try {
+            [state, commands] = await Promise.all([
+                Store.getAiOfficeState(),
+                Store.getAiOfficeCommands()
+            ]);
+        } catch (e) { console.error(e); }
+        root.innerHTML = aioBuildOfficeHTML(state || AIO_DEFAULT_STATE, commands || []);
 
         const sendBtn = document.getElementById('aio-cmd-send');
         const input = document.getElementById('aio-cmd-input');
@@ -176,7 +224,8 @@ App.Pages.ai_office = async function() {
                     const user = Auth.getCurrentUser();
                     await Store.postAiOfficeCommand(text, user ? user.email : 'unknown');
                     input.value = '';
-                    alert('コマンドを送信しました。処理状況はこの画面と業務ログに反映されます。');
+                    alert('コマンドを送信しました。通常は1時間以内に自動処理されます。処理状況は下の「コマンド履歴」に反映されます。今すぐ処理してほしい場合は、Claudeとのチャットでお声がけください。');
+                    tick();
                 } catch (e) {
                     console.error(e);
                     alert('コマンドの送信に失敗しました。');
