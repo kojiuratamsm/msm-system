@@ -300,20 +300,16 @@ App.Pages.threads = async function() {
                         <label>予約日(予約する場合のみ)</label>
                         <input type="date" id="th-schedule-date">
                     </div>
-                    <div class="form-group" style="max-width:200px;">
+                    <div class="form-group" style="max-width:180px;">
                         <label>投稿時間(予約する場合のみ)</label>
-                        <select id="th-schedule-time">
-                            <option value="">選択してください</option>
-                            <option value="07:00">7:00</option>
-                            <option value="09:00">9:00</option>
-                            <option value="12:00">12:00</option>
-                            <option value="15:00">15:00</option>
-                            <option value="19:00">19:00(連投)</option>
-                            <option value="21:00">21:00(連投)</option>
-                        </select>
+                        <input type="time" id="th-schedule-time" step="60">
                     </div>
                 </div>
-                <p style="font-size:0.75rem; color:var(--text-tertiary); margin-top:-8px; margin-bottom:16px;">※マーケティング事業部の投稿スケジュール(7/9/12/15/19/21時の6枠)に合わせています</p>
+                <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:-8px; margin-bottom:16px;">
+                    <span style="font-size:0.75rem; color:var(--text-tertiary); align-self:center; margin-right:4px;">よく使う時間:</span>
+                    ${['07:00','09:00','12:00','15:00','19:00','21:00'].map(t => `<button type="button" class="btn-secondary" style="padding:4px 10px; font-size:0.75rem; margin-top:0;" onclick="document.getElementById('th-schedule-time').value='${t}'">${t}</button>`).join('')}
+                </div>
+                <p style="font-size:0.75rem; color:var(--text-tertiary); margin-top:-8px; margin-bottom:16px;">※分単位で自由に指定できます。上のボタンはマーケティング事業部の標準投稿枠(7/9/12/15/19/21時)のショートカットです</p>
                 <div style="display:flex; gap:12px;">
                     <button class="btn-secondary" onclick="savePost('draft')"><i class="ph ph-floppy-disk"></i> 下書き保存</button>
                     <button class="btn-primary" style="margin-top:0;" onclick="savePost('scheduled')"><i class="ph ph-calendar-check"></i> この日時で予約する</button>
