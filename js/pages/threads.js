@@ -295,10 +295,25 @@ App.Pages.threads = async function() {
                     </select>
                 </div>
                 <div class="th-thread-chain" id="th-thread-inputs"></div>
-                <div class="form-group" style="max-width:320px;">
-                    <label>予約日時(予約する場合のみ)</label>
-                    <input type="text" id="th-schedule-at" placeholder="2026-08-21 21:00">
+                <div style="display:flex; gap:16px; flex-wrap:wrap;">
+                    <div class="form-group" style="max-width:220px;">
+                        <label>予約日(予約する場合のみ)</label>
+                        <input type="date" id="th-schedule-date">
+                    </div>
+                    <div class="form-group" style="max-width:200px;">
+                        <label>投稿時間(予約する場合のみ)</label>
+                        <select id="th-schedule-time">
+                            <option value="">選択してください</option>
+                            <option value="07:00">7:00</option>
+                            <option value="09:00">9:00</option>
+                            <option value="12:00">12:00</option>
+                            <option value="15:00">15:00</option>
+                            <option value="19:00">19:00(連投)</option>
+                            <option value="21:00">21:00(連投)</option>
+                        </select>
+                    </div>
                 </div>
+                <p style="font-size:0.75rem; color:var(--text-tertiary); margin-top:-8px; margin-bottom:16px;">※マーケティング事業部の投稿スケジュール(7/9/12/15/19/21時の6枠)に合わせています</p>
                 <div style="display:flex; gap:12px;">
                     <button class="btn-secondary" onclick="savePost('draft')"><i class="ph ph-floppy-disk"></i> 下書き保存</button>
                     <button class="btn-primary" style="margin-top:0;" onclick="savePost('scheduled')"><i class="ph ph-calendar-check"></i> この日時で予約する</button>
@@ -522,10 +537,12 @@ App.Pages.threads = async function() {
             const textareas = Array.from(document.querySelectorAll('#th-thread-inputs textarea'));
             const trees = textareas.map(el => ({ text: el.value.trim(), views: 0, likes: 0 })).filter(t => t.text);
             if (trees.length === 0) { alert('投稿本文を入力してください。'); return; }
-            const scheduledAt = document.getElementById('th-schedule-at').value.trim();
-            if (status === 'scheduled' && !scheduledAt) { alert('予約日時を入力してください。'); return; }
+            const scheduleDate = document.getElementById('th-schedule-date').value;
+            const scheduleTime = document.getElementById('th-schedule-time').value;
+            if (status === 'scheduled' && (!scheduleDate || !scheduleTime)) { alert('予約日と投稿時間の両方を選択してください。'); return; }
+            const scheduledAt = (scheduleDate && scheduleTime) ? `${scheduleDate} ${scheduleTime}` : null;
             await Store.addCustomer('threads_post', {
-                trees, status, scheduledAt: scheduledAt || null,
+                trees, status, scheduledAt,
                 createdBy: user.name || user.email, createdAt: new Date().toISOString()
             });
             await loadAll();

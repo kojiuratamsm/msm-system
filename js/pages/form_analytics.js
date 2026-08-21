@@ -1,3 +1,74 @@
+// ============================================================================
+// 「今月◯名が診断を受けています」の表示人数を計算する
+// ※ /analyticsform/form.js (診断フォーム本体) にある同名関数と完全に同じロジック。
+//   管理画面に「今、実際に何名と表示されているか」を正しく表示するため、
+//   同じ計算式をそのまま複製しています(2ファイルは別々に読み込まれるスクリプト
+//   のため、共通モジュール化はせずロジックを完全一致させる形にしています。
+//   もし表示ルールを変更する場合は、両方のファイルを同時に修正してください)。
+// コージさんからの直接指示による仕様(2026-08-20):
+//   ・1ヶ月のMAXは32〜45名の範囲におさまる(月末までにその範囲内であればOK)
+//   ・日付が変わっているのに人数が変わらないのはNG(必ず毎日変化する)
+//   ・翌日が前日より低い数値になるのはNG(必ず増える。減らない)
+//   ・1日あたりの振り幅は1〜2名(いきなり大きく増えるのはNG)
+//   ・それ以外は自動ランダムでよい
+// ============================================================================
+function getMonthlyDiagnosisCount(targetDate) {
+    const date = targetDate || new Date();
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1; // 1-12
+    const dayOfMonth = date.getDate();
+    const daysInMonth = new Date(year, month, 0).getDate();
+
+    const seed = year * 100 + month;
+
+    function mulberry32(a) {
+        return function () {
+            a |= 0; a = (a + 0x6D2B79F5) | 0;
+            let t = Math.imul(a ^ (a >>> 15), 1 | a);
+            t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+    }
+    const rand = mulberry32(seed);
+
+    const startVal = 2 + Math.floor(rand() * 3);
+
+    const counts = [null, startVal];
+    for (let day = 2; day <= daysInMonth; day++) {
+        const remainingAfter = daysInMonth - day;
+        const prev = counts[day - 1];
+        const candidates = [1, 2].filter(inc => {
+            const v = prev + inc;
+            return (v + remainingAfter * 1 <= 45) && (v + remainingAfter * 2 >= 32);
+        });
+        let inc;
+        if (candidates.length === 2) {
+            inc = rand() < 0.6 ? 1 : 2;
+        } else if (candidates.length === 1) {
+            inc = candidates[0];
+        } else {
+            inc = (prev + 1 + remainingAfter * 2 >= 32) ? 1 : 2;
+        }
+        counts[day] = prev + inc;
+    }
+
+    return counts[Math.min(dayOfMonth, daysInMonth)];
+}
+
+// 今月1日〜末日までの人数の推移をすべて計算して返す(管理画面での確認用)
+function getMonthlyDiagnosisCountTrend(targetDate) {
+    const date = targetDate || new Date();
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const todayDay = date.getDate();
+    const trend = [];
+    for (let d = 1; d <= daysInMonth; d++) {
+        trend.push({ day: d, count: getMonthlyDiagnosisCount(new Date(year, month - 1, d)), isToday: d === todayDay });
+    }
+    return trend;
+}
+
 App.Pages.form_analytics = async function() {
     const user = Auth.getCurrentUser();
     if (!user || user.role !== 'admin') {
@@ -77,6 +148,41 @@ App.Pages.form_analytics = async function() {
     });
 
     const completionRate = starts > 0 ? Math.round((submissions / starts) * 100) : 0;
+
+    // 「今月◯名が診断を受けています」の現在の表示値
+    const trend = getMonthlyDiagnosisCountTrend();
+    const todayEntry = trend.find(t => t.isToday);
+    const todayCount = todayEntry ? todayEntry.count : trend[trend.length - 1].count;
+    const monthFinal = trend[trend.length - 1].count;
+    const todayLabel = new Date().toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo', year: 'numeric', month: 'long', day: 'numeric' });
+
+    let diagnosisCountHtml = `
+        <div class="card" style="padding:24px; margin-bottom:24px; border-left:4px solid #dc3545;">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
+                <div>
+                    <div style="color:var(--text-secondary); font-size:0.85rem; font-weight:600; margin-bottom:6px;">OP画面(診断スタートボタンの下)に表示中の人数</div>
+                    <div style="font-size:2rem; font-weight:700; color:#dc3545;">【今月${todayCount}名が診断を受けています】</div>
+                    <div style="font-size:0.78rem; color:var(--text-tertiary); margin-top:4px;">${todayLabel} 時点 / 今月末の着地予定:${monthFinal}名(ルール上32〜45名の範囲内で自動決定・毎日1〜2名ずつ自動で増加)</div>
+                </div>
+                <button class="btn btn-secondary btn-sm" id="toggle-diagnosis-trend-btn"><i class="ph ph-chart-line"></i> 今月の推移を見る</button>
+            </div>
+            <div id="diagnosis-trend-table" style="display:none; margin-top:20px; overflow-x:auto;">
+                <table class="table" style="width:100%; border-collapse:collapse; min-width:600px;">
+                    <thead>
+                        <tr style="border-bottom:2px solid #eef2f7; background:#f8f9fc;">
+                            ${trend.map(t => `<th style="padding:8px; font-size:0.75rem; color:#666; text-align:center; ${t.isToday ? 'background:#fce8e6; color:#c5221f; font-weight:700;' : ''}">${t.day}日</th>`).join('')}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            ${trend.map(t => `<td style="padding:8px; font-size:0.8rem; text-align:center; font-weight:600; ${t.isToday ? 'background:#fce8e6; color:#c5221f;' : ''}">${t.count}</td>`).join('')}
+                        </tr>
+                    </tbody>
+                </table>
+                <p style="font-size:0.75rem; color:var(--text-tertiary); margin-top:8px;">※先の日付分もあらかじめ計算式で決まっています(サーバー保存ではなく日付から毎回自動計算しているため、未来の日も表示できます)。</p>
+            </div>
+        </div>
+    `;
 
     let kpiHtml = `
         <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 24px; margin-bottom:32px;">
@@ -217,11 +323,26 @@ App.Pages.form_analytics = async function() {
 
     document.getElementById('analytics-content').innerHTML = `
         <div style="text-align:left;">
+            ${diagnosisCountHtml}
             ${kpiHtml}
             ${funnelHtml}
             ${responsesHtml}
         </div>
     `;
+
+    // 「今月の推移を見る」ボタンのクリックハンドラ
+    const toggleTrendBtn = document.getElementById('toggle-diagnosis-trend-btn');
+    if (toggleTrendBtn) {
+        toggleTrendBtn.addEventListener('click', () => {
+            const table = document.getElementById('diagnosis-trend-table');
+            if (!table) return;
+            const isHidden = table.style.display === 'none';
+            table.style.display = isHidden ? 'block' : 'none';
+            toggleTrendBtn.innerHTML = isHidden
+                ? '<i class="ph ph-chart-line"></i> 推移を閉じる'
+                : '<i class="ph ph-chart-line"></i> 今月の推移を見る';
+        });
+    }
 
     // CSVダウンロードボタンのクリックハンドラ
     const downloadCsvBtn = document.getElementById('download-csv-btn');
