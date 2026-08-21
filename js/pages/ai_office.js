@@ -204,6 +204,16 @@ App.Pages.ai_office = async function() {
     async function tick() {
         const root = document.getElementById('aio-root');
         if (!root) { if (window._aioTimer) { clearInterval(window._aioTimer); window._aioTimer = null; } return; }
+
+        // コマンド入力欄に入力中(フォーカスあり)の場合は、定期更新による再描画で
+        // 入力中の文字やフォーカスが消し飛ばないよう、いったん自動更新をスキップする。
+        // (この画面は6秒おきにDOM全体を作り直すため、何もしないと入力欄ごと
+        //  作り直されてフォーカスが外れ、「勝手に外れて入力できなくなる」原因になっていた)
+        const existingInput = document.getElementById('aio-cmd-input');
+        if (existingInput && document.activeElement === existingInput) {
+            return;
+        }
+
         let state = null, commands = [];
         try {
             [state, commands] = await Promise.all([
@@ -211,10 +221,20 @@ App.Pages.ai_office = async function() {
                 Store.getAiOfficeCommands()
             ]);
         } catch (e) { console.error(e); }
+
+        // 万が一、上のフォーカス確認とawaitの間に入力を始めた場合に備えて、
+        // 再描画の直前にもう一度だけ値とフォーカス状態を保持しておく。
+        const inputBeforeRender = document.getElementById('aio-cmd-input');
+        const hadFocus = inputBeforeRender && document.activeElement === inputBeforeRender;
+        if (hadFocus) { return; } // 入力中に切り替わっていたら、この回の更新は諦めて次回に回す
+        const preservedValue = inputBeforeRender ? inputBeforeRender.value : '';
+
         root.innerHTML = aioBuildOfficeHTML(state || AIO_DEFAULT_STATE, commands || []);
 
         const sendBtn = document.getElementById('aio-cmd-send');
         const input = document.getElementById('aio-cmd-input');
+        if (input && preservedValue) input.value = preservedValue; // 送信前の下書きが残っていれば復元
+
         if (sendBtn && input) {
             sendBtn.addEventListener('click', async () => {
                 const text = input.value.trim();
