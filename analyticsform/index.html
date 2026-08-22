@@ -21,6 +21,8 @@
     </div>
     
     <div id="form-container" class="form-container" style="display: none;">
+        <button id="form-close-btn" class="form-close-btn" aria-label="閉じる">✕</button>
+
         <div id="slide-container" class="slide-container">
             <!-- Slides will be injected here by JS -->
         </div>
@@ -30,6 +32,19 @@
         <div class="navigation-controls" id="nav-controls" style="display:none;">
             <button class="nav-btn" id="btn-prev" style="opacity: 0.5;"><i class="ph ph-caret-up"></i></button>
             <button class="nav-btn" id="btn-next"><i class="ph ph-caret-down"></i></button>
+        </div>
+
+        <!-- 回答途中で×ボタンを押した際の離脱確認POP(2026-08-22 コージさん指示により追加) -->
+        <div class="confirm-overlay" id="confirm-overlay">
+            <div class="confirm-card">
+                <div class="confirm-icon">!</div>
+                <div class="confirm-title">回答を中断しますか？</div>
+                <div class="confirm-body">ここまで入力した回答内容は保存されず<br><b>すべて削除されます。</b><br>本当に終了しますか？</div>
+                <div class="confirm-actions">
+                    <button class="confirm-btn confirm-btn-primary" id="confirm-continue-btn">続ける</button>
+                    <button class="confirm-btn confirm-btn-ghost" id="confirm-exit-btn">終了する</button>
+                </div>
+            </div>
         </div>
     </div>
 

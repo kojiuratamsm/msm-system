@@ -71,6 +71,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         renderForm();
+        setupCloseConfirm();
 
         // カレンダー日程調整設問の初期読み込み
         document.querySelectorAll('.booking-widget-container').forEach(container => {
@@ -597,6 +598,54 @@ function closeFormWindow() {
         const guide = document.getElementById('close-guide');
         if (guide) guide.style.display = 'block';
     }
+}
+
+// ============================================================================
+// 回答途中で×ボタンを押した際の離脱確認POP(コージさん指示、2026-08-22)
+// ・OP画面(まだ何も回答していない)や、既に送信済みのED画面ではまだ/もう
+//   削除されるデータが無いため、確認なしでそのまま閉じる。
+// ・質問中(question)・確認画面(review)の間に×を押した場合のみ、
+//   「ここまでの回答が削除されます」という確認POPを表示する。
+// ============================================================================
+function setupCloseConfirm() {
+    const closeBtn = document.getElementById('form-close-btn');
+    const overlay = document.getElementById('confirm-overlay');
+    const continueBtn = document.getElementById('confirm-continue-btn');
+    const exitBtn = document.getElementById('confirm-exit-btn');
+    if (!closeBtn || !overlay || !continueBtn || !exitBtn) return;
+
+    const hasUnsavedAnswer = () => {
+        const slide = document.getElementById(`slide-${currentSlideIndex}`);
+        if (!slide) return false;
+        const type = slide.getAttribute('data-type');
+        return type === 'question' || type === 'review';
+    };
+
+    closeBtn.addEventListener('click', () => {
+        if (hasUnsavedAnswer()) {
+            overlay.classList.add('show');
+        } else {
+            closeFormWindow();
+        }
+    });
+
+    continueBtn.addEventListener('click', () => {
+        overlay.classList.remove('show');
+    });
+
+    exitBtn.addEventListener('click', async () => {
+        overlay.classList.remove('show');
+        // 「終了する」を押した時点で、まだgoNext()を通っていない(＝Supabaseに
+        // 保存される前の)入力中の回答が answers オブジェクトには残っているため、
+        // 管理画面の「回答データ一覧」で最後まで正確に反映されるよう、閉じる前に
+        // 最終状態を一度だけ保存してから閉じる。
+        try {
+            await saveResponseProgress('abandoned');
+        } catch (e) {
+            console.error('final saveResponseProgress before exit failed:', e);
+        }
+        closeFormWindow();
+    });
 }
 
 // カレンダー日程調整関連の関数
