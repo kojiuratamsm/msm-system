@@ -601,6 +601,35 @@ function closeFormWindow() {
 }
 
 // ============================================================================
+// 離脱確認POPの「終了する」・×ボタン単独クリック時に使うタブクローズ処理
+// (コージさん指示、2026-08-22)
+// closeFormWindow() はED画面(診断完了後)の「終了する」ボタン専用として、
+// formData.ed.redirectUrl (LINE誘導など) がある場合はそちらへリダイレクトする
+// 仕様のまま残す。一方こちらは「回答を完了せずに自主的に離脱する」ケースなので、
+// ED画面の誘導設定は使わず、必ずタブを閉じるだけにする。
+// ============================================================================
+function closeTabOnly() {
+    window.close();
+
+    // ブラウザの仕様上、スクリプトで開いたタブでない場合は window.close() が
+    // 効かないことがあるため、少し待っても閉じなかった場合のフォールバックとして、
+    // 離脱確認POPのカード内に「手動でタブを閉じてください」という案内を表示する。
+    // (実際に閉じられた場合は、この処理が実行されてもユーザーには見えない)
+    setTimeout(() => {
+        const overlay = document.getElementById('confirm-overlay');
+        const card = overlay ? overlay.querySelector('.confirm-card') : null;
+        if (overlay && card) {
+            card.innerHTML = `
+                <div class="confirm-icon" style="background:#e6f4ea; color:#198754;">✓</div>
+                <div class="confirm-title">ご回答ありがとうございました</div>
+                <div class="confirm-body">自動で画面が閉じない場合は、<br>このタブを閉じてください。</div>
+            `;
+            overlay.classList.add('show');
+        }
+    }, 300);
+}
+
+// ============================================================================
 // 回答途中で×ボタンを押した際の離脱確認POP(コージさん指示、2026-08-22)
 // ・OP画面(まだ何も回答していない)や、既に送信済みのED画面ではまだ/もう
 //   削除されるデータが無いため、確認なしでそのまま閉じる。
@@ -625,7 +654,7 @@ function setupCloseConfirm() {
         if (hasUnsavedAnswer()) {
             overlay.classList.add('show');
         } else {
-            closeFormWindow();
+            closeTabOnly();
         }
     });
 
@@ -634,7 +663,6 @@ function setupCloseConfirm() {
     });
 
     exitBtn.addEventListener('click', async () => {
-        overlay.classList.remove('show');
         // 「終了する」を押した時点で、まだgoNext()を通っていない(＝Supabaseに
         // 保存される前の)入力中の回答が answers オブジェクトには残っているため、
         // 管理画面の「回答データ一覧」で最後まで正確に反映されるよう、閉じる前に
@@ -644,7 +672,7 @@ function setupCloseConfirm() {
         } catch (e) {
             console.error('final saveResponseProgress before exit failed:', e);
         }
-        closeFormWindow();
+        closeTabOnly();
     });
 }
 
