@@ -161,7 +161,7 @@ App.Pages.form_analytics = async function() {
             <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
                 <div>
                     <div style="color:var(--text-secondary); font-size:0.85rem; font-weight:600; margin-bottom:6px;">OP画面(診断スタートボタンの下)に表示中の人数</div>
-                    <div style="font-size:2rem; font-weight:700; color:#dc3545;">【今月${todayCount}名が診断を受けています】</div>
+                    <div style="font-size:2rem; font-weight:700; color:#dc3545;">【今月${todayCount}名が診断を申込しています】</div>
                     <div style="font-size:0.78rem; color:var(--text-tertiary); margin-top:4px;">${todayLabel} 時点 / 今月末の着地予定:${monthFinal}名(ルール上32〜45名の範囲内で自動決定・毎日1〜2名ずつ自動で増加)</div>
                 </div>
                 <button class="btn btn-secondary btn-sm" id="toggle-diagnosis-trend-btn"><i class="ph ph-chart-line"></i> 今月の推移を見る</button>

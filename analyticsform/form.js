@@ -197,7 +197,7 @@ function renderForm() {
             <div class="slide-title" style="${applyThemeStyle(true, formData.op)}">${formData.op.title || ''}</div>
             <div class="slide-desc" style="${applyThemeStyle(false, formData.op)}">${(formData.op.description || '').replace(/\n/g, '<br>')}</div>
             <button class="btn-primary" onclick="handleOpStart()">${formData.op.buttonText || 'スタート'}</button>
-            <div class="diagnosis-count-text">【今月${getMonthlyDiagnosisCount()}名が診断を受けています】</div>
+            <div class="diagnosis-count-text">【今月${getMonthlyDiagnosisCount()}名が診断を申込しています】</div>
         </div>
     `;
 
