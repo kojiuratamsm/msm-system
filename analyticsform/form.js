@@ -117,13 +117,46 @@ document.addEventListener('DOMContentLoaded', async () => {
 //   ・翌日が前日より低い数値になるのはNG(必ず増える。減らない)
 //   ・1日あたりの振り幅は1〜2名(いきなり大きく増えるのはNG)
 //   ・それ以外は自動ランダムでよい
+//
+// キャンペーン月の固定表示(コージさん指示、2026-09-04・2026-09-04追加指示で確定値に変更):
+//   2026年9月のみ、通常のランダム計算式ではなく「日付ごとの確定値」を
+//   そのまま表示する。指定内容:9/4=17名, 9/5=22名, 9/6=25名、
+//   月末(9/30)着地=86名。9/7以降は9/6(25名)→9/30(86名)を毎日必ず
+//   増える(2〜3名/日)なだらかな数列で自動補間した固定値。
+//   FIXED_MONTHLY_SEQUENCESに登録されていない月(10月以降含む)は
+//   自動的に元の通常ロジック(2〜4名開始/32〜45名着地のランダム式)に
+//   戻るため、来月以降は何も操作しなくてよい。
 // ============================================================================
+const FIXED_MONTHLY_SEQUENCES = {
+    // "YYYY-M": [1日目の値, 2日目の値, ... 月末までの値]
+    "2026-9": [13, 14, 15, 17, 22, 25, 28, 30, 33, 35, 38, 40, 43, 45, 48, 50, 53, 55, 58, 60, 63, 65, 68, 70, 73, 75, 78, 80, 83, 86],
+};
+
 function getMonthlyDiagnosisCount(targetDate) {
     const date = targetDate || new Date();
     const year = date.getFullYear();
     const month = date.getMonth() + 1; // 1-12
     const dayOfMonth = date.getDate();
     const daysInMonth = new Date(year, month, 0).getDate();
+
+    // 固定シーケンスが設定されている月は、その日の確定値をそのまま返す。
+    const fixedSeq = FIXED_MONTHLY_SEQUENCES[`${year}-${month}`];
+    if (fixedSeq) {
+        const idx = Math.min(dayOfMonth, fixedSeq.length) - 1;
+        return fixedSeq[idx];
+    }
+
+    // ---- ここから通常月の自動ランダム計算式(2026-08-20仕様) ----
+    // 絶対ルール:
+    //   ・1ヶ月のMAXは32〜45名の範囲におさまる(月末までにその範囲内であればOK)
+    //   ・日付が変わっているのに人数が変わらないのはNG(必ず毎日変化する)
+    //   ・翌日が前日より低い数値になるのはNG(必ず増える。減らない)
+    //   ・1日あたりの振り幅は1〜2名(いきなり大きく増えるのはNG)
+    //   ・それ以外は自動ランダムでよい
+    const startMin = 2;
+    const startMax = 4;
+    const endMin = 32;
+    const endMax = 45;
 
     // 年月ごとに固定されるseed → 同じ月なら常に同じ数列(一貫性のため)。
     // 月が変われば別のseedになるので、結果として毎月自動的にリセット・再生成される。
@@ -141,7 +174,8 @@ function getMonthlyDiagnosisCount(targetDate) {
     const rand = mulberry32(seed);
 
     // 1日目の人数(2〜4名からランダムに決定。例:1日は2名〜)
-    const startVal = 2 + Math.floor(rand() * 3);
+    const startRange = startMax - startMin + 1;
+    const startVal = startMin + Math.floor(rand() * startRange);
 
     // 2日目以降、前日より1〜2名ずつ積み上げていく。
     // 「残り日数ぶんを最速(+2/日)で増やしても45名を超えない」
@@ -154,7 +188,7 @@ function getMonthlyDiagnosisCount(targetDate) {
         const prev = counts[day - 1];
         const candidates = [1, 2].filter(inc => {
             const v = prev + inc;
-            return (v + remainingAfter * 1 <= 45) && (v + remainingAfter * 2 >= 32);
+            return (v + remainingAfter * 1 <= endMax) && (v + remainingAfter * 2 >= endMin);
         });
         let inc;
         if (candidates.length === 2) {
@@ -163,7 +197,7 @@ function getMonthlyDiagnosisCount(targetDate) {
             inc = candidates[0];
         } else {
             // 通常はここに来ないはずの保険(範囲内に収まる側を優先)
-            inc = (prev + 1 + remainingAfter * 2 >= 32) ? 1 : 2;
+            inc = (prev + 1 + remainingAfter * 2 >= endMin) ? 1 : 2;
         }
         counts[day] = prev + inc;
     }

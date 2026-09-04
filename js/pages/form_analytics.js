@@ -11,13 +11,51 @@
 //   ・翌日が前日より低い数値になるのはNG(必ず増える。減らない)
 //   ・1日あたりの振り幅は1〜2名(いきなり大きく増えるのはNG)
 //   ・それ以外は自動ランダムでよい
+//
+// キャンペーン月の固定表示(コージさん指示、2026-09-04・2026-09-04追加指示で確定値に変更):
+//   2026年9月のみ、通常のランダム計算式ではなく「日付ごとの確定値」を
+//   そのまま表示する。指定内容:9/4=17名, 9/5=22名, 9/6=25名、
+//   月末(9/30)着地=86名。9/7以降は9/6(25名)→9/30(86名)を毎日必ず
+//   増える(2〜3名/日)なだらかな数列で自動補間した固定値。
+//   FIXED_MONTHLY_SEQUENCESに登録されていない月(10月以降含む)は
+//   自動的に元の通常ロジック(2〜4名開始/32〜45名着地のランダム式)に
+//   戻る。/analyticsform/form.js 側と完全に同じ設定にしてあるので、
+//   必ず両方を同時に直すこと。
 // ============================================================================
+const FIXED_MONTHLY_SEQUENCES = {
+    // "YYYY-M": [1日目の値, 2日目の値, ... 月末までの値]
+    "2026-9": [13, 14, 15, 17, 22, 25, 28, 30, 33, 35, 38, 40, 43, 45, 48, 50, 53, 55, 58, 60, 63, 65, 68, 70, 73, 75, 78, 80, 83, 86],
+};
+
+// 管理画面のラベル表示用:その年月が「固定値表示」か「通常の自動ランダム」かと、
+// 月末着地の値(固定値表示の場合はその確定値、通常月の場合は32〜45のレンジ)を返す。
+function getMonthDisplayInfo(year, month) {
+    const fixedSeq = FIXED_MONTHLY_SEQUENCES[`${year}-${month}`];
+    if (fixedSeq) {
+        return { isFixed: true, endValue: fixedSeq[fixedSeq.length - 1] };
+    }
+    return { isFixed: false, endMin: 32, endMax: 45 };
+}
+
 function getMonthlyDiagnosisCount(targetDate) {
     const date = targetDate || new Date();
     const year = date.getFullYear();
     const month = date.getMonth() + 1; // 1-12
     const dayOfMonth = date.getDate();
     const daysInMonth = new Date(year, month, 0).getDate();
+
+    // 固定シーケンスが設定されている月は、その日の確定値をそのまま返す。
+    const fixedSeq = FIXED_MONTHLY_SEQUENCES[`${year}-${month}`];
+    if (fixedSeq) {
+        const idx = Math.min(dayOfMonth, fixedSeq.length) - 1;
+        return fixedSeq[idx];
+    }
+
+    // ---- ここから通常月の自動ランダム計算式(2026-08-20仕様) ----
+    const startMin = 2;
+    const startMax = 4;
+    const endMin = 32;
+    const endMax = 45;
 
     const seed = year * 100 + month;
 
@@ -31,7 +69,8 @@ function getMonthlyDiagnosisCount(targetDate) {
     }
     const rand = mulberry32(seed);
 
-    const startVal = 2 + Math.floor(rand() * 3);
+    const startRange = startMax - startMin + 1;
+    const startVal = startMin + Math.floor(rand() * startRange);
 
     const counts = [null, startVal];
     for (let day = 2; day <= daysInMonth; day++) {
@@ -39,7 +78,7 @@ function getMonthlyDiagnosisCount(targetDate) {
         const prev = counts[day - 1];
         const candidates = [1, 2].filter(inc => {
             const v = prev + inc;
-            return (v + remainingAfter * 1 <= 45) && (v + remainingAfter * 2 >= 32);
+            return (v + remainingAfter * 1 <= endMax) && (v + remainingAfter * 2 >= endMin);
         });
         let inc;
         if (candidates.length === 2) {
@@ -47,7 +86,7 @@ function getMonthlyDiagnosisCount(targetDate) {
         } else if (candidates.length === 1) {
             inc = candidates[0];
         } else {
-            inc = (prev + 1 + remainingAfter * 2 >= 32) ? 1 : 2;
+            inc = (prev + 1 + remainingAfter * 2 >= endMin) ? 1 : 2;
         }
         counts[day] = prev + inc;
     }
@@ -155,6 +194,11 @@ App.Pages.form_analytics = async function() {
     const todayCount = todayEntry ? todayEntry.count : trend[trend.length - 1].count;
     const monthFinal = trend[trend.length - 1].count;
     const todayLabel = new Date().toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo', year: 'numeric', month: 'long', day: 'numeric' });
+    const nowJst = new Date();
+    const displayInfo = getMonthDisplayInfo(nowJst.getFullYear(), nowJst.getMonth() + 1);
+    const rangeLabel = displayInfo.isFixed
+        ? `今月は指定の固定値で表示中(月末${displayInfo.endValue}名着地予定)`
+        : `ルール上${displayInfo.endMin}〜${displayInfo.endMax}名の範囲内で自動決定・毎日1〜2名ずつ自動で増加`;
 
     let diagnosisCountHtml = `
         <div class="card" style="padding:24px; margin-bottom:24px; border-left:4px solid #dc3545;">
@@ -162,7 +206,7 @@ App.Pages.form_analytics = async function() {
                 <div>
                     <div style="color:var(--text-secondary); font-size:0.85rem; font-weight:600; margin-bottom:6px;">OP画面(診断スタートボタンの下)に表示中の人数</div>
                     <div style="font-size:2rem; font-weight:700; color:#dc3545;">【今月${todayCount}名が診断を申込しています】</div>
-                    <div style="font-size:0.78rem; color:var(--text-tertiary); margin-top:4px;">${todayLabel} 時点 / 今月末の着地予定:${monthFinal}名(ルール上32〜45名の範囲内で自動決定・毎日1〜2名ずつ自動で増加)</div>
+                    <div style="font-size:0.78rem; color:var(--text-tertiary); margin-top:4px;">${todayLabel} 時点 / 今月末の着地予定:${monthFinal}名(${rangeLabel})</div>
                 </div>
                 <button class="btn btn-secondary btn-sm" id="toggle-diagnosis-trend-btn"><i class="ph ph-chart-line"></i> 今月の推移を見る</button>
             </div>
