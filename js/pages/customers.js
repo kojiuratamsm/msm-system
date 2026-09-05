@@ -59,7 +59,7 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
         if (!startMonthStr) return '';
         const [yyyy, mm] = startMonthStr.split('-');
         let date = new Date(parseInt(yyyy), parseInt(mm) - 1, 1);
-        date.setMonth(date.getMonth() + 11); // 12 months duration means +11 months from start month (inclusive)
+        date.setMonth(date.getMonth() + 5); // 2026-09-04以降:最低利用期間が6ヶ月に変更(6ヶ月分=+5ヶ月)。既に保存済みの契約(旧12ヶ月分)のendMonthは触らないので、過去のクライアントは12ヶ月表示のまま残る。
         return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
     };
 
@@ -164,7 +164,7 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                                 </select>
                             </div>
                             <div class="form-group"><label>契約月</label><input type="month" id="meo-month" required onchange="onAddMeoMonthChange(event)"></div>
-                            <div class="form-group"><label>契約満了予定 (12ヶ月後)</label><input type="text" id="meo-end-month" disabled></div>
+                            <div class="form-group"><label>契約満了予定 (6ヶ月後)</label><input type="text" id="meo-end-month" disabled></div>
                             <div class="form-group"><label>ステータス</label>
                                 <select id="meo-tag" onclick="if(!checkAdmin()) return false;">
                                     <option value="契約中">契約中</option>
