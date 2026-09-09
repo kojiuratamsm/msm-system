@@ -172,6 +172,91 @@ const Store = {
         await supabase.from('customers').delete().eq('service_type', 'meo_form_response');
     },
 
+    // === Survey (複数作成可能な「アンケート」機能) ===
+    // 分析フォーム(meo_form)と全く同じデータ構造(title/theme/op/ed/review/questions[])を使うが、
+    // meo_formは customers テーブルに service_type='meo_form' の行が1件だけ、という前提の設計だったのに対し、
+    // アンケートは複数作成できるようにするため service_type='survey_definition' の行を複数持たせ、
+    // 各行の id がそのまま surveyId になる(1アンケート = 1行)。
+    // 回答(survey_response)・アクセス統計(survey_stats)は、それぞれの data.surveyId で
+    // どのアンケートに属するデータかを紐付ける(この点だけが meo_form_response/meo_form_stats との違い)。
+    // ※既存のMEO Form関連メソッド(getMEOForm等、上記)は一切変更していない。
+    // ※v1では calendar_booking(カレンダー日程調整)質問タイプ、および UTAGE/Googleカレンダー/Chatwork
+    //   の外部連携設定パネルは意図的に含めていない。理由:
+    //   ・api/calendar.js, api/booking.js が service_type='meo_form' 固定でフォームを検索する実装のため、
+    //     このままではアンケート(service_type='survey_definition')からは動作しない。
+    //   ・かつ、これらは本番稼働中のAPIであり、この環境からは実際に呼び出してテストする手段がない。
+    //   ・そのため、未検証のままバックエンドAPIを改修して事故(既存の分析フォームの日程調整機能を壊す等)
+    //     を起こすリスクを避け、v1はテキスト/選択肢系の質問タイプのみに絞った。
+    //   ・Chatwork通知については、api/chatwork.js 側は認証情報(service_type='meo_form_secrets')を
+    //     読むだけでフォームの種類は問わない汎用実装のため、アンケート送信時にも問題なく再利用できる
+    //     (通知先チャットルームは分析フォームと共通の1部屋になる制約付き)。
+    async getSurveys() {
+        const { data, error } = await supabase.from('customers').select('*').eq('service_type', 'survey_definition').order('id', { ascending: false });
+        if (error) console.error(error);
+        return (data || []).map(row => ({ id: row.id, ...row.data }));
+    },
+    async getSurvey(surveyId) {
+        const { data, error } = await supabase.from('customers').select('*').eq('service_type', 'survey_definition').eq('id', surveyId).single();
+        if (error || !data) return null;
+        return { id: data.id, ...data.data };
+    },
+    async saveSurvey(surveyId, formData) {
+        if (surveyId) {
+            await supabase.from('customers').update({ data: formData }).eq('id', surveyId).eq('service_type', 'survey_definition');
+            return surveyId;
+        } else {
+            const id = Date.now();
+            await supabase.from('customers').insert([{ id, service_type: 'survey_definition', data: formData }]);
+            return id;
+        }
+    },
+    async duplicateSurvey(surveyId) {
+        const original = await this.getSurvey(surveyId);
+        if (!original) return null;
+        const { id: _oldId, ...formData } = original;
+        formData.title = (formData.title || 'アンケート') + 'のコピー';
+        const newId = Date.now();
+        await supabase.from('customers').insert([{ id: newId, service_type: 'survey_definition', data: formData }]);
+        return newId;
+    },
+    async deleteSurvey(surveyId) {
+        // アンケート本体と、それに紐づく回答・統計データもまとめて削除する(残骸を残さない)
+        await supabase.from('customers').delete().eq('id', surveyId).eq('service_type', 'survey_definition');
+        const { data: responses } = await supabase.from('customers').select('id, data').eq('service_type', 'survey_response');
+        const resIds = (responses || []).filter(r => r.data && r.data.surveyId == surveyId).map(r => r.id);
+        if (resIds.length > 0) await supabase.from('customers').delete().in('id', resIds);
+        const { data: stats } = await supabase.from('customers').select('id, data').eq('service_type', 'survey_stats');
+        const statIds = (stats || []).filter(r => r.data && r.data.surveyId == surveyId).map(r => r.id);
+        if (statIds.length > 0) await supabase.from('customers').delete().in('id', statIds);
+    },
+    async addSurveyResponse(surveyId, responseData) {
+        const id = Date.now();
+        await supabase.from('customers').insert([{ id, service_type: 'survey_response', data: { ...responseData, surveyId } }]);
+        return id;
+    },
+    async getSurveyResponses(surveyId) {
+        const { data } = await supabase.from('customers').select('*').eq('service_type', 'survey_response').order('id', { ascending: false });
+        return (data || []).map(r => ({ id: r.id, ...r.data })).filter(r => r.surveyId == surveyId);
+    },
+    async logSurveyStat(surveyId, statType, detailId = null) {
+        // statType: 'view', 'start', 'reach', 'submission'
+        const id = Date.now();
+        const statData = { surveyId, type: statType, detail: detailId, timestamp: new Date().toISOString() };
+        await supabase.from('customers').insert([{ id, service_type: 'survey_stats', data: statData }]);
+    },
+    async getSurveyStats(surveyId) {
+        const { data } = await supabase.from('customers').select('*').eq('service_type', 'survey_stats');
+        return (data || []).map(r => ({ id: r.id, ...r.data })).filter(r => r.surveyId == surveyId);
+    },
+    async clearSurveyStatsAndResponses(surveyId) {
+        const responses = await this.getSurveyResponses(surveyId);
+        const resIds = responses.map(r => r.id);
+        if (resIds.length > 0) await supabase.from('customers').delete().in('id', resIds);
+        const stats = await this.getSurveyStats(surveyId);
+        const statIds = stats.map(r => r.id);
+        if (statIds.length > 0) await supabase.from('customers').delete().in('id', statIds);
+    },
+
     // Targets and KPIs
     async getTargetsKpis() {
         const { data } = await supabase.from('customers').select('*').eq('service_type', 'targets_kpis');

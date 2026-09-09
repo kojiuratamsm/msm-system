@@ -1,0 +1,513 @@
+:root {
+    --primary-color: #0d6efd;
+    --text-primary: #1a1a1a;
+    --text-secondary: #666666;
+    --bg-color: #fdfbfb;
+    --error-color: #dc3545;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-primary);
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    touch-action: manipulation; /* ダブルタップズームの禁止 */
+}
+
+/* Beautiful Gradient Background */
+body::before {
+    content: ''; position: absolute; bottom: -20%; right: -20%; width: 50vw; height: 50vw;
+    background: radial-gradient(circle, rgba(235,93,149,0.8) 0%, rgba(246,149,94,0.6) 50%, transparent 80%);
+    filter: blur(80px); z-index: -1; pointer-events: none;
+}
+body::after {
+    content: ''; position: absolute; top: -10%; left: -10%; width: 40vw; height: 40vw;
+    background: radial-gradient(circle, rgba(255,255,255,0.8) 0%, transparent 70%);
+    filter: blur(40px); z-index: -1; pointer-events: none;
+}
+
+.loading-screen {
+    font-size: 3rem;
+    color: var(--primary-color);
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    transition: opacity 0.5s;
+}
+
+.form-container {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    max-width: 800px;
+    margin: 0 auto;
+    opacity: 0;
+    transition: opacity 0.5s;
+}
+
+.slide-container {
+    width: 100%;
+    height: 100%;
+    position: relative;
+}
+
+.slide {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    padding: 60px 40px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(40px);
+    transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.slide.active {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+}
+
+.slide.prev {
+    transform: translateY(-40px);
+}
+
+/* Scrollable Review Page */
+.slide.scrollable {
+    display: block !important;
+    overflow-y: auto !important;
+    padding-top: 80px;
+    padding-bottom: 120px;
+}
+
+.slide-img-container {
+    text-align: center;
+    margin-bottom: 32px;
+    width: 100%;
+}
+.slide-img {
+    max-width: 100%;
+    max-height: 250px;
+    border-radius: 12px;
+    object-fit: cover;
+    box-shadow: 0 12px 24px rgba(0,0,0,0.1);
+}
+
+.slide-title {
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin-bottom: 16px;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    width: 100%;
+}
+
+.slide-desc {
+    font-size: 1.1rem;
+    margin-bottom: 40px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    width: 100%;
+}
+
+.required-mark {
+    color: var(--error-color);
+    margin-left: 4px;
+    font-size: 0.9em;
+    font-weight: normal;
+}
+
+/* Individual Alignment Styles */
+.text-align-left { text-align: left; }
+.text-align-center { text-align: center; }
+.text-align-right { text-align: right; }
+
+.btn-primary {
+    background-color: rgba(0,0,0,0.8);
+    color: white;
+    border: none;
+    padding: 16px 32px;
+    border-radius: 8px;
+    font-size: 1.2rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.1s;
+    display: inline-block;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    backdrop-filter: blur(4px);
+    margin-top: 24px;
+}
+.btn-primary:hover {
+    background-color: #000;
+    transform: translateY(-2px);
+}
+.btn-primary:active {
+    transform: translateY(0);
+}
+.btn-primary:disabled {
+    background-color: rgba(0,0,0,0.4);
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+/* OPページ:「今月◯名が診断を受けています」の表示(赤文字) */
+.diagnosis-count-text {
+    color: #dc3545;
+    font-weight: 700;
+    font-size: 0.95rem;
+    margin-top: 14px;
+    text-align: center;
+    width: 100%;
+}
+
+/* Beautiful Underline design for Short text input and textareas */
+.input-text {
+    width: 100%;
+    font-size: 16px; /* 16px prevents iOS zoom */
+    border: none;
+    border-bottom: 2px solid rgba(0,0,0,0.15);
+    background: transparent;
+    border-radius: 0;
+    padding: 12px 0;
+    outline: none;
+    color: var(--text-primary);
+    transition: border-color 0.3s;
+    text-align: left;
+    height: auto;
+}
+.input-text:focus {
+    border-bottom-color: var(--primary-color);
+    box-shadow: none;
+}
+.input-text::placeholder {
+    color: rgba(0,0,0,0.3);
+    text-align: left;
+}
+
+/* Long text */
+textarea.input-text {
+    height: 48px;
+    min-height: 48px;
+    resize: none;
+    overflow-y: hidden;
+    line-height: 1.5;
+    padding: 12px 0;
+}
+
+/* Pulldown Select Box Styles */
+.dropdown-select {
+    width: 100%;
+    padding: 16px 20px;
+    font-size: 16px; /* 16px prevents iOS zoom */
+    border: 1px solid rgba(0,0,0,0.1);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.7);
+    backdrop-filter: blur(8px);
+    color: var(--text-primary);
+    outline: none;
+    appearance: none;
+    -webkit-appearance: none;
+    cursor: pointer;
+    background-image: url("data:image/svg+xml;utf8,<svg fill='black' height='24' viewBox='0 0 24 24' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/><path d='M0 0h24v24H0z' fill='none'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 16px center;
+    transition: border-color 0.2s;
+}
+.dropdown-select:focus {
+    border-color: var(--primary-color);
+    background: rgba(255,255,255,0.9);
+}
+
+.choice-box {
+    display: flex;
+    align-items: center;
+    padding: 16px 20px;
+    border: 1px solid rgba(0,0,0,0.1);
+    border-radius: 8px;
+    margin-bottom: 12px;
+    cursor: pointer;
+    background: rgba(255,255,255,0.7);
+    backdrop-filter: blur(8px);
+    transition: all 0.2s;
+    font-size: 1.1rem;
+    font-weight: 500;
+    width: 100%;
+    text-align: left;
+}
+.choice-box:hover {
+    background: rgba(255,255,255,0.9);
+    border-color: rgba(0,0,0,0.3);
+}
+.choice-box.selected {
+    border-color: var(--primary-color);
+    background: rgba(255,255,255,0.95);
+    box-shadow: 0 4px 12px rgba(13, 110, 253, 0.15);
+}
+.choice-alpha {
+    background: #e0e0e0;
+    color: #333;
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 16px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    transition: all 0.2s;
+}
+.choice-box.selected .choice-alpha {
+    background: var(--primary-color);
+    color: white;
+}
+
+.progress-bar-container {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 4px;
+    background: rgba(0,0,0,0.1);
+}
+.progress-bar {
+    height: 100%;
+    background: var(--primary-color);
+    width: 0%;
+    transition: width 0.4s ease;
+}
+
+.navigation-controls {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    display: flex;
+    gap: 8px;
+    z-index: 10;
+}
+.nav-btn {
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(4px);
+    color: white;
+    border: none;
+    width: 48px;
+    height: 48px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    transition: background 0.2s;
+}
+.nav-btn:hover {
+    background: rgba(0,0,0,0.9);
+}
+
+.error-msg {
+    color: var(--error-color);
+    background: #ffe5e5;
+    padding: 8px 16px;
+    border-radius: 4px;
+    display: inline-block;
+    margin-top: 16px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+.error-msg.visible {
+    opacity: 1;
+}
+
+/* Review Page Styles */
+.review-item {
+    margin-bottom: 16px;
+    padding: 16px;
+    background: rgba(255,255,255,0.7);
+    backdrop-filter: blur(8px);
+    border-radius: 8px;
+    border: 1px solid rgba(0,0,0,0.05);
+    text-align: left;
+    width: 100%;
+}
+.review-q {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+.review-a {
+    font-size: 1.2rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: pre-wrap;
+}
+
+/* Mobile responsive UI enhancements */
+@media (max-width: 768px) {
+    .form-container {
+        max-width: 100%;
+        width: 100%;
+    }
+    .slide {
+        padding: 40px 16px;
+    }
+    .slide.scrollable {
+        padding-top: 60px;
+        padding-bottom: 100px;
+    }
+    .slide-title {
+        font-size: 1.4rem;
+    }
+    .slide-desc {
+        font-size: 0.95rem;
+        margin-bottom: 24px;
+    }
+    .diagnosis-count-text {
+        font-size: 0.85rem;
+    }
+    .input-text {
+        font-size: 1.2rem;
+        padding: 8px 0;
+    }
+    textarea.input-text {
+        font-size: 1.2rem;
+        padding: 8px 0;
+    }
+    .choice-box {
+        padding: 12px 16px;
+        font-size: 1rem;
+        margin-bottom: 8px;
+    }
+    .choice-alpha {
+        width: 24px;
+        height: 24px;
+        margin-right: 12px;
+        font-size: 0.8rem;
+    }
+    .review-item {
+        padding: 12px;
+        margin-bottom: 12px;
+    }
+    .review-q {
+        font-size: 0.8rem;
+    }
+    .review-a {
+        font-size: 1rem;
+    }
+    .btn-primary {
+        width: 100%;
+        text-align: center;
+        padding: 14px 20px;
+        font-size: 1.1rem;
+    }
+    .navigation-controls {
+        bottom: 16px;
+        right: 16px;
+    }
+    .nav-btn {
+        width: 40px;
+        height: 40px;
+        font-size: 1.2rem;
+    }
+}
+
+/* Booking Widget Styles */
+.booking-widget {
+    width: 100%;
+    margin-top: 16px;
+    text-align: left;
+}
+.booking-days-container {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 12px;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+}
+.booking-day-card {
+    flex: 0 0 70px;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.6);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 10px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.booking-day-card:hover {
+    background: rgba(255, 255, 255, 0.9);
+    transform: translateY(-2px);
+}
+.booking-day-card.active {
+    background: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+    box-shadow: 0 4px 12px rgba(13, 110, 253, 0.3);
+}
+.booking-day-card .day-name {
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+    opacity: 0.8;
+}
+.booking-day-card.active .day-name {
+    opacity: 1;
+}
+.booking-day-card .day-val {
+    font-size: 0.95rem;
+    font-weight: 700;
+}
+.booking-slots-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+    gap: 10px;
+    max-height: 200px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+.booking-slot-btn {
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.6);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 8px;
+    text-align: center;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+.booking-slot-btn:hover {
+    background: rgba(255, 255, 255, 0.9);
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+.booking-slot-btn.selected {
+    background: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+    box-shadow: 0 4px 12px rgba(13, 110, 253, 0.3);
+}
+
