@@ -537,20 +537,13 @@ function closeFormWindow() {
 // (分析フォーム側の同機能をそのまま踏襲)
 // ============================================================================
 function closeTabOnly() {
+    // 「終了する」ポップアップを閉じてからタブを閉じる。
+    // ブラウザの仕様上、スクリプトで開いたタブでない場合は window.close() が
+    // 効かないことがあるが、その場合の代替メッセージ(手動で閉じてくださいの案内)は
+    // 表示しない仕様(分析フォーム側と同じ、コージさん指示 2026-09-09)。
+    const overlay = document.getElementById('confirm-overlay');
+    if (overlay) overlay.classList.remove('show');
     window.close();
-
-    setTimeout(() => {
-        const overlay = document.getElementById('confirm-overlay');
-        const card = overlay ? overlay.querySelector('.confirm-card') : null;
-        if (overlay && card) {
-            card.innerHTML = `
-                <div class="confirm-icon" style="background:#e6f4ea; color:#198754;">✓</div>
-                <div class="confirm-title">ご回答ありがとうございました</div>
-                <div class="confirm-body">自動で画面が閉じない場合は、<br>このタブを閉じてください。</div>
-            `;
-            overlay.classList.add('show');
-        }
-    }, 300);
 }
 
 // ============================================================================

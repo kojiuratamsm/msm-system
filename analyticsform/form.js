@@ -643,24 +643,13 @@ function closeFormWindow() {
 // ED画面の誘導設定は使わず、必ずタブを閉じるだけにする。
 // ============================================================================
 function closeTabOnly() {
-    window.close();
-
+    // 「終了する」ポップアップを閉じてからタブを閉じる。
     // ブラウザの仕様上、スクリプトで開いたタブでない場合は window.close() が
-    // 効かないことがあるため、少し待っても閉じなかった場合のフォールバックとして、
-    // 離脱確認POPのカード内に「手動でタブを閉じてください」という案内を表示する。
-    // (実際に閉じられた場合は、この処理が実行されてもユーザーには見えない)
-    setTimeout(() => {
-        const overlay = document.getElementById('confirm-overlay');
-        const card = overlay ? overlay.querySelector('.confirm-card') : null;
-        if (overlay && card) {
-            card.innerHTML = `
-                <div class="confirm-icon" style="background:#e6f4ea; color:#198754;">✓</div>
-                <div class="confirm-title">ご回答ありがとうございました</div>
-                <div class="confirm-body">自動で画面が閉じない場合は、<br>このタブを閉じてください。</div>
-            `;
-            overlay.classList.add('show');
-        }
-    }, 300);
+    // 効かないことがあるが、その場合の代替メッセージ(手動で閉じてくださいの案内)は
+    // 表示しない仕様(コージさん指示、2026-09-09)。
+    const overlay = document.getElementById('confirm-overlay');
+    if (overlay) overlay.classList.remove('show');
+    window.close();
 }
 
 // ============================================================================
