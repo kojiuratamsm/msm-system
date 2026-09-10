@@ -257,6 +257,53 @@ const Store = {
         if (statIds.length > 0) await supabase.from('customers').delete().in('id', statIds);
     },
 
+    // === Mindmap (マインドマップ機能) ===
+    // customersテーブルに service_type='mindmap' の行を複数保存(1行=1マインドマップ)。
+    // アンケート機能(survey_definition)と同じ「複数インスタンス」の考え方だが、
+    // こちらは data.creatorEmail に作成者のメールアドレスを保持し、
+    // 一覧取得(getMindmaps)・個別取得(getMindmap)の両方で「本人が作成したものだけ」
+    // に絞り込む(コージさん指示:管理者のみが使え、作成者本人だけが閲覧・編集できる)。
+    // 万一 creatorEmail が入っていない古いデータがあっても弾かないよう、
+    // creatorEmailが無い場合はフィルタしない(安全側に倒す)。
+    async getMindmaps() {
+        const user = Auth.getCurrentUser();
+        const email = user ? user.email : null;
+        const { data, error } = await supabase.from('customers').select('*').eq('service_type', 'mindmap').order('id', { ascending: false });
+        if (error) console.error(error);
+        return (data || []).map(row => ({ id: row.id, ...row.data })).filter(m => !email || !m.creatorEmail || m.creatorEmail === email);
+    },
+    async getMindmap(mindmapId) {
+        const { data, error } = await supabase.from('customers').select('*').eq('service_type', 'mindmap').eq('id', mindmapId).single();
+        if (error || !data) return null;
+        const map = { id: data.id, ...data.data };
+        const user = Auth.getCurrentUser();
+        if (user && map.creatorEmail && map.creatorEmail !== user.email) return null;
+        return map;
+    },
+    async saveMindmap(mindmapId, mapData) {
+        if (mindmapId) {
+            await supabase.from('customers').update({ data: mapData }).eq('id', mindmapId).eq('service_type', 'mindmap');
+            return mindmapId;
+        } else {
+            const id = Date.now();
+            await supabase.from('customers').insert([{ id, service_type: 'mindmap', data: mapData }]);
+            return id;
+        }
+    },
+    async duplicateMindmap(mindmapId) {
+        const original = await this.getMindmap(mindmapId);
+        if (!original) return null;
+        const { id: _oldId, ...mapData } = original;
+        mapData.title = (mapData.title || 'マインドマップ') + 'のコピー';
+        mapData.updatedAt = new Date().toISOString();
+        const newId = Date.now();
+        await supabase.from('customers').insert([{ id: newId, service_type: 'mindmap', data: mapData }]);
+        return newId;
+    },
+    async deleteMindmap(mindmapId) {
+        await supabase.from('customers').delete().eq('id', mindmapId).eq('service_type', 'mindmap');
+    },
+
     // Targets and KPIs
     async getTargetsKpis() {
         const { data } = await supabase.from('customers').select('*').eq('service_type', 'targets_kpis');
