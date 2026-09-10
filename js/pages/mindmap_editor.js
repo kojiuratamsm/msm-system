@@ -4,8 +4,8 @@
 //
 // 操作方法(コージさんへの案内はページ内のヒント表示にも記載):
 //   ・ノードをクリック → そのままテキストを編集できます
-//   ・Tabキー → 選択中ノードの「子ノード」を追加
-//   ・Enterキー → 選択中ノードの「兄弟ノード」を追加(中心テーマの場合は子ノード)
+//   ・Tabキー / Shift+Enter → 選択中ノードの「子ノード」を追加(横方向にツリーを伸ばす)
+//   ・Enterキー → 選択中ノードの「兄弟ノード」を追加(縦方向に増やす。中心テーマの場合は子ノード)
 //   ・Shift+Tab → 選択中ノードを1階層上へ移動(アウトデント)
 //   ・テキストが空の状態でBackspace → そのノードを削除
 //   ・ノード左端の「⠿」をつかんで別のノードの上でマウスを離す → 親ノードを変更(ドラッグで移動)
@@ -357,7 +357,14 @@ App.Pages.mindmap_editor = async function(mindmapId) {
                 } else if (e.key === 'Enter') {
                     e.preventDefault();
                     node.text = textEl.innerText;
-                    if (nodeId === mapData.root.id) addChildNode(node); else addSiblingNode(node);
+                    if (e.shiftKey) {
+                        // Shift+Enter: 横方向(子ノード)へツリーを伸ばす
+                        addChildNode(node);
+                    } else if (nodeId === mapData.root.id) {
+                        addChildNode(node);
+                    } else {
+                        addSiblingNode(node);
+                    }
                 } else if (e.key === 'Backspace') {
                     if (textEl.innerText.trim() === '' && nodeId !== mapData.root.id) {
                         e.preventDefault();
@@ -518,7 +525,7 @@ App.Pages.mindmap_editor = async function(mindmapId) {
                         <span id="mm-save-status"><i class="ph ph-check-circle"></i> 保存済み</span>
                     </div>
                     <div class="mm-toolbar-right">
-                        <span class="mm-hint-panel">Tab:子ノード / Enter:兄弟ノード / ⠿ドラッグ:移動</span>
+                        <span class="mm-hint-panel">Tab/Shift+Enter:子ノード(横) / Enter:兄弟ノード(縦) / ⠿ドラッグ:移動</span>
                         <button class="btn btn-secondary btn-sm" id="mm-zoom-out-btn"><i class="ph ph-minus"></i></button>
                         <button class="btn btn-secondary btn-sm" id="mm-zoom-fit-btn"><i class="ph ph-arrows-out"></i> 全体表示</button>
                         <button class="btn btn-secondary btn-sm" id="mm-zoom-in-btn"><i class="ph ph-plus"></i></button>
