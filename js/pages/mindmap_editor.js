@@ -177,13 +177,16 @@ App.Pages.mindmap_editor = async function(mindmapId) {
         const svgW = (b.maxX - b.minX) + PADDING * 2 + 200;
         const svgH = (b.maxY - b.minY) + PADDING * 2 + 40;
 
-        let edgesHtml = '';
         let nodesHtml = '';
 
-        function visitRender(node, isRoot) {
+        // ノード本体(枠)のみを先に組み立てる。エッジ(線)と折りたたみボタンの位置は
+        // 実際にDOMへ描画されたあとの「本当の幅」を計測してから決める(下記2パス目)。
+        // テキストの長さでノード幅が可変(min-width:120px〜max-width:200px)なため、
+        // 幅を固定値と仮定して線を引くと、短いテキストのノードで線がノードの右端まで
+        // 届かず「枝が離れて見える」問題が起きる。
+        function visitRenderNodes(node, isRoot) {
             const x = node._x + offsetX;
             const y = node._y + offsetY;
-            const hasChildren = (node.children || []).length > 0;
             const rootClass = isRoot ? 'mm-root' : '';
 
             if (isRoot) {
@@ -202,32 +205,54 @@ App.Pages.mindmap_editor = async function(mindmapId) {
                 `;
             }
 
-            if (hasChildren) {
-                nodesHtml += `<button class="mm-collapse-btn" data-id="${node.id}" style="left:${x + 200}px; top:${y - 9}px; border-color:${node.color}; color:${node.color};">${node.collapsed ? '+' : '−'}</button>`;
-            }
-
             if (!node.collapsed) {
-                (node.children || []).forEach(child => {
-                    const cx = child._x + offsetX;
-                    const cy = child._y + offsetY;
-                    const px = x + (isRoot ? 160 : 200);
-                    const py = y + (isRoot ? 0 : 0);
-                    const midX = (px + cx) / 2;
-                    edgesHtml += `<path d="M ${px} ${py} C ${midX} ${py}, ${midX} ${cy}, ${cx} ${cy}" stroke="${child.color}" stroke-width="2.5" fill="none" opacity="0.6"/>`;
-                    visitRender(child, false);
-                });
+                (node.children || []).forEach(child => visitRenderNodes(child, false));
             }
         }
-        visitRender(mapData.root, true);
+        visitRenderNodes(mapData.root, true);
 
         const el = canvasEl();
         if (!el) return;
         el.style.width = svgW + 'px';
         el.style.height = svgH + 'px';
         el.innerHTML = `
-            <svg class="mm-edges" width="${svgW}" height="${svgH}">${edgesHtml}</svg>
+            <svg class="mm-edges" width="${svgW}" height="${svgH}"></svg>
             ${nodesHtml}
+            <div class="mm-extras"></div>
         `;
+
+        // 2パス目: 実測した各ノードの幅をもとに、線と折りたたみボタンの接続位置を確定する
+        function measuredWidth(nodeId, fallback) {
+            const elNode = el.querySelector(`.mm-node[data-id="${nodeId}"]`);
+            return elNode ? elNode.offsetWidth : fallback;
+        }
+
+        let edgesHtml = '';
+        let extrasHtml = '';
+        function buildExtras(node, x, y, isRoot) {
+            const w = measuredWidth(node.id, isRoot ? 160 : 200);
+            const hasChildren = (node.children || []).length > 0;
+            if (hasChildren) {
+                extrasHtml += `<button class="mm-collapse-btn" data-id="${node.id}" style="left:${x + w}px; top:${y - 9}px; border-color:${node.color}; color:${node.color};">${node.collapsed ? '+' : '−'}</button>`;
+            }
+            if (!node.collapsed) {
+                (node.children || []).forEach(child => {
+                    const cx = child._x + offsetX;
+                    const cy = child._y + offsetY;
+                    const px = x + w;
+                    const py = y;
+                    const midX = (px + cx) / 2;
+                    edgesHtml += `<path d="M ${px} ${py} C ${midX} ${py}, ${midX} ${cy}, ${cx} ${cy}" stroke="${child.color}" stroke-width="2.5" fill="none" opacity="0.6"/>`;
+                    buildExtras(child, cx, cy, false);
+                });
+            }
+        }
+        buildExtras(mapData.root, mapData.root._x + offsetX, mapData.root._y + offsetY, true);
+
+        const svgEl = el.querySelector('.mm-edges');
+        if (svgEl) svgEl.innerHTML = edgesHtml;
+        const extrasEl = el.querySelector('.mm-extras');
+        if (extrasEl) extrasEl.innerHTML = extrasHtml;
 
         bindCanvasEvents();
         if (focusNodeIdAfter) focusNodeText(focusNodeIdAfter);
