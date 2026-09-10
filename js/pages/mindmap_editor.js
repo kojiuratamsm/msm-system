@@ -8,6 +8,9 @@
 //   ・Enterキー → 選択中ノードの「兄弟ノード」を追加(縦方向に増やす。中心テーマの場合は子ノード)
 //   ・Shift+Tab → 選択中ノードを1階層上へ移動(アウトデント)
 //   ・テキストが空の状態でBackspace → そのノードを削除
+//   ・Ctrl+Enter(Macは⌘+Enter) → ノードのテキスト内で改行(通常は自分で改行しない限り
+//       折り返さず1行のまま表示される。長い文章はノードの横幅が伸びて対応する)
+//   ・文字をドラッグして選択 → 太字・文字色・マーカー(蛍光ペン)を付けられるツールバーが出る
 //   ・ノード左端の「⠿」をつかんでドラッグ →
 //       他のノードの上でマウスを離す:親ノードを変更
 //       何もない場所でマウスを離す:そのノード(と配下の枝)を自由な位置へ移動
@@ -53,6 +56,8 @@ App.Pages.mindmap_editor = async function(mindmapId) {
 
     // ==== 定数 ====
     const BRANCH_PALETTE = ['#0d6efd', '#dc3545', '#198754', '#fd7e14', '#6f42c1', '#20c997', '#e83e8c', '#0dcaf0'];
+    const TEXT_COLOR_PALETTE = ['#1a1a1a', '#dc3545', '#0d6efd', '#198754', '#fd7e14'];
+    const MARKER_COLOR_PALETTE = ['#fff59d', '#a5d6ff', '#b2f2bb', '#ffc9de'];
     const NODE_H_SPACING = 240;
     const NODE_V_SPACING = 64;
     const PADDING = 80;
@@ -109,6 +114,53 @@ App.Pages.mindmap_editor = async function(mindmapId) {
     }
     function escapeHtml(str) {
         return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    // ノードのテキストには「太字・文字色・マーカー(背景色)・改行」だけを許可した
+    // ごく限定的なHTMLを保存できるようにする。contenteditableのinnerHTMLをそのまま
+    // 保存/表示すると余計なタグや属性が混ざる(あるいは安全性の問題が起きる)ため、
+    // 許可したタグ(b/strong/i/em/mark/span[style=color/background-colorのみ]/br)以外は
+    // タグだけ剥がしてテキストは残す、という方針でサニタイズする。
+    // 許可していないタグの中身も含めてテキストとして扱うので、既存のプレーンテキストの
+    // データ(絵文字や記号など)をそのまま渡しても壊れない。
+    const MM_ALLOWED_INLINE_TAGS = { B: 1, STRONG: 1, I: 1, EM: 1, MARK: 1, SPAN: 1 };
+    function sanitizeNodeHtml(rawHtml) {
+        const container = document.createElement('div');
+        container.innerHTML = String(rawHtml || '');
+        function walk(node) {
+            let out = '';
+            node.childNodes.forEach(child => {
+                if (child.nodeType === Node.TEXT_NODE) {
+                    out += escapeHtml(child.nodeValue);
+                } else if (child.nodeType === Node.ELEMENT_NODE) {
+                    const tag = child.tagName;
+                    if (tag === 'BR') {
+                        out += '<br>';
+                    } else if (tag === 'DIV' || tag === 'P') {
+                        // contenteditableがEnterで<div>/<p>を生成する場合があるため改行として扱う
+                        out += (out ? '<br>' : '') + walk(child);
+                    } else if (MM_ALLOWED_INLINE_TAGS[tag]) {
+                        let styleAttr = '';
+                        if (tag === 'SPAN' && child.style) {
+                            const parts = [];
+                            if (child.style.color) parts.push(`color:${child.style.color}`);
+                            if (child.style.backgroundColor) parts.push(`background-color:${child.style.backgroundColor}`);
+                            if (parts.length) styleAttr = ` style="${parts.join(';')}"`;
+                        }
+                        const inner = walk(child);
+                        if (tag === 'SPAN' && !styleAttr) {
+                            out += inner; // スタイルの無いspanは意味が無いので剥がす
+                        } else {
+                            const lower = tag.toLowerCase();
+                            out += `<${lower}${styleAttr}>${inner}</${lower}>`;
+                        }
+                    } else {
+                        out += walk(child); // 許可されていないタグは中身だけ残す
+                    }
+                }
+            });
+            return out;
+        }
+        return walk(container);
     }
     function newNodeSkeleton(color) {
         return { id: 'n' + Date.now() + Math.floor(Math.random() * 1000), text: '', color: color, collapsed: false, children: [] };
@@ -214,14 +266,14 @@ App.Pages.mindmap_editor = async function(mindmapId) {
             if (isRoot) {
                 nodesHtml += `
                     <div class="mm-node ${rootClass}" data-id="${node.id}" style="left:${x}px; top:${y - 24}px; background:${node.color}; border-color:${node.color};">
-                        <div class="mm-node-text" contenteditable="true" spellcheck="false" data-id="${node.id}">${escapeHtml(node.text)}</div>
+                        <div class="mm-node-text" contenteditable="true" spellcheck="false" data-id="${node.id}">${sanitizeNodeHtml(node.text)}</div>
                     </div>
                 `;
             } else {
                 nodesHtml += `
                     <div class="mm-node" data-id="${node.id}" style="left:${x}px; top:${y - 20}px; border-color:${node.color}; box-shadow: inset 0 0 0 9999px ${node.color}14;">
                         <span class="mm-grip" data-id="${node.id}" title="ドラッグして移動(ノードの上でドロップ:親を変更 / 何もない場所でドロップ:自由配置)">⠿</span>
-                        <div class="mm-node-text" contenteditable="true" spellcheck="false" data-id="${node.id}" style="color:${node.color};">${escapeHtml(node.text)}</div>
+                        <div class="mm-node-text" contenteditable="true" spellcheck="false" data-id="${node.id}" style="color:${node.color};">${sanitizeNodeHtml(node.text)}</div>
                         <button class="mm-del-btn" data-id="${node.id}" title="削除"><i class="ph ph-x"></i></button>
                     </div>
                 `;
@@ -398,7 +450,7 @@ App.Pages.mindmap_editor = async function(mindmapId) {
                 const node = findNode(nodeId);
                 if (node) {
                     const trimmed = textEl.innerText.trim();
-                    node.text = trimmed || (nodeId === mapData.root.id ? '中心テーマ' : '無題');
+                    node.text = trimmed ? sanitizeNodeHtml(textEl.innerHTML) : (nodeId === mapData.root.id ? '中心テーマ' : '無題');
                     scheduleSave();
                 }
                 const cardEl = textEl.closest('.mm-node');
@@ -407,7 +459,7 @@ App.Pages.mindmap_editor = async function(mindmapId) {
             });
             textEl.addEventListener('input', () => {
                 const node = findNode(nodeId);
-                if (node) { node.text = textEl.innerText; scheduleSave(); }
+                if (node) { node.text = sanitizeNodeHtml(textEl.innerHTML); scheduleSave(); }
             });
             // 日本語入力(IME)で変換候補を確定するときのEnterキーを、
             // 「兄弟ノードを追加する」Enterと誤判定しないためのフラグ管理。
@@ -428,13 +480,27 @@ App.Pages.mindmap_editor = async function(mindmapId) {
                 }
                 const node = findNode(nodeId);
                 if (!node) return;
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                    // Ctrl(Mac:Cmd)+Enter: ノードを増やすのではなく、テキスト内に改行を挿入する。
+                    // (Enter/Shift+Enterは既にノード追加の操作として使っているため、
+                    //  文章の途中で改行したいときはこちらを使う)
+                    e.preventDefault();
+                    // insertHTMLで<br>要素を挿入すると、末尾では次に入力した文字が
+                    // <br>より前に入ってしまうことがある(contenteditableのカーソル位置の仕様上の癖)。
+                    // 改行文字\nをテキストとして挿入する方が、通常の文字入力と同じ扱いになり確実。
+                    // (.mm-node-textはwhite-space:preのため、\nはそのまま改行として表示される)
+                    document.execCommand('insertText', false, '\n');
+                    node.text = sanitizeNodeHtml(textEl.innerHTML);
+                    scheduleSave();
+                    return;
+                }
                 if (e.key === 'Tab') {
                     e.preventDefault();
-                    node.text = textEl.innerText;
+                    node.text = sanitizeNodeHtml(textEl.innerHTML);
                     if (e.shiftKey) outdentNode(node); else addChildNode(node);
                 } else if (e.key === 'Enter') {
                     e.preventDefault();
-                    node.text = textEl.innerText;
+                    node.text = sanitizeNodeHtml(textEl.innerHTML);
                     if (e.shiftKey) {
                         // Shift+Enter: 横方向(子ノード)へツリーを伸ばす
                         addChildNode(node);
@@ -570,6 +636,71 @@ App.Pages.mindmap_editor = async function(mindmapId) {
         }, 150);
     }
 
+    // ==== 文字を選択したときの書式ツールバー(太字・文字色・マーカー) ====
+    // ノードのテキストの一部だけを選択して、その部分だけ太字/色/マーカーを付けられる。
+    function closestNodeTextEl(node) {
+        const el = node && node.nodeType === 1 ? node : (node ? node.parentElement : null);
+        return el ? el.closest('.mm-node-text') : null;
+    }
+    function updateFormatToolbar() {
+        const toolbar = document.getElementById('mm-format-toolbar');
+        if (!toolbar) return;
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
+            toolbar.style.display = 'none';
+            return;
+        }
+        const textEl = closestNodeTextEl(sel.anchorNode);
+        if (!textEl) {
+            toolbar.style.display = 'none';
+            return;
+        }
+        const rect = sel.getRangeAt(0).getBoundingClientRect();
+        if (!rect || (rect.width === 0 && rect.height === 0)) {
+            toolbar.style.display = 'none';
+            return;
+        }
+        toolbar.style.display = 'flex';
+        toolbar.style.left = (rect.left + rect.width / 2) + 'px';
+        toolbar.style.top = Math.max(46, rect.top) + 'px';
+    }
+    function saveTextElContent(textEl) {
+        const nodeId = textEl.getAttribute('data-id');
+        const node = findNode(nodeId);
+        if (node) { node.text = sanitizeNodeHtml(textEl.innerHTML); scheduleSave(); }
+    }
+    // 太字は document.execCommand('bold') に任せない。
+    // ノードのテキストはデフォルトで font-weight:600 (少し太め)のスタイルを当てているため、
+    // ブラウザの「すでに太字かどうか」の判定がこの既定の太さに引っ張られてしまい、
+    // ボタンを押すと逆に細く(normal)なってしまう不具合があった。
+    // そのため、<b>タグで囲む/剥がすことを自前で行い、タグの有無だけで太字状態を判定する。
+    function toggleBoldOnSelection() {
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
+        const range = sel.getRangeAt(0);
+        let ancestor = range.commonAncestorContainer;
+        if (ancestor.nodeType !== 1) ancestor = ancestor.parentElement;
+        const boldTag = ancestor ? ancestor.closest('b, strong') : null;
+        if (boldTag) {
+            const parent = boldTag.parentNode;
+            while (boldTag.firstChild) parent.insertBefore(boldTag.firstChild, boldTag);
+            parent.removeChild(boldTag);
+            return;
+        }
+        try {
+            const wrapper = document.createElement('b');
+            wrapper.appendChild(range.extractContents());
+            range.insertNode(wrapper);
+            const newRange = document.createRange();
+            newRange.selectNodeContents(wrapper);
+            sel.removeAllRanges();
+            sel.addRange(newRange);
+        } catch (err) {
+            // 選択範囲の構造上むずかしい場合の保険
+            document.execCommand('bold');
+        }
+    }
+
     // ==== ズーム・パン ====
     function zoomAt(clientX, clientY, factor) {
         const wrapper = canvasWrapper();
@@ -613,13 +744,16 @@ App.Pages.mindmap_editor = async function(mindmapId) {
                 #mm-canvas-wrapper.panning { cursor:grabbing; }
                 #mm-canvas { position:absolute; top:0; left:0; transform-origin: 0 0; }
                 .mm-edges { position:absolute; top:0; left:0; pointer-events:none; }
-                .mm-node { position:absolute; min-width:120px; max-width:200px; padding:10px 14px; border-radius:10px; border:2px solid #0d6efd; background:white; box-shadow:0 2px 8px rgba(0,0,0,0.08); display:flex; align-items:center; gap:6px; transition: box-shadow 0.15s; }
+                .mm-node { position:absolute; min-width:120px; max-width:640px; padding:10px 14px; border-radius:10px; border:2px solid #0d6efd; background:white; box-shadow:0 2px 8px rgba(0,0,0,0.08); display:flex; align-items:center; gap:6px; transition: box-shadow 0.15s; }
                 .mm-node.active { box-shadow:0 4px 16px rgba(13,110,253,0.35); }
                 .mm-node.mm-drop-target { box-shadow:0 0 0 3px #ffc107, 0 4px 16px rgba(0,0,0,0.2); }
                 .mm-node.mm-root { min-width:160px; padding:14px 20px; border-radius:14px; justify-content:center; box-shadow:0 6px 18px rgba(0,0,0,0.15); }
                 .mm-node.mm-root .mm-node-text { color:white; font-weight:700; font-size:1.05rem; text-align:center; }
-                .mm-node-text { outline:none; font-size:0.9rem; font-weight:600; word-break:break-word; white-space:pre-wrap; flex:1; min-width:40px; color:#1a1a1a; }
+                /* 自分で改行(Ctrl/Cmd+Enter)しない限り折り返さない。長い文章はノードの幅が伸びて1行のまま表示される */
+                .mm-node-text { outline:none; font-size:0.9rem; font-weight:600; white-space:pre; flex:1; min-width:40px; color:#1a1a1a; }
                 .mm-node-text:empty::before { content: '入力してください'; color:#aaa; font-weight:400; }
+                .mm-node-text b, .mm-node-text strong { font-weight:800; }
+                .mm-node-text mark { border-radius:2px; padding:0 1px; }
                 .mm-grip { cursor:grab; color:#bbb; font-size:0.85rem; user-select:none; flex-shrink:0; }
                 .mm-grip:hover { color:#666; }
                 .mm-del-btn { border:none; background:transparent; color:#ccc; cursor:pointer; padding:2px; flex-shrink:0; display:flex; align-items:center; opacity:0; transition:opacity 0.15s; }
@@ -630,6 +764,17 @@ App.Pages.mindmap_editor = async function(mindmapId) {
                 .mm-color-swatch { width:22px; height:22px; border-radius:50%; cursor:pointer; border:2px solid white; box-shadow:0 0 0 1px rgba(0,0,0,0.1); }
                 #mm-drag-hint { display:none; position:absolute; top:12px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.75); color:white; font-size:0.8rem; padding:6px 14px; border-radius:20px; z-index:20; }
                 .mm-hint-panel { font-size:0.78rem; color:var(--text-secondary); background:#f8f9fc; border-radius:8px; padding:6px 12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+                /* テキストを選択したときに出る書式ツールバー(太字・文字色・マーカー) */
+                #mm-format-toolbar { display:none; position:fixed; transform:translate(-50%,-100%); background:#2b2b2f; border-radius:10px; box-shadow:0 6px 20px rgba(0,0,0,0.3); padding:6px 8px; align-items:center; gap:5px; z-index:100; }
+                #mm-format-toolbar button { border:none; background:transparent; cursor:pointer; padding:0; display:flex; align-items:center; justify-content:center; }
+                #mm-format-toolbar .mm-fmt-bold { width:26px; height:26px; border-radius:6px; color:white; font-size:0.85rem; }
+                #mm-format-toolbar .mm-fmt-bold:hover { background:rgba(255,255,255,0.15); }
+                #mm-format-toolbar .mm-fmt-sep { width:1px; height:18px; background:rgba(255,255,255,0.2); margin:0 2px; }
+                #mm-format-toolbar .mm-fmt-swatch { width:18px; height:18px; border-radius:50%; border:1.5px solid rgba(255,255,255,0.5); }
+                #mm-format-toolbar .mm-fmt-swatch:hover { transform:scale(1.15); }
+                #mm-format-toolbar .mm-fmt-mark { width:18px; height:18px; border-radius:4px; border:1.5px solid rgba(255,255,255,0.5); }
+                #mm-format-toolbar .mm-fmt-clear { width:22px; height:22px; border-radius:6px; color:white; font-size:0.75rem; }
+                #mm-format-toolbar .mm-fmt-clear:hover { background:rgba(255,255,255,0.15); }
             </style>
             <div class="mm-page">
                 <div class="mm-toolbar">
@@ -639,7 +784,7 @@ App.Pages.mindmap_editor = async function(mindmapId) {
                         <span id="mm-save-status"><i class="ph ph-check-circle"></i> 保存済み</span>
                     </div>
                     <div class="mm-toolbar-right">
-                        <span class="mm-hint-panel">Tab/Shift+Enter:子ノード(横) / Enter:兄弟ノード(縦) / ⠿ドラッグ:移動・配置</span>
+                        <span class="mm-hint-panel">Tab/Shift+Enter:子ノード(横) / Enter:兄弟ノード(縦) / Ctrl(⌘)+Enter:改行 / ⠿ドラッグ:移動・配置</span>
                         <button class="btn btn-secondary btn-sm" id="mm-zoom-out-btn"><i class="ph ph-minus"></i></button>
                         <button class="btn btn-secondary btn-sm" id="mm-zoom-fit-btn"><i class="ph ph-arrows-out"></i> 全体表示</button>
                         <button class="btn btn-secondary btn-sm" id="mm-zoom-in-btn"><i class="ph ph-plus"></i></button>
@@ -654,6 +799,15 @@ App.Pages.mindmap_editor = async function(mindmapId) {
                         ${BRANCH_PALETTE.map(c => `<span class="mm-color-swatch" data-color="${c}" style="background:${c};"></span>`).join('')}
                     </div>
                 </div>
+            </div>
+            <!-- 文字を選択すると表示される書式ツールバー(太字/文字色/マーカー) -->
+            <div id="mm-format-toolbar">
+                <button type="button" class="mm-fmt-bold" data-cmd="bold" title="太字"><b>B</b></button>
+                <span class="mm-fmt-sep"></span>
+                ${TEXT_COLOR_PALETTE.map(c => `<button type="button" class="mm-fmt-swatch" data-cmd="foreColor" data-color="${c}" style="background:${c};" title="文字色"></button>`).join('')}
+                <span class="mm-fmt-sep"></span>
+                ${MARKER_COLOR_PALETTE.map(c => `<button type="button" class="mm-fmt-mark" data-cmd="hiliteColor" data-color="${c}" style="background:${c};" title="マーカー"></button>`).join('')}
+                <button type="button" class="mm-fmt-clear" data-cmd="hiliteColor" data-color="transparent" title="マーカーを消す"><i class="ph ph-eraser"></i></button>
             </div>
         `;
 
@@ -743,6 +897,32 @@ App.Pages.mindmap_editor = async function(mindmapId) {
                     applyTransform();
                 }
             }, { passive: false });
+
+            // 文字色/マーカーのコマンドが<font>タグ等の古い書き方にならないよう、
+            // CSS(style属性)で反映させる設定にしておく(1回でよい)。
+            try { document.execCommand('styleWithCSS', false, true); } catch (err) { /* 非対応ブラウザは無視 */ }
+
+            // テキストの一部を選択すると書式ツールバーを表示する
+            document.addEventListener('selectionchange', updateFormatToolbar);
+
+            document.querySelectorAll('#mm-format-toolbar button').forEach(btn => {
+                // mousedownでpreventDefaultしないと、ボタンをクリックした時点で
+                // contenteditableからフォーカスが外れ、選択範囲が失われてしまう
+                btn.addEventListener('mousedown', (e) => e.preventDefault());
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const sel = window.getSelection();
+                    const textEl = sel && sel.rangeCount ? closestNodeTextEl(sel.anchorNode) : null;
+                    const cmd = btn.getAttribute('data-cmd');
+                    const color = btn.getAttribute('data-color');
+                    if (cmd === 'bold') {
+                        toggleBoldOnSelection();
+                    } else if (cmd && color) {
+                        document.execCommand(cmd, false, color);
+                    }
+                    if (textEl) saveTextElContent(textEl);
+                });
+            });
 
             renderCanvas();
             setTimeout(fitToScreen, 50);
