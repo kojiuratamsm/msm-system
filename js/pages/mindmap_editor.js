@@ -8,12 +8,17 @@
 //   ・Enterキー → 選択中ノードの「兄弟ノード」を追加(縦方向に増やす。中心テーマの場合は子ノード)
 //   ・Shift+Tab → 選択中ノードを1階層上へ移動(アウトデント)
 //   ・テキストが空の状態でBackspace → そのノードを削除
-//   ・ノード左端の「⠿」をつかんで別のノードの上でマウスを離す → 親ノードを変更(ドラッグで移動)
+//   ・ノード左端の「⠿」をつかんでドラッグ →
+//       他のノードの上でマウスを離す:親ノードを変更
+//       何もない場所でマウスを離す:そのノード(と配下の枝)を自由な位置へ移動
 //   ・ノード横の丸ボタン → 子ノードの折りたたみ/展開
-//   ・マウスホイール/ズームボタン → 拡大縮小、背景ドラッグ → 画面移動
+//   ・トラックパッドを二本指で動かす(スワイプ) → 画面移動(パン)
+//   ・トラックパッドを二本指でつまむ/開く(ピンチ)、マウスホイール、ズームボタン → 拡大縮小
+//   ・背景をドラッグ → 画面移動
 //
 // データはservice_type='mindmap'としてcustomersテーブルに複数保存され、
 // 入力停止から約1秒後に自動保存される(Store.saveMindmap、詳細はjs/state.js参照)。
+// ノードの手動配置のズレはnode.offsetX/offsetYとして保存され、親が変わると自動でリセットされる。
 // ============================================================================
 
 App.Pages.mindmap_editor = async function(mindmapId) {
@@ -60,6 +65,8 @@ App.Pages.mindmap_editor = async function(mindmapId) {
     let panStartX = 0, panStartY = 0, panOriginX = 0, panOriginY = 0;
     let draggingNodeId = null;
     let dropTargetId = null;
+    let dragStartClientX = 0, dragStartClientY = 0;
+    let dragNodeEl = null;
     let saveTimer = null;
     let lastLayoutBounds = null;
 
@@ -149,14 +156,20 @@ App.Pages.mindmap_editor = async function(mindmapId) {
         }
         visit(mapData.root, 0);
 
-        // バウンディングボックスを計算(オフセット計算・SVGサイズ決定用)
+        // バウンディングボックスを計算(オフセット計算・SVGサイズ決定用)。
+        // 手動で動かしたノード(offsetX/offsetY、子孫にも累積)がキャンバス外へ
+        // はみ出さないよう、ここでも同じ累積オフセットを考慮する。
         let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-        function collectBounds(node) {
-            minX = Math.min(minX, node._x); maxX = Math.max(maxX, node._x);
-            minY = Math.min(minY, node._y); maxY = Math.max(maxY, node._y);
-            if (!node.collapsed) (node.children || []).forEach(collectBounds);
+        function collectBounds(node, ancestorOffsetX, ancestorOffsetY) {
+            const cumOffsetX = ancestorOffsetX + (node.offsetX || 0);
+            const cumOffsetY = ancestorOffsetY + (node.offsetY || 0);
+            const x = node._x + cumOffsetX;
+            const y = node._y + cumOffsetY;
+            minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+            minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+            if (!node.collapsed) (node.children || []).forEach(c => collectBounds(c, cumOffsetX, cumOffsetY));
         }
-        collectBounds(mapData.root);
+        collectBounds(mapData.root, 0, 0);
         lastLayoutBounds = { minX, maxX, minY, maxY };
     }
 
@@ -184,9 +197,18 @@ App.Pages.mindmap_editor = async function(mindmapId) {
         // テキストの長さでノード幅が可変(min-width:120px〜max-width:200px)なため、
         // 幅を固定値と仮定して線を引くと、短いテキストのノードで線がノードの右端まで
         // 届かず「枝が離れて見える」問題が起きる。
-        function visitRenderNodes(node, isRoot) {
-            const x = node._x + offsetX;
-            const y = node._y + offsetY;
+        //
+        // ノードは自動レイアウト(depth×間隔)の位置を基本としつつ、node.offsetX/offsetY に
+        // 手動で動かした分のズレを保持できる。祖先ノードのズレは子孫にも累積して伝わるため、
+        // 枝(サブツリー)をまとめてドラッグで動かすと、その配下のノードごと一緒に動く。
+        function visitRenderNodes(node, isRoot, ancestorOffsetX, ancestorOffsetY) {
+            const cumOffsetX = ancestorOffsetX + (node.offsetX || 0);
+            const cumOffsetY = ancestorOffsetY + (node.offsetY || 0);
+            const x = node._x + offsetX + cumOffsetX;
+            const y = node._y + offsetY + cumOffsetY;
+            // buildExtras(線・折りたたみボタン)で再利用するため、最終的な画面座標を保存しておく
+            node._finalX = x;
+            node._finalY = y;
             const rootClass = isRoot ? 'mm-root' : '';
 
             if (isRoot) {
@@ -198,7 +220,7 @@ App.Pages.mindmap_editor = async function(mindmapId) {
             } else {
                 nodesHtml += `
                     <div class="mm-node" data-id="${node.id}" style="left:${x}px; top:${y - 20}px; border-color:${node.color}; box-shadow: inset 0 0 0 9999px ${node.color}14;">
-                        <span class="mm-grip" data-id="${node.id}" title="ドラッグして移動">⠿</span>
+                        <span class="mm-grip" data-id="${node.id}" title="ドラッグして移動(ノードの上でドロップ:親を変更 / 何もない場所でドロップ:自由配置)">⠿</span>
                         <div class="mm-node-text" contenteditable="true" spellcheck="false" data-id="${node.id}" style="color:${node.color};">${escapeHtml(node.text)}</div>
                         <button class="mm-del-btn" data-id="${node.id}" title="削除"><i class="ph ph-x"></i></button>
                     </div>
@@ -206,10 +228,10 @@ App.Pages.mindmap_editor = async function(mindmapId) {
             }
 
             if (!node.collapsed) {
-                (node.children || []).forEach(child => visitRenderNodes(child, false));
+                (node.children || []).forEach(child => visitRenderNodes(child, false, cumOffsetX, cumOffsetY));
             }
         }
-        visitRenderNodes(mapData.root, true);
+        visitRenderNodes(mapData.root, true, 0, 0);
 
         const el = canvasEl();
         if (!el) return;
@@ -229,7 +251,9 @@ App.Pages.mindmap_editor = async function(mindmapId) {
 
         let edgesHtml = '';
         let extrasHtml = '';
-        function buildExtras(node, x, y, isRoot) {
+        function buildExtras(node, isRoot) {
+            const x = node._finalX;
+            const y = node._finalY;
             const w = measuredWidth(node.id, isRoot ? 160 : 200);
             const hasChildren = (node.children || []).length > 0;
             if (hasChildren) {
@@ -237,17 +261,17 @@ App.Pages.mindmap_editor = async function(mindmapId) {
             }
             if (!node.collapsed) {
                 (node.children || []).forEach(child => {
-                    const cx = child._x + offsetX;
-                    const cy = child._y + offsetY;
+                    const cx = child._finalX;
+                    const cy = child._finalY;
                     const px = x + w;
                     const py = y;
                     const midX = (px + cx) / 2;
                     edgesHtml += `<path d="M ${px} ${py} C ${midX} ${py}, ${midX} ${cy}, ${cx} ${cy}" stroke="${child.color}" stroke-width="2.5" fill="none" opacity="0.6"/>`;
-                    buildExtras(child, cx, cy, false);
+                    buildExtras(child, false);
                 });
             }
         }
-        buildExtras(mapData.root, mapData.root._x + offsetX, mapData.root._y + offsetY, true);
+        buildExtras(mapData.root, true);
 
         const svgEl = el.querySelector('.mm-edges');
         if (svgEl) svgEl.innerHTML = edgesHtml;
@@ -331,6 +355,19 @@ App.Pages.mindmap_editor = async function(mindmapId) {
         newParent.children.push(node);
         newParent.collapsed = false;
         if (newParentId !== mapData.root.id) applyColorRecursive(node, newParent.color);
+        // 親が変わったら、以前の手動配置のズレは持ち越さず新しい親の下の基本位置に戻す
+        node.offsetX = 0;
+        node.offsetY = 0;
+        scheduleSave();
+        renderCanvas();
+    }
+    function repositionNode(nodeId, dx, dy) {
+        // ノードをドラッグして何もない場所でドロップしたときの「自由配置」。
+        // 既存のズレに加算するので、同じノードを何度もドラッグして微調整できる。
+        const node = findNode(nodeId);
+        if (!node) return;
+        node.offsetX = (node.offsetX || 0) + dx;
+        node.offsetY = (node.offsetY || 0) + dy;
         scheduleSave();
         renderCanvas();
     }
@@ -372,7 +409,23 @@ App.Pages.mindmap_editor = async function(mindmapId) {
                 const node = findNode(nodeId);
                 if (node) { node.text = textEl.innerText; scheduleSave(); }
             });
+            // 日本語入力(IME)で変換候補を確定するときのEnterキーを、
+            // 「兄弟ノードを追加する」Enterと誤判定しないためのフラグ管理。
+            // compositionstart〜compositionendの間はIME変換中とみなし、
+            // その間のEnter/Tabキーはノード追加処理に渡さない。
+            textEl.addEventListener('compositionstart', () => {
+                textEl.dataset.imeComposing = '1';
+            });
+            textEl.addEventListener('compositionend', () => {
+                // compositionendの直後に発火するkeydown(確定用Enter)と競合しないよう、
+                // 1ティック遅らせてフラグを解除する。
+                setTimeout(() => { textEl.dataset.imeComposing = ''; }, 0);
+            });
             textEl.addEventListener('keydown', (e) => {
+                if (e.isComposing || e.keyCode === 229 || textEl.dataset.imeComposing === '1') {
+                    // IME変換中の確定キー操作(Enter等)はスルーする
+                    return;
+                }
                 const node = findNode(nodeId);
                 if (!node) return;
                 if (e.key === 'Tab') {
@@ -420,6 +473,16 @@ App.Pages.mindmap_editor = async function(mindmapId) {
                 e.preventDefault();
                 e.stopPropagation();
                 draggingNodeId = grip.getAttribute('data-id');
+                dragStartClientX = e.clientX;
+                dragStartClientY = e.clientY;
+                dragNodeEl = grip.closest('.mm-node');
+                if (dragNodeEl) {
+                    dragNodeEl.style.zIndex = '10';
+                    // ドラッグ中のノード自身がカーソル直下に重なってしまうと、その下にある
+                    // ドロップ先ノードのmouseenterを奪ってしまい「親の変更」が反応しなくなるため、
+                    // ドラッグ中だけこのノードへのポインターイベントを無効にする。
+                    dragNodeEl.style.pointerEvents = 'none';
+                }
                 document.body.style.cursor = 'grabbing';
                 const hint = document.getElementById('mm-drag-hint');
                 if (hint) hint.style.display = 'block';
@@ -444,14 +507,40 @@ App.Pages.mindmap_editor = async function(mindmapId) {
         });
     }
 
+    // ==== ドラッグ中の見た目の追従(掴んだノードだけをカーソルに合わせて動かす) ====
+    window.addEventListener('mousemove', (e) => {
+        if (draggingNodeId && dragNodeEl) {
+            const dx = (e.clientX - dragStartClientX) / zoom;
+            const dy = (e.clientY - dragStartClientY) / zoom;
+            dragNodeEl.style.transform = `translate(${dx}px, ${dy}px)`;
+        }
+    });
+
     // ==== ドラッグ終了(ドロップ)の検知 ====
-    window.addEventListener('mouseup', () => {
+    // ・他のノードの上でドロップ → 親ノードを変更(既存の挙動)
+    // ・何もない場所でドロップ → そのノード(と配下の枝)を自由な位置へ移動
+    window.addEventListener('mouseup', (e) => {
         if (draggingNodeId) {
-            if (dropTargetId && dropTargetId !== draggingNodeId) {
-                reparentNode(draggingNodeId, dropTargetId);
+            const id = draggingNodeId;
+            const dx = (e.clientX - dragStartClientX) / zoom;
+            const dy = (e.clientY - dragStartClientY) / zoom;
+            const moved = Math.abs(dx) > 3 || Math.abs(dy) > 3;
+
+            if (dragNodeEl) {
+                dragNodeEl.style.transform = '';
+                dragNodeEl.style.zIndex = '';
+                dragNodeEl.style.pointerEvents = '';
             }
+
+            if (dropTargetId && dropTargetId !== id) {
+                reparentNode(id, dropTargetId);
+            } else if (moved) {
+                repositionNode(id, dx, dy);
+            }
+
             draggingNodeId = null;
             dropTargetId = null;
+            dragNodeEl = null;
             document.body.style.cursor = '';
             document.querySelectorAll('.mm-drop-target').forEach(el => el.classList.remove('mm-drop-target'));
             const hint = document.getElementById('mm-drag-hint');
@@ -550,7 +639,7 @@ App.Pages.mindmap_editor = async function(mindmapId) {
                         <span id="mm-save-status"><i class="ph ph-check-circle"></i> 保存済み</span>
                     </div>
                     <div class="mm-toolbar-right">
-                        <span class="mm-hint-panel">Tab/Shift+Enter:子ノード(横) / Enter:兄弟ノード(縦) / ⠿ドラッグ:移動</span>
+                        <span class="mm-hint-panel">Tab/Shift+Enter:子ノード(横) / Enter:兄弟ノード(縦) / ⠿ドラッグ:移動・配置</span>
                         <button class="btn btn-secondary btn-sm" id="mm-zoom-out-btn"><i class="ph ph-minus"></i></button>
                         <button class="btn btn-secondary btn-sm" id="mm-zoom-fit-btn"><i class="ph ph-arrows-out"></i> 全体表示</button>
                         <button class="btn btn-secondary btn-sm" id="mm-zoom-in-btn"><i class="ph ph-plus"></i></button>
@@ -560,7 +649,7 @@ App.Pages.mindmap_editor = async function(mindmapId) {
                     <div id="mm-canvas-wrapper">
                         <div id="mm-canvas"></div>
                     </div>
-                    <div id="mm-drag-hint">別のノードの上でマウスを離すと、そこに移動します</div>
+                    <div id="mm-drag-hint">ノードの上で離す:親を変更 / 何もない場所で離す:自由に配置</div>
                     <div class="mm-color-panel" id="mm-color-panel">
                         ${BRANCH_PALETTE.map(c => `<span class="mm-color-swatch" data-color="${c}" style="background:${c};"></span>`).join('')}
                     </div>
@@ -634,10 +723,25 @@ App.Pages.mindmap_editor = async function(mindmapId) {
             }, { passive: true });
             wrapper.addEventListener('touchend', () => { isPanning = false; });
 
+            // トラックパッドの「二本指で動かす(スワイプ)」は画面移動(パン)、
+            // 「二本指で開く/閉じる(ピンチ)」は拡大縮小として扱う。
+            // ブラウザ仕様上、トラックパッドのピンチ操作はwheelイベントに
+            // ctrlKey:true が自動的に付与されて送られてくる(実際にCtrlキーを
+            // 押していなくても、ブラウザがピンチジェスチャーをそう伝える)ため、
+            // これを判定材料にする。マウスホイールやCtrl+スクロールも同様に
+            // 拡大縮小として扱われる。
             wrapper.addEventListener('wheel', (e) => {
                 e.preventDefault();
-                const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-                zoomAt(e.clientX, e.clientY, factor);
+                if (e.ctrlKey) {
+                    // ピンチズーム(またはCtrl+ホイール)
+                    const factor = e.deltaY < 0 ? 1.04 : 1 / 1.04;
+                    zoomAt(e.clientX, e.clientY, factor);
+                } else {
+                    // 二本指スワイプ = 画面移動(パン)
+                    panX -= e.deltaX;
+                    panY -= e.deltaY;
+                    applyTransform();
+                }
             }, { passive: false });
 
             renderCanvas();
