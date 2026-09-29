@@ -14,6 +14,17 @@ App.Pages.youtube = async function(targetScriptId = null) {
         window.ytActiveTab = 'script';
     }
     let videoTypeTab = window.ytVideoTypeMode || 'long';
+
+    // 台本の進捗状態(作成中 → 撮影待ち → 編集待ち → 投稿済み)。未設定の台本は「作成中」として扱う
+    const SCRIPT_STATUSES = [
+        { value: '作成中',   color: '#495057', bg: '#F1F3F5', border: '#ADB5BD', icon: 'ph-pencil-simple' },
+        { value: '撮影待ち', color: '#C2410C', bg: '#FFF4E6', border: '#FD7E14', icon: 'ph-video-camera' },
+        { value: '編集待ち', color: '#5F3DC4', bg: '#F3F0FF', border: '#845EF7', icon: 'ph-scissors' },
+        { value: '投稿済み', color: '#2B8A3E', bg: '#EBFBEE', border: '#40C057', icon: 'ph-check-circle' },
+    ];
+    const scriptStatusOf = (sc) => (SCRIPT_STATUSES.some(x => x.value === sc?.status) ? sc.status : '作成中');
+    const scriptStatusDef = (v) => SCRIPT_STATUSES.find(x => x.value === v) || SCRIPT_STATUSES[0];
+    const escHtml = (t) => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     let selectedChannelId = window.ytSelectedChannelId || null;
     let selectedLineId = window.ytSelectedLineId || null;
 
@@ -382,6 +393,14 @@ App.Pages.youtube = async function(targetScriptId = null) {
 
     function renderScriptTab() {
         return `
+            <div class="card" id="script-board" style="padding: 20px 24px; margin-bottom: 20px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom: 12px;">
+                    <h3 style="font-size: 1.1rem; margin: 0; display:flex; align-items:center; gap:8px;"><i class="ph ph-kanban"></i> 台本の進捗（${videoTypeTab === 'short' ? 'ショート' : 'ロング'}）</h3>
+                    <div id="script-status-chips" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
+                </div>
+                <div id="script-status-list" style="max-height: 320px; overflow-y: auto; border: 1px solid var(--border-light); border-radius: 8px;"></div>
+            </div>
+
             <div class="card" style="display: flex; flex-direction: column; padding: 24px; background: var(--bg-secondary);">
                 <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-light); padding-bottom: 16px; margin-bottom: 24px;">
                     <div>
@@ -391,8 +410,12 @@ App.Pages.youtube = async function(targetScriptId = null) {
                         </div>
                         <div id="script-total-chars" style="font-size: 0.85rem; color: var(--primary); font-weight: bold; margin-top: 4px;">合計文字数: 0 文字 (空白抜き)</div>
                     </div>
-                    <div style="display: flex; gap: 8px; align-items: center;">
-                        <select id="script-history-select" class="input-field" style="width: 200px; margin-bottom: 0;" onchange="loadSelectedScript(this.value)">
+                    <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end;">
+                        <label for="script-status" style="font-size:0.8rem; font-weight:bold; color:var(--text-secondary); margin:0;">状態</label>
+                        <select id="script-status" class="input-field" style="width: 130px; margin-bottom: 0; font-weight: bold; border-left-width: 6px;" onchange="changeCurrentScriptStatus(this.value)">
+                            ${SCRIPT_STATUSES.map(st => `<option value="${st.value}">${st.value}</option>`).join('')}
+                        </select>
+                        <select id="script-history-select" class="input-field" style="width: 240px; margin-bottom: 0;" onchange="loadSelectedScript(this.value)">
                             <option value="">-- 保存済みを選択 --</option>
                         </select>
                         <button class="btn-sm" style="border: 2px solid #dc3545; background: white; color: #dc3545; padding: 4px 16px; border-radius: 4px; cursor: pointer; transition: 0.2s; font-weight: bold;" onclick="deleteCurrentScript()"><i class="ph ph-trash"></i> 削除</button>
@@ -482,7 +505,89 @@ App.Pages.youtube = async function(targetScriptId = null) {
             if(!select) return;
             const filteredScripts = allScripts.filter(s => (s.videoType || 'long') === videoTypeTab);
             select.innerHTML = '<option value="">-- 保存済みを選択 --</option>' + 
-                filteredScripts.map(s => `<option value="${s.id}" ${s.id == selectedId ? 'selected':''}>${s.title || '(無題)'}</option>`).join('');
+                filteredScripts.map(s => `<option value="${s.id}" ${s.id == selectedId ? 'selected':''}>【${scriptStatusOf(s)}】${escHtml(s.title || '(無題)')}</option>`).join('');
+            renderScriptBoard();
+        };
+
+        // --- 台本の進捗ボード(状態ごとの件数と一覧) ---
+        const paintStatusSelect = (el, value) => {
+            if (!el) return;
+            const d = scriptStatusDef(value);
+            el.value = d.value;
+            el.style.color = d.color; el.style.background = d.bg; el.style.borderColor = d.border;
+        };
+
+        const renderScriptBoard = () => {
+            const chips = document.getElementById('script-status-chips');
+            const list = document.getElementById('script-status-list');
+            if (!chips || !list) return;
+            const mine = allScripts.filter(s => (s.videoType || 'long') === videoTypeTab);
+            const filter = window.ytScriptStatusFilter || 'all';
+            const currentId = document.getElementById('script-id')?.value || '';
+
+            const chip = (value, label, count, d) => {
+                const on = filter === value;
+                const color = d ? d.color : 'var(--text-primary)';
+                return `<button type="button" onclick="setScriptStatusFilter('${value}')" style="cursor:pointer; padding:5px 12px; border-radius:999px; font-size:0.8rem; font-weight:bold; border:2px solid ${on ? (d ? d.border : 'var(--primary)') : 'var(--border-light)'}; background:${on ? (d ? d.bg : 'var(--bg-tertiary)') : 'white'}; color:${color}; display:inline-flex; align-items:center; gap:4px;">${d ? `<i class="ph ${d.icon}"></i>` : ''}${label} <span style="background:${d ? d.border : '#868E96'}; color:white; border-radius:999px; padding:0 7px; font-size:0.75rem;">${count}</span></button>`;
+            };
+            chips.innerHTML = chip('all', 'すべて', mine.length, null) +
+                SCRIPT_STATUSES.map(d => chip(d.value, d.value, mine.filter(s => scriptStatusOf(s) === d.value).length, d)).join('');
+
+            const order = (v) => SCRIPT_STATUSES.findIndex(x => x.value === v);
+            const rows = mine
+                .filter(s => filter === 'all' || scriptStatusOf(s) === filter)
+                .sort((a, b) => order(scriptStatusOf(a)) - order(scriptStatusOf(b)) || String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+            if (!rows.length) {
+                list.innerHTML = `<div style="padding:20px; text-align:center; color:var(--text-secondary); font-size:0.9rem;">${mine.length ? 'この状態の台本はありません' : 'まだ台本がありません'}</div>`;
+                return;
+            }
+            list.innerHTML = rows.map(s => {
+                const st = scriptStatusOf(s); const d = scriptStatusDef(st);
+                const isCurrent = String(s.id) === String(currentId);
+                const date = s.updatedAt ? new Date(s.updatedAt).toLocaleDateString('ja-JP') : '-';
+                return `<div style="display:flex; align-items:center; gap:10px; padding:8px 12px; border-bottom:1px solid var(--border-light); background:${isCurrent ? 'var(--bg-tertiary)' : 'white'}; border-left:5px solid ${d.border};">
+                    <a href="#" onclick="openScriptFromBoard(${s.id}); return false;" style="flex:1; min-width:0; font-weight:${isCurrent ? 'bold' : '600'}; color:var(--text-primary); text-decoration:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escHtml(s.title || '(無題)')}">${isCurrent ? '<i class="ph ph-caret-right"></i> ' : ''}${escHtml(s.title || '(無題)')}</a>
+                    <span style="font-size:0.75rem; color:var(--text-secondary); white-space:nowrap; flex:0 0 auto;">更新 ${date}</span>
+                    <select onchange="changeScriptStatusFromBoard(${s.id}, this.value)" style="width:auto; flex:0 0 auto; margin:0; font-size:0.8rem; font-weight:bold; padding:3px 6px; border-radius:6px; border:2px solid ${d.border}; background:${d.bg}; color:${d.color}; cursor:pointer;">
+                        ${SCRIPT_STATUSES.map(x => `<option value="${x.value}" ${x.value === st ? 'selected' : ''}>${x.value}</option>`).join('')}
+                    </select>
+                </div>`;
+            }).join('');
+        };
+
+        window.setScriptStatusFilter = (value) => {
+            window.ytScriptStatusFilter = value;
+            renderScriptBoard();
+        };
+
+        window.openScriptFromBoard = (id) => {
+            window.loadSelectedScript(id);
+            const selectEl = document.getElementById('script-history-select');
+            if (selectEl) selectEl.value = id;
+        };
+
+        // 一覧のプルダウンで状態を変える(開いていない台本も変えられる)
+        window.changeScriptStatusFromBoard = async (id, status) => {
+            const s = allScripts.find(x => x.id == id);
+            if (!s) return;
+            const { id: _omit, ...rest } = s;
+            const data = { ...rest, status };
+            await Store.updateYTScript(id, data);
+            s.status = status;
+            if (String(document.getElementById('script-id')?.value) === String(id)) {
+                paintStatusSelect(document.getElementById('script-status'), status);
+            }
+            updateHistoryDropdown(document.getElementById('script-id')?.value || '');
+        };
+
+        // 編集中の台本の状態を変える
+        window.changeCurrentScriptStatus = async (status) => {
+            paintStatusSelect(document.getElementById('script-status'), status);
+            const id = document.getElementById('script-id').value;
+            if (!id) return;   // まだ保存していない台本は、本文を入力して保存されるときに一緒に保存される
+            clearTimeout(autoSaveTimer);
+            await window.saveScript(false);
+            updateHistoryDropdown(id);
         };
 
         window.copyScriptField = (id) => {
@@ -555,7 +660,9 @@ App.Pages.youtube = async function(targetScriptId = null) {
                 memoEl.value = '';
                 memoEl.style.height = 'auto';
             }
+            paintStatusSelect(document.getElementById('script-status'), '作成中');
             updateScriptState();
+            renderScriptBoard();
         };
 
         window.saveScript = async (showAlert = true) => {
@@ -572,7 +679,8 @@ App.Pages.youtube = async function(targetScriptId = null) {
             const memoEl = document.getElementById('s-field-memo');
             if (memoEl) fields['memo'] = memoEl.value;
 
-            const data = { title, fields, updatedAt: new Date().toISOString(), videoType: videoTypeTab };
+            const status = document.getElementById('script-status')?.value || '作成中';
+            const data = { title, fields, updatedAt: new Date().toISOString(), videoType: videoTypeTab, status };
 
             let isNew = !id;
 
@@ -588,6 +696,11 @@ App.Pages.youtube = async function(targetScriptId = null) {
             if (showAlert || isNew) {
                 allScripts = await Store.getYTScripts();
                 updateHistoryDropdown(id);
+            } else {
+                // 自動保存:一覧だけ手元で更新する(入力欄のフォーカスは動かさない)
+                const local = allScripts.find(x => x.id == id);
+                if (local) Object.assign(local, data);
+                renderScriptBoard();
             }
             
             if (showAlert) {
@@ -621,6 +734,8 @@ App.Pages.youtube = async function(targetScriptId = null) {
             if(!s) return;
 
             document.getElementById('script-id').value = s.id;
+            paintStatusSelect(document.getElementById('script-status'), scriptStatusOf(s));
+            renderScriptBoard();
             
             // Wait for DOM to be ready before updating values
             setTimeout(() => {
