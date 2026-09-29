@@ -533,10 +533,10 @@ App.Pages.youtube = async function(targetScriptId = null) {
             chips.innerHTML = chip('all', 'すべて', mine.length, null) +
                 SCRIPT_STATUSES.map(d => chip(d.value, d.value, mine.filter(s => scriptStatusOf(s) === d.value).length, d)).join('');
 
-            const order = (v) => SCRIPT_STATUSES.findIndex(x => x.value === v);
+            // 並び順は「新規作成した順」(新しい台本が上)で固定。開いたり状態を変えたりしても位置は動かない
             const rows = mine
                 .filter(s => filter === 'all' || scriptStatusOf(s) === filter)
-                .sort((a, b) => order(scriptStatusOf(a)) - order(scriptStatusOf(b)) || String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+                .sort((a, b) => Number(b.id) - Number(a.id));
             if (!rows.length) {
                 list.innerHTML = `<div style="padding:20px; text-align:center; color:var(--text-secondary); font-size:0.9rem;">${mine.length ? 'この状態の台本はありません' : 'まだ台本がありません'}</div>`;
                 return;
@@ -544,10 +544,11 @@ App.Pages.youtube = async function(targetScriptId = null) {
             list.innerHTML = rows.map(s => {
                 const st = scriptStatusOf(s); const d = scriptStatusDef(st);
                 const isCurrent = String(s.id) === String(currentId);
-                const date = s.updatedAt ? new Date(s.updatedAt).toLocaleDateString('ja-JP') : '-';
+                const created = Number(s.id) > 1e12 ? new Date(Number(s.id)) : null;   // 台本のIDは作成時刻
+                const date = created ? created.toLocaleDateString('ja-JP') : '-';
                 return `<div style="display:flex; align-items:center; gap:10px; padding:8px 12px; border-bottom:1px solid var(--border-light); background:${isCurrent ? 'var(--bg-tertiary)' : 'white'}; border-left:5px solid ${d.border};">
                     <a href="#" onclick="openScriptFromBoard(${s.id}); return false;" style="flex:1; min-width:0; font-weight:${isCurrent ? 'bold' : '600'}; color:var(--text-primary); text-decoration:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escHtml(s.title || '(無題)')}">${isCurrent ? '<i class="ph ph-caret-right"></i> ' : ''}${escHtml(s.title || '(無題)')}</a>
-                    <span style="font-size:0.75rem; color:var(--text-secondary); white-space:nowrap; flex:0 0 auto;">更新 ${date}</span>
+                    <span style="font-size:0.75rem; color:var(--text-secondary); white-space:nowrap; flex:0 0 auto;">作成 ${date}</span>
                     <select onchange="changeScriptStatusFromBoard(${s.id}, this.value)" style="width:auto; flex:0 0 auto; margin:0; font-size:0.8rem; font-weight:bold; padding:3px 6px; border-radius:6px; border:2px solid ${d.border}; background:${d.bg}; color:${d.color}; cursor:pointer;">
                         ${SCRIPT_STATUSES.map(x => `<option value="${x.value}" ${x.value === st ? 'selected' : ''}>${x.value}</option>`).join('')}
                     </select>
