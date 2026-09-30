@@ -34,7 +34,7 @@ App.Pages.sales = async function(activeTab = 'plusOne', selectedMonth = 'all') {
         
         meoData = meoData.filter(c => {
             if (!c.startMonth) return false;
-            const isLump = c.plan && c.plan.includes('一括');
+            const isLump = window.isMeoLumpPlan(c.plan);
             const [sY, sM] = c.startMonth.split('-');
             const startD = new Date(parseInt(sY), parseInt(sM) - 1, 1);
             let targetY = new Date().getFullYear();
@@ -135,8 +135,8 @@ App.Pages.sales = async function(activeTab = 'plusOne', selectedMonth = 'all') {
             meoData.forEach(c => {
                 const pInfo = CONSTANTS.MEO_PLANS.find(p => p.name === c.plan);
                 const price = pInfo ? pInfo.price : 0;
-                totalMeoSales += (selectedMonth === 'all') ? (price * (c.plan && c.plan.includes('一括') ? 1 : 12)) : price;
-                const isLump = c.plan && c.plan.includes('一括');
+                totalMeoSales += (selectedMonth === 'all') ? (price * (window.isMeoLumpPlan(c.plan) ? 1 : 12)) : price;
+                const isLump = window.isMeoLumpPlan(c.plan);
                 const monthsCount = isLump ? 1 : 12;
                 const startMonth = c.startMonth || new Date().toISOString().slice(0, 7);
                 

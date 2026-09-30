@@ -54,18 +54,72 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
         });
     }
 
-    // MEO Contract end month calculation
-    window.calcMeoEndMonth = (startMonthStr) => {
+    // ===== MEO: 契約満了予定月の計算 =====
+    // 満了予定月 = 契約月 + (プランの契約期間 - 1)ヶ月。例: 6ヶ月契約で 2026-10 開始 → 2027-03 満了
+    // プランの契約期間は「契約プランの管理」で変更できる(初期値: 月額6ヶ月・一括12ヶ月)。
+    // 計算結果はあくまで初期値で、満了予定月の欄は手で書き換えられる。既に保存済みのendMonthは勝手に変えない。
+    window.calcMeoEndMonth = (startMonthStr, planName) => {
         if (!startMonthStr) return '';
         const [yyyy, mm] = startMonthStr.split('-');
+        const plan = planName ? window.MeoPlans.find(planName) : null;
+        const months = plan && plan.months > 0 ? plan.months : 6;
         let date = new Date(parseInt(yyyy), parseInt(mm) - 1, 1);
-        date.setMonth(date.getMonth() + 5); // 2026-09-04以降:最低利用期間が6ヶ月に変更(6ヶ月分=+5ヶ月)。既に保存済みの契約(旧12ヶ月分)のendMonthは触らないので、過去のクライアントは12ヶ月表示のまま残る。
+        date.setMonth(date.getMonth() + months - 1);
         return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
     };
 
-    // Listeners for MEO Date calculation on add form
-    window.onAddMeoMonthChange = (e) => {
-        document.getElementById('meo-end-month').value = window.calcMeoEndMonth(e.target.value);
+    const escHtml = (v) => String(v ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+
+    // プランの概要(例: 月額 ¥24,800 / 6ヶ月)
+    window.meoPlanSummary = (planName) => {
+        const p = window.MeoPlans.find(planName);
+        if (!p) return planName ? '※このプランは「契約プランの管理」に登録されていません(売上に計上されません)' : '';
+        return `${p.billing === 'lump' ? '一括' : '月額'} ¥${p.price.toLocaleString()} / 契約期間 ${p.months}ヶ月${p.note ? ` / ${p.note}` : ''}`;
+    };
+
+    // プランのプルダウン(「新規で選べる」をオフにしたプランは出さない。ただし今そのプランの顧客なら出す)
+    const meoPlanOptions = (selected) => {
+        const list = CONSTANTS.MEO_PLANS.filter(p => !p.hidden || p.name === selected);
+        let opts = list.map(p => `<option value="${escHtml(p.name)}" ${p.name === selected ? 'selected' : ''}>${escHtml(p.name)}</option>`).join('');
+        if (selected && !CONSTANTS.MEO_PLANS.some(p => p.name === selected)) {
+            opts = `<option value="${escHtml(selected)}" selected>${escHtml(selected)}(未登録のプラン)</option>` + opts;
+        }
+        return opts;
+    };
+
+    // 契約月・プランを変えたら満了予定月を計算し直す(prefix: 新規='' / 編集='e-')
+    window.recalcMeoEnd = (prefix) => {
+        const start = document.getElementById(`${prefix}meo-month`).value;
+        const plan = document.getElementById(`${prefix}meo-plan`).value;
+        const endEl = document.getElementById(`${prefix}meo-end-month`);
+        if (start) endEl.value = window.calcMeoEndMonth(start, plan);
+        const info = document.getElementById(`${prefix}meo-plan-info`);
+        if (info) info.textContent = window.meoPlanSummary(plan);
+    };
+    window.onAddMeoMonthChange = () => window.recalcMeoEnd('');
+
+    // 満了予定月が契約月より前になっていないかの確認
+    const checkMeoMonths = (start, end) => {
+        if (start && end && end < start) {
+            alert('契約満了予定月が契約月より前になっています。確認してください。');
+            return false;
+        }
+        return true;
+    };
+
+    // 契約満了が近い(1ヶ月前〜)・過ぎた「契約中」の顧客
+    const meoExpiry = {};
+    meoData.forEach(d => { meoExpiry[d.id] = window.getMeoExpiryInfo(d); });
+    const meoAlerts = meoData
+        .filter(d => meoExpiry[d.id])
+        .sort((a, b) => meoExpiry[a.id].daysLeft - meoExpiry[b.id].daysLeft);
+    const fmtEndDate = (dt) => `${dt.getFullYear()}/${dt.getMonth() + 1}/${dt.getDate()}`;
+    const meoExpiryBadge = (info) => {
+        if (!info) return '';
+        if (info.level === 'expired') {
+            return `<span class="meo-exp-badge meo-exp-expired" title="満了日(${fmtEndDate(info.endDate)})を過ぎています。更新・解約を確認してください"><i class="ph ph-warning-circle"></i> 契約満了(更新確認)</span>`;
+        }
+        return `<span class="meo-exp-badge meo-exp-soon" title="満了日: ${fmtEndDate(info.endDate)}"><i class="ph ph-bell-ringing"></i> ${info.daysLeft === 0 ? '本日満了' : `満了まであと${info.daysLeft}日`}</span>`;
     };
 
     window.checkAdmin = () => {
@@ -159,12 +213,15 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                             <div class="form-group"><label>顧客名</label><input type="text" id="meo-client" required></div>
                             <div class="form-group">
                                 <label>契約プラン</label>
-                                <select id="meo-plan">
-                                    ${CONSTANTS.MEO_PLANS.map(p => `<option value="${p.name}">${p.name}</option>`).join('')}
+                                <select id="meo-plan" onchange="recalcMeoEnd('')">
+                                    ${meoPlanOptions('')}
                                 </select>
+                                <div id="meo-plan-info" class="meo-plan-info">${escHtml(window.meoPlanSummary((CONSTANTS.MEO_PLANS.find(p => !p.hidden) || {}).name))}</div>
                             </div>
                             <div class="form-group"><label>契約月</label><input type="month" id="meo-month" required onchange="onAddMeoMonthChange(event)"></div>
-                            <div class="form-group"><label>契約満了予定 (6ヶ月後)</label><input type="text" id="meo-end-month" disabled></div>
+                            <div class="form-group"><label>契約満了予定月</label><input type="month" id="meo-end-month">
+                                <div class="meo-plan-info">契約月とプランから自動で入ります。手で変更もできます。</div>
+                            </div>
                             <div class="form-group"><label>ステータス</label>
                                 <select id="meo-tag" onclick="if(!checkAdmin()) return false;">
                                     <option value="契約中">契約中</option>
@@ -213,9 +270,10 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
             <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
                 <div>
                     <h3 class="card-title">${activeTab === 'meo' ? '顧客リスト' : '案件管理'} ${selectedMonth !== 'all' ? `(${selectedMonth}月)` : ''}</h3>
-                    <p style="font-size:0.8rem; color:var(--text-secondary); margin-top:4px;">※顧客名をクリックすると編集できます</p>
+                    <p style="font-size:0.8rem; color:var(--text-secondary); margin-top:4px;">※顧客名をクリックすると編集できます${activeTab === 'meo' ? '(契約満了予定月も変更できます)' : ''}</p>
                 </div>
-                <div style="display:flex; gap: 8px;">
+                <div style="display:flex; gap: 8px; flex-wrap:wrap; align-items:center;">
+                    ${activeTab === 'meo' && isAdmin ? `<button class="btn-secondary btn-sm" onclick="openMeoPlanModal()"><i class="ph ph-list-checks"></i> 契約プランの管理</button>` : ''}
                     ${activeTab === 'plusOne' ? `
                     <div style="position:relative; width: 140px;">
                         <input type="text" id="person-search" placeholder="担当者検索..." onkeyup="filterCustomers()" style="width:100%; border:1px solid var(--border-light); padding:8px; border-radius:var(--radius-sm); font-size:0.9rem;">
@@ -240,6 +298,21 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                     <input type="text" class="input-field" value="https://docs.google.com/spreadsheets/d/*************************" style="flex: 1; padding: 8px;" readonly>
                     <button class="btn-secondary" onclick="alert('管理者のみ操作可能です')" style="opacity:0.6;"><i class="ph ph-arrows-clockwise"></i> スプレッドシートから自動反映</button>
                     `}
+                </div>
+            </div>
+            ` : ''}
+
+            ${activeTab === 'meo' && meoAlerts.length ? `
+            <div class="meo-exp-banner">
+                <div class="meo-exp-banner-head">
+                    <span><i class="ph ph-bell-ringing"></i> 契約満了が近いお店(満了の1ヶ月前から表示)<b>${meoAlerts.length}件</b></span>
+                    <button type="button" class="btn-secondary btn-sm" id="meo-exp-filter-btn" onclick="toggleMeoExpiryFilter()">この${meoAlerts.length}件だけ表示</button>
+                </div>
+                <div class="meo-exp-banner-list">
+                    ${meoAlerts.map(d => {
+                        const info = meoExpiry[d.id];
+                        return `<a href="#" class="meo-exp-chip meo-exp-chip-${info.level}" onclick="openEditModal('meo', ${d.id}); return false;">${escHtml(d.client)}<small>${info.level === 'expired' ? '満了日を過ぎています' : (info.daysLeft === 0 ? `${fmtEndDate(info.endDate)} 本日満了` : `${fmtEndDate(info.endDate)} 満了・あと${info.daysLeft}日`)}</small></a>`;
+                    }).join('')}
                 </div>
             </div>
             ` : ''}
@@ -306,13 +379,13 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                         ${renderTableHead(['顧客名', '契約情報', '投稿状況', 'ブログ履歴', 'GBP情報', 'ステータス'])}
                         <tbody>
                             ${meoData.map(d => `
-                                <tr>
-                                    <td><a href="#" onclick="openEditModal('meo', ${d.id}); return false;" style="font-weight:bold; color:var(--info); text-decoration:none;">${d.client}</a></td>
+                                <tr class="${meoExpiry[d.id] ? `meo-exp-row-${meoExpiry[d.id].level}` : ''}" data-expiry="${meoExpiry[d.id] ? meoExpiry[d.id].level : ''}">
+                                    <td><a href="#" onclick="openEditModal('meo', ${d.id}); return false;" style="font-weight:bold; color:var(--info); text-decoration:none;">${d.client}</a>${meoExpiry[d.id] ? `<div style="margin-top:6px;">${meoExpiryBadge(meoExpiry[d.id])}</div>` : ''}</td>
                                     <td>
                                         <div style="font-size:0.8rem; line-height:1.4;">
                                             <div><strong>プラン:</strong> ${d.plan || '未設定'}</div>
                                             <div><strong>契約月:</strong> ${d.startMonth || '未設定'}</div>
-                                            <div><strong>満了予定:</strong> ${d.endMonth || '未設定'}</div>
+                                            <div class="${meoExpiry[d.id] ? `meo-exp-text-${meoExpiry[d.id].level}` : ''}"><strong>満了予定:</strong> ${d.endMonth || '未設定'}</div>
                                         </div>
                                     </td>
                                     <td>
@@ -412,6 +485,58 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                 <div id="edit-form-container"></div>
             </div>
         </div>
+
+        <!-- MEO 契約プランの管理 -->
+        <div class="modal-overlay" id="meo-plan-modal">
+            <div class="modal-content" style="max-width: 1040px;">
+                <div class="modal-header">
+                    <h3 class="modal-title">契約プランの管理</h3>
+                    <button class="modal-close" onclick="closeMeoPlanModal()"><i class="ph ph-x"></i></button>
+                </div>
+                <div class="meo-plan-help">
+                    <div>・<b>契約期間</b>は、新しく登録するときの「契約満了予定月」の自動計算に使います(お店ごとの満了予定月は、お店の編集画面で個別に変更できます)。</div>
+                    <div>・既にお客様がいるプランの<b>金額を変えると、そのお客様の過去分も含めた売上計算が新しい金額になります</b>。既存のお客様はそのままにしたい場合は、新しいプランとして追加してください。</div>
+                    <div>・プラン名は、お客様の契約と結びついているため後から変えられません。使わなくなったプランは「新規で選ぶ」のチェックを外すと、登録のプルダウンに出なくなります。</div>
+                </div>
+                <div class="table-container" style="overflow-x:auto;">
+                    <table class="meo-plan-table">
+                        <thead><tr><th>プラン名</th><th>金額(円)</th><th>支払い</th><th>契約期間</th><th>サービス内容(メモ)</th><th>新規で選ぶ</th><th>利用中</th><th></th></tr></thead>
+                        <tbody id="meo-plan-tbody"></tbody>
+                    </table>
+                </div>
+                <button type="button" class="btn-secondary btn-sm" style="margin-top:12px;" onclick="addMeoPlanRow()"><i class="ph ph-plus"></i> プランを追加</button>
+                <div class="modal-footer" style="align-items:center;">
+                    <button class="btn-secondary" onclick="closeMeoPlanModal()">キャンセル</button>
+                    <button class="btn-primary" id="meo-plan-save-btn" onclick="saveMeoPlans()">保存する</button>
+                </div>
+            </div>
+        </div>
+
+        <style>
+            .meo-plan-info { font-size: 0.75rem; color: var(--text-secondary); margin-top: 6px; line-height: 1.5; }
+            .meo-exp-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 0.72rem; font-weight: 700; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
+            .meo-exp-soon { background: #FFF4E5; color: #C25E00; border: 1px solid #FFC078; }
+            .meo-exp-expired { background: #FFF0F0; color: #C92A2A; border: 1px solid #FFA8A8; }
+            #customer-table tr.meo-exp-row-soon > td { background: #FFF9F0; }
+            #customer-table tr.meo-exp-row-soon > td:first-child { box-shadow: inset 4px 0 0 #FD7E14; }
+            #customer-table tr.meo-exp-row-expired > td { background: #FFF5F5; }
+            #customer-table tr.meo-exp-row-expired > td:first-child { box-shadow: inset 4px 0 0 #E03131; }
+            .meo-exp-text-soon { color: #C25E00; font-weight: 700; }
+            .meo-exp-text-expired { color: #C92A2A; font-weight: 700; }
+            .meo-exp-banner { margin: 0 0 16px; padding: 14px 16px; background: #FFF9F0; border: 1px solid #FFD8A8; border-radius: var(--radius-md, 10px); }
+            .meo-exp-banner-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 0.9rem; color: #C25E00; font-weight: 600; }
+            .meo-exp-banner-head b { margin-left: 8px; font-size: 1rem; }
+            .meo-exp-banner-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+            .meo-exp-chip { display: inline-flex; flex-direction: column; padding: 6px 12px; border-radius: 8px; background: #fff; text-decoration: none; font-weight: 700; font-size: 0.85rem; color: var(--text-primary, #333); border: 1px solid #FFC078; }
+            .meo-exp-chip small { font-weight: 500; font-size: 0.72rem; color: #C25E00; }
+            .meo-exp-chip-expired { border-color: #FFA8A8; }
+            .meo-exp-chip-expired small { color: #C92A2A; }
+            .meo-plan-help { font-size: 0.8rem; color: var(--text-secondary); line-height: 1.7; background: var(--bg-tertiary, #f6f7f9); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; }
+            .meo-plan-table th, .meo-plan-table td { padding: 8px 6px; font-size: 0.8rem; vertical-align: middle; white-space: nowrap; }
+            .meo-plan-table input, .meo-plan-table select { padding: 6px 8px; font-size: 0.85rem; border: 1px solid var(--border-light); border-radius: 6px; }
+            .meo-plan-table input[type=checkbox] { width: 18px; height: 18px; }
+            .meo-plan-table input:disabled { background: var(--bg-tertiary, #f1f3f5); color: var(--text-primary, #333); }
+        </style>
     `;
 
     App.mount(html, () => {
@@ -648,6 +773,7 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
         else if (activeTab === 'meo') {
             document.getElementById('add-meo-form').addEventListener('submit', async (e) => {
                 e.preventDefault();
+                if (!checkMeoMonths(document.getElementById('meo-month').value, document.getElementById('meo-end-month').value)) return;
                 await Store.addCustomer('meo', {
                     client: document.getElementById('meo-client').value,
                     plan: document.getElementById('meo-plan').value,
@@ -726,6 +852,102 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                 closeBlogModal();
                 switchCustomerTab('meo');
             }
+
+            // ----- 契約満了が近いお店だけ表示する切り替え -----
+            let meoExpiryFilterOn = false;
+            window.toggleMeoExpiryFilter = () => {
+                meoExpiryFilterOn = !meoExpiryFilterOn;
+                document.querySelectorAll('#customer-table tbody tr').forEach(tr => {
+                    tr.style.display = (!meoExpiryFilterOn || tr.dataset.expiry) ? '' : 'none';
+                });
+                const btn = document.getElementById('meo-exp-filter-btn');
+                if (btn) btn.textContent = meoExpiryFilterOn ? 'すべて表示に戻す' : `この${meoAlerts.length}件だけ表示`;
+            };
+
+            // ----- 契約プランの管理(管理者のみ) -----
+            let meoPlanDraft = [];
+            const meoPlanUsage = (name) => meoData.filter(c => c.plan === name).length;
+
+            const renderMeoPlanRows = () => {
+                const tbody = document.getElementById('meo-plan-tbody');
+                if (!tbody) return;
+                tbody.innerHTML = meoPlanDraft.map((p, i) => {
+                    const used = p.isNew ? 0 : meoPlanUsage(p.name);
+                    return `
+                    <tr>
+                        <td><input type="text" value="${escHtml(p.name)}" ${p.isNew ? '' : 'disabled title="プラン名は変更できません"'} placeholder="例: Standard Plan(2026年10月〜)" style="width:220px;" oninput="setMeoPlanField(${i}, 'name', this.value)"></td>
+                        <td><input type="number" min="0" step="100" value="${p.price}" style="width:110px;" oninput="setMeoPlanField(${i}, 'price', this.value)"></td>
+                        <td><select style="width:84px;" onchange="setMeoPlanField(${i}, 'billing', this.value)">
+                            <option value="monthly" ${p.billing === 'monthly' ? 'selected' : ''}>月額</option>
+                            <option value="lump" ${p.billing === 'lump' ? 'selected' : ''}>一括</option>
+                        </select></td>
+                        <td><input type="number" min="1" max="120" value="${p.months}" style="width:64px;" oninput="setMeoPlanField(${i}, 'months', this.value)"> ヶ月</td>
+                        <td><input type="text" value="${escHtml(p.note)}" placeholder="例: 投稿月8回+ブログ2本" style="width:220px;" oninput="setMeoPlanField(${i}, 'note', this.value)"></td>
+                        <td style="text-align:center;"><input type="checkbox" ${p.hidden ? '' : 'checked'} onchange="setMeoPlanField(${i}, 'hidden', !this.checked)"></td>
+                        <td style="text-align:center;">${used ? `${used}件` : '-'}</td>
+                        <td>${used ? `<span title="利用中のお客様がいるため削除できません" style="color:var(--text-tertiary, #aaa);"><i class="ph ph-lock-simple"></i></span>` : `<button type="button" class="btn-icon" title="削除" onclick="removeMeoPlanRow(${i})"><i class="ph ph-trash"></i></button>`}</td>
+                    </tr>`;
+                }).join('');
+            };
+
+            window.openMeoPlanModal = async () => {
+                if (!checkAdmin()) return;
+                await window.MeoPlans.load(true);   // 他の人が変えた分も取り込む
+                meoPlanDraft = CONSTANTS.MEO_PLANS.map(p => ({ ...p, original: { price: p.price, billing: p.billing } }));
+                renderMeoPlanRows();
+                document.getElementById('meo-plan-modal').classList.add('active');
+            };
+            window.closeMeoPlanModal = () => document.getElementById('meo-plan-modal').classList.remove('active');
+            window.setMeoPlanField = (i, key, value) => { if (meoPlanDraft[i]) meoPlanDraft[i][key] = value; };
+            window.addMeoPlanRow = () => {
+                meoPlanDraft.push({ name: '', price: 0, months: 6, billing: 'monthly', note: '', hidden: false, isNew: true });
+                renderMeoPlanRows();
+                const inputs = document.querySelectorAll('#meo-plan-tbody tr:last-child input[type=text]');
+                if (inputs[0]) inputs[0].focus();
+            };
+            window.removeMeoPlanRow = (i) => {
+                const p = meoPlanDraft[i];
+                if (!p) return;
+                if (!p.isNew && meoPlanUsage(p.name) > 0) { alert('利用中のお客様がいるため削除できません。'); return; }
+                if (!p.isNew && !confirm(`「${p.name}」を削除しますか？`)) return;
+                meoPlanDraft.splice(i, 1);
+                renderMeoPlanRows();
+            };
+            window.saveMeoPlans = async () => {
+                if (!checkAdmin()) return;
+                const names = new Set();
+                for (const p of meoPlanDraft) {
+                    const name = String(p.name || '').trim();
+                    if (!name) { alert('プラン名が空の行があります。入力するか、ゴミ箱で消してください。'); return; }
+                    if (names.has(name)) { alert(`「${name}」が重複しています。プラン名は別の名前にしてください。`); return; }
+                    names.add(name);
+                    const price = Number(p.price), months = Number(p.months);
+                    if (!Number.isFinite(price) || price < 0) { alert(`「${name}」の金額を確認してください。`); return; }
+                    if (!Number.isInteger(months) || months < 1 || months > 120) { alert(`「${name}」の契約期間は1〜120ヶ月の整数で入力してください。`); return; }
+                }
+                if (!meoPlanDraft.some(p => !p.hidden)) { alert('「新規で選ぶ」にチェックが入っているプランが1つもありません。'); return; }
+
+                // 利用中のプランで金額・支払い方法を変えた場合は、売上計算に影響するので確認
+                const changed = meoPlanDraft.filter(p => !p.isNew && p.original && meoPlanUsage(p.name) > 0 &&
+                    (Number(p.price) !== p.original.price || p.billing !== p.original.billing));
+                if (changed.length) {
+                    const lines = changed.map(p => `・${p.name}(利用中 ${meoPlanUsage(p.name)}件): ¥${p.original.price.toLocaleString()} → ¥${Number(p.price).toLocaleString()}${p.billing !== p.original.billing ? '(支払い方法も変更)' : ''}`).join('\n');
+                    if (!confirm(`次のプランは既にお客様がいます。\n${lines}\n\n保存すると、このお客様たちの売上計算(過去の月も含む)が新しい内容で計算し直されます。\n既存のお客様はそのままにしたい場合は「キャンセル」を押し、新しいプランとして追加してください。\n\nこのまま保存しますか？`)) return;
+                }
+
+                const btn = document.getElementById('meo-plan-save-btn');
+                if (btn) { btn.disabled = true; btn.textContent = '保存中...'; }
+                try {
+                    await window.MeoPlans.save(meoPlanDraft.map(({ isNew, original, ...p }) => ({ ...p, name: String(p.name).trim() })));
+                    await Store.logAction(user.email, 'MEOの契約プランを変更しました');
+                    closeMeoPlanModal();
+                    switchCustomerTab('meo');
+                } catch (err) {
+                    console.error(err);
+                    alert('保存に失敗しました。もう一度お試しください。\n' + (err && err.message ? err.message : ''));
+                    if (btn) { btn.disabled = false; btn.textContent = '保存する'; }
+                }
+            };
         }
         else if (activeTab === 'telecom') {
             document.getElementById('add-telecom-form').addEventListener('submit', async (e) => {
@@ -790,12 +1012,16 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                             <div class="form-group"><label>顧客名</label><input type="text" id="e-meo-client" value="${data.client || ''}" required></div>
                             <div class="form-group">
                                 <label>契約プラン</label>
-                                <select id="e-meo-plan">
-                                    ${CONSTANTS.MEO_PLANS.map(p => `<option value="${p.name}" ${data.plan === p.name ? 'selected' : ''}>${p.name}</option>`).join('')}
+                                <select id="e-meo-plan" onchange="recalcMeoEnd('e-')">
+                                    ${meoPlanOptions(data.plan || '')}
                                 </select>
+                                <div id="e-meo-plan-info" class="meo-plan-info">${escHtml(window.meoPlanSummary(data.plan))}</div>
                             </div>
-                            <div class="form-group"><label>契約月</label><input type="month" id="e-meo-month" value="${data.startMonth || ''}" required onchange="document.getElementById('e-meo-end-month').value = calcMeoEndMonth(this.value)"></div>
-                            <div class="form-group"><label>契約満了予定</label><input type="text" id="e-meo-end-month" value="${data.endMonth || ''}" disabled></div>
+                            <div class="form-group"><label>契約月</label><input type="month" id="e-meo-month" value="${data.startMonth || ''}" required onchange="recalcMeoEnd('e-')"></div>
+                            <div class="form-group"><label>契約満了予定月</label><input type="month" id="e-meo-end-month" value="${data.endMonth || ''}">
+                                <div class="meo-plan-info">更新・延長したときは、ここを書き換えて保存してください。(契約月・プランを変えると自動で計算し直します)</div>
+                                ${window.getMeoExpiryInfo(data) ? `<div style="margin-top:6px;">${meoExpiryBadge(window.getMeoExpiryInfo(data))}</div>` : ''}
+                            </div>
                             
                             <div class="form-group"><label>予約リンク</label><input type="url" id="e-meo-reserve-link" value="${data.reserveUrl || ''}"></div>
                             <div class="form-group"><label>ビジネスカテゴリー</label><input type="text" id="e-meo-gbp-cat" value="${data.gbpCategory || ''}"></div>
@@ -850,6 +1076,7 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                 });
                 await Store.logAction(user.email, `Plus Oneの案件「${document.getElementById('e-po-client').value}」を編集しました`);
             } else if (type === 'meo') {
+                if (!checkMeoMonths(document.getElementById('e-meo-month').value, document.getElementById('e-meo-end-month').value)) return;
                 await Store.updateCustomer('meo', id, {
                     client: document.getElementById('e-meo-client').value,
                     plan: document.getElementById('e-meo-plan').value,

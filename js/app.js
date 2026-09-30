@@ -56,6 +56,8 @@ const App = {
             content.innerHTML = '<div style="text-align:center; padding: 60px; color:var(--text-secondary);"><i class="ph ph-spinner ph-spin" style="font-size: 2rem; margin-bottom: 16px;"></i><p>データを読み込み中...</p></div>';
 
             try {
+                // MEOの契約プラン(管理画面で追加・変更したもの)を最初に1回だけ読み込む
+                if (window.MeoPlans) await window.MeoPlans.load();
                 await this.Pages[target](...args);
                 content.classList.remove('fade-in');
                 void content.offsetWidth;
@@ -612,7 +614,7 @@ App.Pages.dashboard = async function(selectedYearText = null) {
                 
                 const pInfo = CONSTANTS.MEO_PLANS.find(p => p.name === c.plan);
                 if (pInfo) {
-                    const isLump = c.plan.includes('一括');
+                    const isLump = window.isMeoLumpPlan(c.plan);
                     if (isLump) {
                         if (mDate.getTime() === startD.getTime()) sum += pInfo.price;
                     } else {

@@ -64,7 +64,7 @@ App.Pages.finance = async function(selectedMonth = 'all') {
         
         const pInfo = CONSTANTS.MEO_PLANS.find(p => p.name === c.plan);
         if (pInfo) {
-            const isLump = c.plan.includes('一括');
+            const isLump = window.isMeoLumpPlan(c.plan);
             if (isLump) {
                 if (isTargetMonth(startD)) sum += pInfo.price;
             } else {
