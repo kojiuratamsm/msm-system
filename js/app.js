@@ -33,7 +33,7 @@ const App = {
             'mindmaps': 'マインドマップ',
             'mindmap_editor': 'マインドマップ編集',
             'threads': 'Threads運用代行',
-            'photo_convert': '写真変換 (HEIC → JPEG)'
+            'photo_convert': '写真変換 (JPEG / PNG)'
         };
         document.getElementById('page-title').textContent = titleMap[target] || '';
 

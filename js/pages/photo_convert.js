@@ -1,5 +1,8 @@
 // js/pages/photo_convert.js
-// 写真変換: HEIC/HEIF(iPhoneの写真)を JPEG に変換して保存するページ。
+// 写真変換: HEIC/HEIF(iPhoneの写真)・PNG・JPEG などの写真を、JPEG か PNG にそろえて保存するページ。
+// ・形式はファイル名ではなく「ファイルの中身(先頭のバイト)」で判定する。名前が .PNG でも中身が HEIC なら HEIC として変換する。
+// ・HEIC は heic-to で読み込み、それ以外(PNG/JPEG/WebP/GIF/BMP)はブラウザ標準の createImageBitmap で読み込む。
+// ・JPEG で保存するとき、透明な部分は白にする(JPEG は透明を持てないため)。
 //
 // ・変換はすべてブラウザの中で行う(写真はサーバーやSupabaseに送らない)。
 // ・変換ライブラリ: heic-to v1.6.5(内部は libheif 1.23.5 / LGPL-3.0)https://github.com/hoppergee/heic-to
@@ -9,7 +12,7 @@
 //   https://developer.mozilla.org/docs/Web/API/Window/showDirectoryPicker
 //   Chrome / Edge は対応。Safari / Firefox は未対応のため、その場合は「ダウンロード」フォルダに保存する。
 // ・選んだフォルダはブラウザ(IndexedDB)に覚えておき、次回も同じフォルダに保存できる。
-// ・JPEGにすると、撮影日時・位置情報などの写真の情報(Exif)は引き継がれない。
+// ・保存し直すため、撮影日時・位置情報などの写真の情報(Exif)は引き継がれない(JPEGで向きの情報がある写真は、向きを反映してから保存する)。
 (function () {
     const VENDOR = {
         heic: 'js/vendor/heic-to.js',
@@ -20,6 +23,12 @@
         { value: '0.85', label: '標準(少し軽い)' },
         { value: '0.75', label: '軽量(容量を小さく)' }
     ];
+    const FORMAT_OPTIONS = [
+        { value: 'jpeg', label: 'JPEG', ext: 'jpg', mime: 'image/jpeg', note: 'おすすめ。容量が小さく、どこでも使えます' },
+        { value: 'png', label: 'PNG', ext: 'png', mime: 'image/png', note: '画質はそのまま(劣化なし)。容量は大きめ。透明な部分も残ります' }
+    ];
+    const KIND_LABEL = { heic: 'HEIC', png: 'PNG', jpeg: 'JPEG', webp: 'WebP', gif: 'GIF', bmp: 'BMP' };
+    const EXT_KIND = { heic: 'heic', heif: 'heic', png: 'png', jpg: 'jpeg', jpeg: 'jpeg', webp: 'webp', gif: 'gif', bmp: 'bmp' };
     const SIZE_OPTIONS = [
         { value: '0', label: '元のサイズのまま' },
         { value: '3000', label: '長い辺 3000px まで' },
@@ -30,8 +39,9 @@
     const supportsFolder = typeof window.showDirectoryPicker === 'function' && window.isSecureContext;
 
     // ページを移動しても選んだ設定は残す
-    const S = window.PhotoConvertState = window.PhotoConvertState || {
-        items: [],            // { id, file, name, status, outName, blob, url, error, isHeic, w, h }
+    const S = window.PhotoConvertState = (window.PhotoConvertState && 'format' in window.PhotoConvertState) ? window.PhotoConvertState : {
+        items: [],            // { id, file, name, kind, status, outName, blob, url, error, w, h, doneFormat }
+        format: 'jpeg',       // 保存形式: 'jpeg' | 'png'
         mode: supportsFolder ? 'folder' : 'download',
         dirHandle: null,
         dirLoaded: false,
@@ -42,6 +52,7 @@
     };
 
     const esc = (v) => String(v ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+    const curFormat = () => FORMAT_OPTIONS.find(f => f.value === S.format) || FORMAT_OPTIONS[0];
     const fmtSize = (n) => n >= 1048576 ? `${(n / 1048576).toFixed(1)}MB` : `${Math.max(1, Math.round(n / 1024))}KB`;
 
     // ---------- 外部ファイルの読み込み(1回だけ) ----------
@@ -87,43 +98,58 @@
         return false;
     }
 
-    // ---------- HEICかどうか(ファイルの先頭12バイトで判定) ----------
-    async function detectHeic(file) {
+    // ---------- 写真の形式を、ファイルの中身(先頭のバイト)で判定する ----------
+    // 戻り値: 'heic' | 'png' | 'jpeg' | 'webp' | 'gif' | 'bmp' | null(対応していない)
+    async function detectKind(file) {
         try {
-            const head = new Uint8Array(await file.slice(0, 12).arrayBuffer());
-            const txt = String.fromCharCode(...head.slice(4, 12));
-            if (txt.slice(0, 4) !== 'ftyp') return false;
-            return HEIC_BRANDS.includes(txt.slice(4, 8).replace(/\0/g, ' ').trim());
+            const b = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+            const str = (from, to) => String.fromCharCode(...b.slice(from, to));
+            if (str(4, 8) === 'ftyp' && HEIC_BRANDS.includes(str(8, 12).replace(/\0/g, ' ').trim())) return 'heic';
+            if (b[0] === 0x89 && str(1, 4) === 'PNG') return 'png';
+            if (b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF) return 'jpeg';
+            if (str(0, 4) === 'RIFF' && str(8, 12) === 'WEBP') return 'webp';
+            if (str(0, 4) === 'GIF8') return 'gif';
+            if (str(0, 2) === 'BM') return 'bmp';
+            return null;
         } catch (e) {
-            return /\.(heic|heif)$/i.test(file.name);
+            const ext = (file.name.split('.').pop() || '').toLowerCase();
+            return EXT_KIND[ext] || null;
         }
     }
 
     // ---------- 変換 ----------
     function baseName(name) { return name.replace(/\.[^.]+$/, '') || 'photo'; }
 
-    async function resizeIfNeeded(jpegBlob, maxSize, quality) {
-        const max = parseInt(maxSize, 10);
-        const bmp = await createImageBitmap(jpegBlob);
+    // 写真を読み込んで、指定の形式(JPEG/PNG)・サイズで書き出す
+    async function convertOne(it, HeicTo) {
+        const bmp = it.kind === 'heic'
+            ? await HeicTo({ blob: it.file, type: 'bitmap' })
+            : await createImageBitmap(it.file, { imageOrientation: 'from-image' }).catch(() => createImageBitmap(it.file));
         const w = bmp.width, h = bmp.height;
-        if (!max || Math.max(w, h) <= max) { bmp.close && bmp.close(); return { blob: jpegBlob, w, h }; }
-        const r = max / Math.max(w, h);
-        const cw = Math.round(w * r), ch = Math.round(h * r);
+        const max = parseInt(S.maxSize, 10);
+        const r = max && Math.max(w, h) > max ? max / Math.max(w, h) : 1;
+        const cw = Math.max(1, Math.round(w * r)), ch = Math.max(1, Math.round(h * r));
+        const fmt = curFormat();
         const canvas = document.createElement('canvas');
         canvas.width = cw; canvas.height = ch;
         const ctx = canvas.getContext('2d');
+        if (fmt.value === 'jpeg') { ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, cw, ch); }   // 透明部分は白に
         ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(bmp, 0, 0, cw, ch);
-        bmp.close && bmp.close();
-        const blob = await new Promise((res, rej) => canvas.toBlob(b => b ? res(b) : rej(new Error('縮小に失敗しました')), 'image/jpeg', parseFloat(quality)));
-        canvas.width = canvas.height = 1;
-        return { blob, w: cw, h: ch };
+        if (bmp.close) bmp.close();
+        try {
+            const blob = await new Promise((res, rej) => canvas.toBlob(
+                bl => bl ? res(bl) : rej(new Error('画像を書き出せませんでした(写真が大きすぎる可能性があります。「サイズ」を小さくしてお試しください)')),
+                fmt.mime, fmt.value === 'jpeg' ? parseFloat(S.quality) : undefined));
+            return { blob, w: cw, h: ch };
+        } finally {
+            canvas.width = canvas.height = 1;
+        }
     }
 
-    async function uniqueNameInDir(dir, name, used) {
-        const base = name.replace(/\.jpg$/i, '');
+    async function uniqueNameInDir(dir, base, ext, used) {
         for (let i = 0; i < 1000; i++) {
-            const cand = i === 0 ? `${base}.jpg` : `${base} (${i}).jpg`;
+            const cand = i === 0 ? `${base}.${ext}` : `${base} (${i}).${ext}`;
             if (used.has(cand.toLowerCase())) continue;
             if (dir) {
                 try { await dir.getFileHandle(cand); continue; } catch (e) { /* 無い = 使える */ }
@@ -131,7 +157,7 @@
             used.add(cand.toLowerCase());
             return cand;
         }
-        return `${base}-${Date.now()}.jpg`;
+        return `${base}-${Date.now()}.${ext}`;
     }
 
     function triggerDownload(blob, name) {
@@ -154,16 +180,26 @@
             <div class="card pc-card">
                 <div class="pc-step"><span>1</span>写真を選ぶ</div>
                 <label class="pc-drop" id="pc-drop">
-                    <input type="file" id="pc-input" accept=".heic,.heif,image/heic,image/heif" multiple hidden>
+                    <input type="file" id="pc-input" accept=".heic,.heif,.png,.jpg,.jpeg,.webp,.gif,.bmp,image/*" multiple hidden>
                     <i class="ph ph-image-square"></i>
-                    <div class="pc-drop-main">ここに HEIC の写真をドラッグ&ドロップ</div>
-                    <div class="pc-drop-sub">または <u>クリックして選ぶ</u>(複数まとめてOK)</div>
+                    <div class="pc-drop-main">ここに写真をドラッグ&ドロップ</div>
+                    <div class="pc-drop-sub">または <u>クリックして選ぶ</u>(複数まとめてOK)<br>HEIC(iPhoneの写真)・PNG・JPEG・WebP に対応</div>
                 </label>
                 <div id="pc-list-wrap"></div>
             </div>
 
             <div class="card pc-card">
-                <div class="pc-step"><span>2</span>保存先を決める</div>
+                <div class="pc-step"><span>2</span>保存の形式と保存先を決める</div>
+                <div class="pc-sub-title">保存形式</div>
+                <div class="pc-format-row">
+                    ${FORMAT_OPTIONS.map(f => `
+                    <label class="pc-format ${S.format === f.value ? 'is-on' : ''}">
+                        <input type="radio" name="pc-format" value="${f.value}" ${S.format === f.value ? 'checked' : ''}>
+                        <div><div class="pc-radio-title">${f.label}<span class="pc-ext">.${f.ext}</span>${f.value === 'jpeg' ? '<span class="pc-tag">おすすめ</span>' : ''}</div>
+                        <div class="pc-note" style="margin-top:2px;">${f.note.replace(/^おすすめ。/, '')}</div></div>
+                    </label>`).join('')}
+                </div>
+                <div class="pc-sub-title">保存先</div>
                 <div class="pc-radio ${supportsFolder ? '' : 'is-disabled'}" data-mode="folder">
                     <input type="radio" name="pc-mode" value="folder" ${S.mode === 'folder' ? 'checked' : ''} ${supportsFolder ? '' : 'disabled'}>
                     <div>
@@ -189,9 +225,9 @@
                 </div>
 
                 <div class="pc-options">
-                    <div class="form-group">
-                        <label>画質</label>
-                        <select id="pc-quality">${QUALITY_OPTIONS.map(o => `<option value="${o.value}" ${S.quality === o.value ? 'selected' : ''}>${o.label}</option>`).join('')}</select>
+                    <div class="form-group" id="pc-quality-group" style="${S.format === 'png' ? 'opacity:.5;' : ''}">
+                        <label>画質(JPEGのとき)</label>
+                        <select id="pc-quality" ${S.format === 'png' ? 'disabled' : ''}>${QUALITY_OPTIONS.map(o => `<option value="${o.value}" ${S.quality === o.value ? 'selected' : ''}>${o.label}</option>`).join('')}</select>
                     </div>
                     <div class="form-group">
                         <label>サイズ</label>
@@ -202,9 +238,9 @@
 
             <div class="card pc-card">
                 <div class="pc-step"><span>3</span>変換して保存</div>
-                <button type="button" class="btn-primary pc-go" id="pc-go"><i class="ph ph-arrows-clockwise"></i> JPEGに変換して保存</button>
+                <button type="button" class="btn-primary pc-go" id="pc-go"><i class="ph ph-arrows-clockwise"></i> <span id="pc-go-label">${curFormat().label}に変換して保存</span></button>
                 <div id="pc-progress" class="pc-progress"></div>
-                <div class="pc-note" style="margin-top:12px;">※変換はこのパソコンの中だけで行います(写真がサーバーに送られることはありません)。<br>※JPEGにすると、撮影日時や位置情報などの写真の情報は引き継がれません。</div>
+                <div class="pc-note" style="margin-top:12px;">※変換はこのパソコンの中だけで行います(写真がサーバーに送られることはありません)。<br>※保存し直すため、撮影日時や位置情報などの写真の情報は引き継がれません。<br>※JPEGで保存すると、透明な部分は白になります。</div>
             </div>
         </div>
 
@@ -236,6 +272,14 @@
             .pc-radio.is-disabled { opacity: .75; cursor: default; }
             .pc-radio:has(input[name="pc-mode"]:checked) { border-color: var(--info, #4285F4); background: #F7FAFF; }
             .pc-radio-title { font-weight: 700; }
+            .pc-sub-title { font-size: 0.85rem; font-weight: 700; color: var(--text-secondary); margin: 6px 0 8px; }
+            .pc-format-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
+            .pc-format { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--border-light, #e5e5e5); border-radius: 12px; cursor: pointer; }
+            .pc-format input { margin-top: 4px; width: 18px; height: 18px; flex: 0 0 auto; }
+            .pc-format.is-on { border-color: var(--info, #4285F4); background: #F7FAFF; }
+            .pc-ext { font-weight: 500; font-size: 0.8rem; color: var(--text-secondary); margin-left: 6px; }
+            .pc-kind { display: inline-block; font-size: 0.68rem; font-weight: 700; padding: 1px 6px; border-radius: 4px; background: #EEF2F6; color: #4A5568; margin-right: 6px; }
+            .pc-kind-warn { background: #FFF4E5; color: #C25E00; }
             .pc-tag { font-size: 0.7rem; background: #E6F7EC; color: #1E7E34; padding: 2px 8px; border-radius: 999px; margin-left: 6px; }
             .pc-folder-row { display: flex; align-items: center; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
             .pc-folder { font-weight: 700; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: var(--bg-tertiary, #f1f3f5); border-radius: 8px; }
@@ -248,7 +292,7 @@
             .pc-progress { margin-top: 14px; font-size: 0.9rem; font-weight: 600; }
             .pc-progress.ok { color: #1E7E34; }
             .pc-progress.err { color: #C92A2A; }
-            @media (max-width: 768px) { .pc-options { grid-template-columns: 1fr; } }
+            @media (max-width: 768px) { .pc-options, .pc-format-row { grid-template-columns: 1fr; } }
         </style>`;
 
         App.mount(html, () => {
@@ -272,6 +316,13 @@
             const zip = document.getElementById('pc-zip');
             zip.addEventListener('change', () => { S.zip = zip.checked; });
             document.getElementById('pc-quality').addEventListener('change', e => { S.quality = e.target.value; });
+            document.querySelectorAll('input[name="pc-format"]').forEach(r => r.addEventListener('change', () => {
+                S.format = r.value;
+                document.querySelectorAll('.pc-format').forEach(l => l.classList.toggle('is-on', l.querySelector('input').checked));
+                const q = document.getElementById('pc-quality'); if (q) q.disabled = S.format === 'png';
+                const qg = document.getElementById('pc-quality-group'); if (qg) qg.style.opacity = S.format === 'png' ? '.5' : '';
+                const gl = document.getElementById('pc-go-label'); if (gl) gl.textContent = `${curFormat().label}に変換して保存`;
+            }));
             document.getElementById('pc-size').addEventListener('change', e => { S.maxSize = e.target.value; });
 
             const pick = document.getElementById('pc-pick-folder');
@@ -300,12 +351,12 @@
     async function addFiles(fileList) {
         const files = Array.from(fileList || []);
         for (const file of files) {
-            const isHeic = await detectHeic(file);
+            const kind = await detectKind(file);
             S.items.push({
                 id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                file, name: file.name, isHeic,
-                status: isHeic ? 'wait' : 'skip',
-                error: isHeic ? '' : 'HEICの写真ではないため変換しません'
+                file, name: file.name, kind,
+                status: kind ? 'wait' : 'skip',
+                error: kind ? '' : '写真のファイルではないか、対応していない形式です'
             });
         }
         renderList();
@@ -333,7 +384,7 @@
         const wrap = document.getElementById('pc-list-wrap');
         if (!wrap) return;
         if (!S.items.length) { wrap.innerHTML = ''; return; }
-        const n = S.items.filter(x => x.isHeic).length;
+        const n = S.items.filter(x => x.kind).length;
         const done = S.items.filter(x => x.status === 'done').length;
         const label = { wait: '変換前', run: '変換中…', done: '保存済み', err: 'エラー', skip: '対象外' };
         wrap.innerHTML = `
@@ -346,7 +397,7 @@
                 <div class="pc-item" data-id="${it.id}" data-status="${it.status}">
                     ${it.url ? `<img class="pc-thumb" src="${it.url}" alt="">` : `<div class="pc-thumb"><i class="ph ph-image"></i></div>`}
                     <div class="pc-item-main">
-                        <div class="pc-item-name">${esc(it.name)}${it.outName ? ` → ${esc(it.outName)}` : ''}</div>
+                        <div class="pc-item-name">${kindBadge(it)}${esc(it.name)}${it.outName ? ` → ${esc(it.outName)}` : ''}</div>
                         <div class="pc-item-sub">${fmtSize(it.file.size)}${it.blob ? ` → ${fmtSize(it.blob.size)}(${it.w}×${it.h})` : ''}${it.error ? ` / <span style="color:#C92A2A;">${esc(it.error)}</span>` : ''}</div>
                     </div>
                     <span class="pc-st pc-st-${it.status}">${label[it.status]}</span>
@@ -356,6 +407,17 @@
             </div>`;
     }
 
+    // 中身の形式のバッジ。名前の拡張子と中身が違うときは知らせる(例: 名前は .PNG だが中身は HEIC)
+    function kindBadge(it) {
+        if (!it.kind) return '';
+        const ext = (it.name.includes('.') ? it.name.split('.').pop() : '').toLowerCase();
+        const extKind = EXT_KIND[ext];
+        if (extKind && extKind !== it.kind) {
+            return `<span class="pc-kind pc-kind-warn" title="ファイル名は .${esc(ext)} ですが、中身は ${KIND_LABEL[it.kind]} です">中身は${KIND_LABEL[it.kind]}</span>`;
+        }
+        return `<span class="pc-kind">${KIND_LABEL[it.kind]}</span>`;
+    }
+
     function setProgress(text, cls = '') {
         const p = document.getElementById('pc-progress');
         if (p) { p.textContent = text; p.className = 'pc-progress ' + cls; }
@@ -363,9 +425,10 @@
 
     async function convertAll() {
         if (S.busy) return;
-        const targets = S.items.filter(x => x.isHeic && x.status !== 'done');
+        const fmt = curFormat();
+        const targets = S.items.filter(x => x.kind && !(x.status === 'done' && x.doneFormat === fmt.value));
         if (!targets.length) {
-            alert(S.items.some(x => x.isHeic) ? '選んだ写真はすべて変換済みです。' : 'HEICの写真を選んでください。');
+            alert(S.items.some(x => x.kind) ? `選んだ写真はすべて${fmt.label}で保存済みです。` : '変換する写真を選んでください。');
             return;
         }
 
@@ -383,10 +446,12 @@
         S.busy = true;
         const btn = document.getElementById('pc-go');
         if (btn) btn.disabled = true;
-        let HeicTo;
+        let HeicTo = null;
         try {
-            setProgress('変換の準備中…(初回は少し時間がかかります)');
-            HeicTo = await loadVendor('heic', 'HeicTo');
+            if (targets.some(x => x.kind === 'heic')) {
+                setProgress('変換の準備中…(初回は少し時間がかかります)');
+                HeicTo = await loadVendor('heic', 'HeicTo');
+            }
         } catch (e) {
             S.busy = false; if (btn) btn.disabled = false;
             setProgress('変換の準備に失敗しました: ' + e.message, 'err');
@@ -405,10 +470,9 @@
             setProgress(`変換中… ${i + 1} / ${targets.length} 枚目`);
             renderList();
             try {
-                const jpeg = await HeicTo({ blob: it.file, type: 'image/jpeg', quality: parseFloat(S.quality) });
-                const r = await resizeIfNeeded(jpeg, S.maxSize, S.quality);
+                const r = await convertOne(it, HeicTo);
                 it.blob = r.blob; it.w = r.w; it.h = r.h;
-                it.outName = await uniqueNameInDir(dir, baseName(it.name), used);
+                it.outName = await uniqueNameInDir(dir, baseName(it.name), fmt.ext, used);
                 if (dir) {
                     const fh = await dir.getFileHandle(it.outName, { create: true });
                     const w = await fh.createWritable();
@@ -422,9 +486,9 @@
                 }
                 if (it.url) URL.revokeObjectURL(it.url);
                 it.url = URL.createObjectURL(it.blob);
-                it.status = 'done'; ok++;
+                it.status = 'done'; it.doneFormat = fmt.value; ok++;
             } catch (err) {
-                console.error('HEIC変換エラー', it.name, err);
+                console.error('写真変換エラー', it.name, err);
                 it.status = 'err'; ng++;
                 it.error = '変換できませんでした' + (err && err.message ? `(${err.message})` : (typeof err === 'string' ? `(${err})` : ''));
             }
@@ -444,7 +508,7 @@
             } catch (err) {
                 console.error(err);
                 ng += zipFiles.length; ok -= zipFiles.length;
-                zipFiles.forEach(it => { it.status = 'err'; it.error = 'ZIPにまとめられませんでした。「もう一度保存」で1枚ずつ保存できます'; });
+                zipFiles.forEach(it => { it.status = 'err'; it.error = 'ZIPにまとめられませんでした。「ダウンロード」で1枚ずつ保存できます'; });
             }
         }
 
