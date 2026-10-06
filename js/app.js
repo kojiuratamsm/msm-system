@@ -33,7 +33,8 @@ const App = {
             'mindmaps': 'マインドマップ',
             'mindmap_editor': 'マインドマップ編集',
             'threads': 'Threads運用代行',
-            'photo_convert': '写真変換 (JPEG / PNG)'
+            'photo_convert': '写真変換 (JPEG / PNG)',
+            'qr_code': 'QRコード作成'
         };
         document.getElementById('page-title').textContent = titleMap[target] || '';
 
@@ -199,7 +200,7 @@ const App = {
             
             // Sidebar will explicitly show all items to all users now.
             // When clicked, non-admins will see a rejection screen for restricted pages.
-            const allNavs = ['dashboard', 'ai_office', 'services', 'customers', 'sales', 'finance', 'payroll', 'tasks', 'research', 'youtube', 'youtube_short', 'youtube_subtitles', 'ai_planner', 'sales_leads', 'form_analytics', 'surveys', 'mindmaps', 'meo_users', 'invites', 'settings', 'threads', 'photo_convert'];
+            const allNavs = ['dashboard', 'ai_office', 'services', 'customers', 'sales', 'finance', 'payroll', 'tasks', 'research', 'youtube', 'youtube_short', 'youtube_subtitles', 'ai_planner', 'sales_leads', 'form_analytics', 'surveys', 'mindmaps', 'meo_users', 'invites', 'settings', 'threads', 'photo_convert', 'qr_code'];
             allNavs.forEach(nav => {
                 const el = document.querySelector(`li[data-target="${nav}"]`);
                 if (el) el.style.display = 'flex';
