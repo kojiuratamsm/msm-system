@@ -16,6 +16,7 @@ const App = {
             'ai_office': 'AI OFFICE',
             'services': 'サービス一覧',
             'customers': '顧客管理 / 案件管理',
+            'meo_progress': 'MEO作業状況',
             'sales': '売上シミュレーション',
             'finance': '財務管理',
             'payroll': '給与計算',
@@ -60,6 +61,8 @@ const App = {
             try {
                 // MEOの契約プラン(管理画面で追加・変更したもの)を最初に1回だけ読み込む
                 if (window.MeoPlans) await window.MeoPlans.load();
+                // 満了予定月を過ぎた「契約中」のMEO店舗を、毎月自動で延長する(月に1回だけ確認)
+                if (window.MeoContract) await window.MeoContract.autoRenewAll();
                 await this.Pages[target](...args);
                 content.classList.remove('fade-in');
                 void content.offsetWidth;
@@ -200,7 +203,7 @@ const App = {
             
             // Sidebar will explicitly show all items to all users now.
             // When clicked, non-admins will see a rejection screen for restricted pages.
-            const allNavs = ['dashboard', 'ai_office', 'services', 'customers', 'sales', 'finance', 'payroll', 'tasks', 'research', 'youtube', 'youtube_short', 'youtube_subtitles', 'ai_planner', 'sales_leads', 'form_analytics', 'surveys', 'mindmaps', 'meo_users', 'invites', 'settings', 'threads', 'photo_convert', 'qr_code'];
+            const allNavs = ['dashboard', 'ai_office', 'services', 'customers', 'sales', 'finance', 'payroll', 'tasks', 'research', 'youtube', 'youtube_short', 'youtube_subtitles', 'ai_planner', 'sales_leads', 'form_analytics', 'surveys', 'mindmaps', 'meo_users', 'invites', 'settings', 'threads', 'photo_convert', 'qr_code', 'meo_progress'];
             allNavs.forEach(nav => {
                 const el = document.querySelector(`li[data-target="${nav}"]`);
                 if (el) el.style.display = 'flex';
@@ -620,7 +623,7 @@ App.Pages.dashboard = async function(selectedYearText = null) {
                     if (isLump) {
                         if (mDate.getTime() === startD.getTime()) sum += pInfo.price;
                     } else {
-                        if (mDate.getTime() >= nextMonthD.getTime() && (!c.endMonth || mDate.getTime() < new Date(c.endMonth + '-01').getTime())) {
+                        if (mDate.getTime() >= nextMonthD.getTime() && (!c.endMonth || c.autoRenew || mDate.getTime() < new Date(c.endMonth + '-01').getTime())) {
                             sum += pInfo.price;
                         }
                     }

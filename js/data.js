@@ -46,13 +46,17 @@ window.MeoPlans = {
             ? p.billing
             : ((p.name || '').includes('一括') ? 'lump' : 'monthly');
         const months = parseInt(p.months, 10);
+        const ppm = parseInt(p.postsPerMonth, 10), mpm = parseInt(p.mediaPerMonth, 10);
         return {
             name: String(p.name || '').trim(),
             price: Math.max(0, parseInt(p.price, 10) || 0),
             months: months > 0 ? months : (billing === 'lump' ? 12 : 6),
             billing,
             note: p.note ? String(p.note) : '',
-            hidden: !!p.hidden
+            hidden: !!p.hidden,
+            // 月の作業の目標件数(「今月のMEO作業状況」で使う)。チェック欄の数が上限
+            postsPerMonth: Number.isFinite(ppm) ? Math.min(12, Math.max(0, ppm)) : 12,
+            mediaPerMonth: Number.isFinite(mpm) ? Math.min(6, Math.max(0, mpm)) : 6
         };
     },
     apply(plans) {
@@ -88,7 +92,7 @@ window.MeoPlans = {
         this.loaded = false;
         await this.load(true);
         // 保存できたかを読み直して確認(Store側は失敗しても例外を出さないため)
-        const sig = (arr) => JSON.stringify(arr.map(p => [p.name, p.price, p.months, p.billing, p.note, p.hidden]));
+        const sig = (arr) => JSON.stringify(arr.map(p => [p.name, p.price, p.months, p.billing, p.note, p.hidden, p.postsPerMonth, p.mediaPerMonth]));
         if (sig(CONSTANTS.MEO_PLANS) !== sig(list)) throw new Error('保存した内容を確認できませんでした。通信状態を確認してください。');
     },
     find(name) {
@@ -96,6 +100,56 @@ window.MeoPlans = {
     }
 };
 CONSTANTS.MEO_PLANS.splice(0, CONSTANTS.MEO_PLANS.length, ...CONSTANTS.MEO_PLANS.map(p => window.MeoPlans.normalize(p)));
+
+// ===== MEOの月ごとの作業(投稿状況・写真/動画アップロード)の共通部品 =====
+// 保存先: 顧客データの posts = { 'YYYY-MM': [true/false ×12] } / media = { 'YYYY-MM': [true/false ×6] }
+window.MeoWork = {
+    POSTS_MAX: 12,
+    MEDIA_MAX: 6,
+    ymOf(dt) { return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`; },
+    // 今月から過去 count ヶ月分のプルダウン用の一覧
+    monthOptions(count = 12, now = new Date()) {
+        const list = [];
+        for (let i = 0; i < count; i++) {
+            const dt = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            const label = dt.getFullYear() === now.getFullYear() ? `${dt.getMonth() + 1}月` : `${dt.getFullYear()}年${dt.getMonth() + 1}月`;
+            list.push({ key: this.ymOf(dt), label: i === 0 ? `${label}(今月)` : label });
+        }
+        return list;
+    },
+    // その月のチェック(true/false の配列)
+    checks(customer, type, ym) {
+        const max = type === 'media' ? this.MEDIA_MAX : this.POSTS_MAX;
+        const obj = customer && customer[type];
+        const saved = obj && typeof obj === 'object' && !Array.isArray(obj) && Array.isArray(obj[ym]) ? obj[ym] : [];
+        return Array.from({ length: max }, (_, i) => !!saved[i]);
+    },
+    // 投稿状況の古い保存形式('1'〜'12' の月だけ)を、年+月('YYYY-MM')に1回だけ移し替えてデータベースにも保存する。
+    // 古い形式には年がないため「移し替える日から見て一番最近のその月」とみなす
+    // (例: 2026年10月に移し替えると '1'〜'10' は2026年、'11'・'12' は2025年)。
+    async migrateLegacyPosts(customers, now = new Date()) {
+        const legacyToYm = (k) => {
+            const m = parseInt(k, 10);
+            const y = m <= now.getMonth() + 1 ? now.getFullYear() : now.getFullYear() - 1;
+            return `${y}-${String(m).padStart(2, '0')}`;
+        };
+        for (const d of customers) {
+            if (!d.posts || typeof d.posts !== 'object' || Array.isArray(d.posts)) continue;
+            const legacyKeys = Object.keys(d.posts).filter(k => /^\d{1,2}$/.test(k) && +k >= 1 && +k <= 12);
+            if (!legacyKeys.length) continue;
+            const next = {};
+            Object.keys(d.posts).filter(k => !legacyKeys.includes(k)).forEach(k => { next[k] = d.posts[k]; });
+            legacyKeys.forEach(k => {
+                const ym = legacyToYm(k);
+                const old = Array.isArray(d.posts[k]) ? d.posts[k] : [];
+                const cur = Array.isArray(next[ym]) ? next[ym] : [];
+                next[ym] = Array.from({ length: Math.max(12, old.length, cur.length) }, (_, i) => !!(old[i] || cur[i]));
+            });
+            d.posts = next;
+            try { await Store.updateCustomer('meo', d.id, { posts: next }); } catch (e) { console.error('投稿状況の移し替えに失敗', d.id, e); }
+        }
+    }
+};
 
 // 一括払いのプランかどうか(プランの設定を優先。設定がなければ名前に「一括」が入っているかで判断)
 window.isMeoLumpPlan = (planName) => {
@@ -107,8 +161,9 @@ window.isMeoLumpPlan = (planName) => {
 // 契約満了の状態を判定する。endMonth は 'YYYY-MM'(その月の末日で満了とみなす)
 // 戻り値: null(判定なし) / { level: 'soon'|'expired', daysLeft, endDate }
 // 'soon' = 満了日の1ヶ月前(前月の末日)〜満了日、'expired' = 満了日を過ぎた
+// すでに毎月の自動延長に入っている店舗(autoRenew)は、毎月延長されるだけなので知らせない。
 window.getMeoExpiryInfo = (customer, today = new Date()) => {
-    if (!customer || customer.tag !== '契約中' || !customer.endMonth) return null;
+    if (!customer || customer.tag !== '契約中' || !customer.endMonth || customer.autoRenew) return null;
     const m = String(customer.endMonth).match(/^(\d{4})-(\d{1,2})$/);
     if (!m) return null;
     const y = parseInt(m[1], 10), mo = parseInt(m[2], 10);
@@ -119,6 +174,34 @@ window.getMeoExpiryInfo = (customer, today = new Date()) => {
     if (t > endDate) return { level: 'expired', daysLeft, endDate };
     if (t >= alertFrom) return { level: 'soon', daysLeft, endDate };
     return null;
+};
+
+// ===== MEOの契約の自動延長 =====
+// 「契約中」のまま満了予定月を過ぎた店舗は、解約(ステータスを「解約済み」に)していない限り、毎月1ヶ月ずつ自動で延長する。
+//   ・満了予定月(endMonth)を今月に進め、autoRenew = true(毎月自動更新中)にする。
+//   ・最初に決めていた満了予定月は initialEndMonth に残す(1回目の延長のときだけ)。
+//   ・何ヶ月も開いていなかった場合も、今月までまとめて延長する。
+// 管理画面のページを開いたとき(App.navigate)に、月に1回だけ確認する。
+window.MeoContract = {
+    checkedYm: null,
+    async autoRenewAll(now = new Date()) {
+        const ym = window.MeoWork.ymOf(now);
+        if (this.checkedYm === ym || !window.Store) return;
+        try {
+            const list = await Store.getCustomers('meo');
+            const user = window.Auth && Auth.getCurrentUser ? Auth.getCurrentUser() : null;
+            for (const c of list) {
+                if (c.tag !== '契約中' || !/^\d{4}-\d{2}$/.test(c.endMonth || '') || c.endMonth >= ym) continue;
+                const patch = { endMonth: ym, autoRenew: true };
+                if (!c.initialEndMonth) patch.initialEndMonth = c.endMonth;
+                await Store.updateCustomer('meo', c.id, patch);
+                try { await Store.logAction(user && user.email ? user.email : 'system', `MEO「${c.client}」の契約を自動延長しました(満了予定 ${c.endMonth} → ${ym})`); } catch (e) { /* 記録の失敗は無視 */ }
+            }
+            this.checkedYm = ym;
+        } catch (e) {
+            console.error('MEO契約の自動延長に失敗しました', e);
+        }
+    }
 };
 
 window.getPoBasePrice = (type, monthStr) => {

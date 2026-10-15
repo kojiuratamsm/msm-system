@@ -123,32 +123,8 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
         return list;
     })();
 
-    // 投稿状況の古い保存形式('1'〜'12' の月だけ)を、年+月('YYYY-MM')に1回だけ移し替える。
-    // 古い形式には年がないため、「今日から見て一番最近のその月」とみなす
-    // (例: 2026年10月に移し替えると '1'〜'10' は2026年、'11'・'12' は2025年)。移し替えたらデータベースにも保存する。
-    if (activeTab === 'meo') {
-        const now = new Date();
-        const legacyToYm = (k) => {
-            const m = parseInt(k, 10);
-            const y = m <= now.getMonth() + 1 ? now.getFullYear() : now.getFullYear() - 1;
-            return `${y}-${String(m).padStart(2, '0')}`;
-        };
-        for (const d of meoData) {
-            if (!d.posts || typeof d.posts !== 'object' || Array.isArray(d.posts)) continue;
-            const legacyKeys = Object.keys(d.posts).filter(k => /^\d{1,2}$/.test(k) && +k >= 1 && +k <= 12);
-            if (!legacyKeys.length) continue;
-            const next = {};
-            Object.keys(d.posts).filter(k => !legacyKeys.includes(k)).forEach(k => { next[k] = d.posts[k]; });
-            legacyKeys.forEach(k => {
-                const ym = legacyToYm(k);
-                const old = Array.isArray(d.posts[k]) ? d.posts[k] : [];
-                const cur = Array.isArray(next[ym]) ? next[ym] : [];
-                next[ym] = Array.from({ length: Math.max(12, old.length, cur.length) }, (_, i) => !!(old[i] || cur[i]));
-            });
-            d.posts = next;
-            try { await Store.updateCustomer('meo', d.id, { posts: next }); } catch (e) { console.error('投稿状況の移し替えに失敗', d.id, e); }
-        }
-    }
+    // 投稿状況の古い保存形式('1'〜'12')を年+月に1回だけ移し替える(処理は data.js の MeoWork.migrateLegacyPosts)
+    if (activeTab === 'meo') await window.MeoWork.migrateLegacyPosts(meoData);
 
     // 契約満了が近い(1ヶ月前〜)・過ぎた「契約中」の顧客
     const meoExpiry = {};
@@ -348,7 +324,7 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
             ${activeTab === 'meo' && meoAlerts.length ? `
             <div class="meo-exp-banner">
                 <div class="meo-exp-banner-head">
-                    <span><i class="ph ph-bell-ringing"></i> 契約満了が近いお店(満了の1ヶ月前から表示)<b>${meoAlerts.length}件</b></span>
+                    <span><i class="ph ph-bell-ringing"></i> 契約満了が近いお店(満了の1ヶ月前から表示)<b>${meoAlerts.length}件</b><small class="meo-exp-banner-note">解約しなければ、満了月の翌月から毎月自動で延長されます</small></span>
                     <button type="button" class="btn-secondary btn-sm" id="meo-exp-filter-btn" onclick="toggleMeoExpiryFilter()">この${meoAlerts.length}件だけ表示</button>
                 </div>
                 <div class="meo-exp-banner-list">
@@ -429,6 +405,7 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                                             <div><strong>プラン:</strong> ${d.plan || '未設定'}</div>
                                             <div><strong>契約月:</strong> ${d.startMonth || '未設定'}</div>
                                             <div class="${meoExpiry[d.id] ? `meo-exp-text-${meoExpiry[d.id].level}` : ''}"><strong>満了予定:</strong> ${d.endMonth || '未設定'}</div>
+                                            ${d.autoRenew && d.tag === '契約中' ? `<div style="margin-top:4px;"><span class="meo-auto-badge" title="最初の満了予定: ${d.initialEndMonth || '-'}。解約(ステータスを「解約済み」)にするまで毎月延長されます"><i class="ph ph-arrows-clockwise"></i> 毎月自動更新</span></div>` : ''}
                                         </div>
                                     </td>
                                     <td>
@@ -545,13 +522,14 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                     <button class="modal-close" onclick="closeMeoPlanModal()"><i class="ph ph-x"></i></button>
                 </div>
                 <div class="meo-plan-help">
+                    <div>・<b>月の投稿数・月の写真/動画</b>は、「今月のMEO作業状況」で遅れを判定するときの目標件数です(投稿は最大12件、写真/動画は最大6件)。</div>
                     <div>・<b>契約期間</b>は、新しく登録するときの「契約満了予定月」の自動計算に使います(お店ごとの満了予定月は、お店の編集画面で個別に変更できます)。</div>
                     <div>・既にお客様がいるプランの<b>金額を変えると、そのお客様の過去分も含めた売上計算が新しい金額になります</b>。既存のお客様はそのままにしたい場合は、新しいプランとして追加してください。</div>
                     <div>・プラン名は、お客様の契約と結びついているため後から変えられません。使わなくなったプランは「新規で選ぶ」のチェックを外すと、登録のプルダウンに出なくなります。</div>
                 </div>
                 <div class="table-container" style="overflow-x:auto;">
                     <table class="meo-plan-table">
-                        <thead><tr><th>プラン名</th><th>金額(円)</th><th>支払い</th><th>契約期間</th><th>サービス内容(メモ)</th><th>新規で選ぶ</th><th>利用中</th><th></th></tr></thead>
+                        <thead><tr><th>プラン名</th><th>金額(円)</th><th>支払い</th><th>契約期間</th><th title="「今月のMEO作業状況」の目標">月の投稿数</th><th title="「今月のMEO作業状況」の目標">月の写真/動画</th><th>サービス内容(メモ)</th><th>新規で選ぶ</th><th>利用中</th><th></th></tr></thead>
                         <tbody id="meo-plan-tbody"></tbody>
                     </table>
                 </div>
@@ -577,6 +555,8 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
             .meo-exp-banner { margin: 0 0 16px; padding: 14px 16px; background: #FFF9F0; border: 1px solid #FFD8A8; border-radius: var(--radius-md, 10px); }
             .meo-exp-banner-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 0.9rem; color: #C25E00; font-weight: 600; }
             .meo-exp-banner-head b { margin-left: 8px; font-size: 1rem; }
+            .meo-exp-banner-note { display: block; font-size: 0.75rem; font-weight: 500; color: var(--text-secondary); margin-top: 2px; }
+            .meo-auto-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #EDF5FF; color: #1971C2; border: 1px solid #A5D8FF; white-space: nowrap; }
             .meo-exp-banner-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
             .meo-exp-chip { display: inline-flex; flex-direction: column; padding: 6px 12px; border-radius: 8px; background: #fff; text-decoration: none; font-weight: 700; font-size: 0.85rem; color: var(--text-primary, #333); border: 1px solid #FFC078; }
             .meo-exp-chip small { font-weight: 500; font-size: 0.72rem; color: #C25E00; }
@@ -957,6 +937,8 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                             <option value="lump" ${p.billing === 'lump' ? 'selected' : ''}>一括</option>
                         </select></td>
                         <td><input type="number" min="1" max="120" value="${p.months}" style="width:64px;" oninput="setMeoPlanField(${i}, 'months', this.value)"> ヶ月</td>
+                        <td><input type="number" min="0" max="12" value="${p.postsPerMonth ?? 12}" style="width:56px;" oninput="setMeoPlanField(${i}, 'postsPerMonth', this.value)"> 件</td>
+                        <td><input type="number" min="0" max="6" value="${p.mediaPerMonth ?? 6}" style="width:52px;" oninput="setMeoPlanField(${i}, 'mediaPerMonth', this.value)"> 件</td>
                         <td><input type="text" value="${escHtml(p.note)}" placeholder="例: 投稿月8回+ブログ2本" style="width:220px;" oninput="setMeoPlanField(${i}, 'note', this.value)"></td>
                         <td style="text-align:center;"><input type="checkbox" ${p.hidden ? '' : 'checked'} onchange="setMeoPlanField(${i}, 'hidden', !this.checked)"></td>
                         <td style="text-align:center;">${used ? `${used}件` : '-'}</td>
@@ -975,7 +957,7 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
             window.closeMeoPlanModal = () => document.getElementById('meo-plan-modal').classList.remove('active');
             window.setMeoPlanField = (i, key, value) => { if (meoPlanDraft[i]) meoPlanDraft[i][key] = value; };
             window.addMeoPlanRow = () => {
-                meoPlanDraft.push({ name: '', price: 0, months: 6, billing: 'monthly', note: '', hidden: false, isNew: true });
+                meoPlanDraft.push({ name: '', price: 0, months: 6, billing: 'monthly', note: '', hidden: false, postsPerMonth: 12, mediaPerMonth: 6, isNew: true });
                 renderMeoPlanRows();
                 const inputs = document.querySelectorAll('#meo-plan-tbody tr:last-child input[type=text]');
                 if (inputs[0]) inputs[0].focus();
@@ -999,6 +981,9 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                     const price = Number(p.price), months = Number(p.months);
                     if (!Number.isFinite(price) || price < 0) { alert(`「${name}」の金額を確認してください。`); return; }
                     if (!Number.isInteger(months) || months < 1 || months > 120) { alert(`「${name}」の契約期間は1〜120ヶ月の整数で入力してください。`); return; }
+                    const ppm = Number(p.postsPerMonth ?? 12), mpm = Number(p.mediaPerMonth ?? 6);
+                    if (!Number.isInteger(ppm) || ppm < 0 || ppm > 12) { alert(`「${name}」の月の投稿数は0〜12で入力してください。`); return; }
+                    if (!Number.isInteger(mpm) || mpm < 0 || mpm > 6) { alert(`「${name}」の月の写真/動画は0〜6で入力してください。`); return; }
                 }
                 if (!meoPlanDraft.some(p => !p.hidden)) { alert('「新規で選ぶ」にチェックが入っているプランが1つもありません。'); return; }
 
@@ -1094,7 +1079,9 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                             </div>
                             <div class="form-group"><label>契約月</label><input type="month" id="e-meo-month" value="${data.startMonth || ''}" required onchange="recalcMeoEnd('e-')"></div>
                             <div class="form-group"><label>契約満了予定月</label><input type="month" id="e-meo-end-month" value="${data.endMonth || ''}">
-                                <div class="meo-plan-info">更新・延長したときは、ここを書き換えて保存してください。(契約月・プランを変えると自動で計算し直します)</div>
+                                <div class="meo-plan-info">${data.autoRenew && data.tag === '契約中'
+                                    ? `<span class="meo-auto-badge"><i class="ph ph-arrows-clockwise"></i> 毎月自動更新中</span> 最初の満了予定: ${data.initialEndMonth || '-'}。解約(ステータスを「解約済み」)にするまで、毎月自動で延長されます。先の月を入れると、その月までの契約になります。`
+                                    : '「契約中」のままこの月を過ぎると、翌月から毎月自動で延長されます。先の月まで更新したときは、ここを書き換えて保存してください。(契約月・プランを変えると自動で計算し直します)'}</div>
                                 ${window.getMeoExpiryInfo(data) ? `<div style="margin-top:6px;">${meoExpiryBadge(window.getMeoExpiryInfo(data))}</div>` : ''}
                             </div>
                             
@@ -1152,7 +1139,11 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                 await Store.logAction(user.email, `Plus Oneの案件「${document.getElementById('e-po-client').value}」を編集しました`);
             } else if (type === 'meo') {
                 if (!checkMeoMonths(document.getElementById('e-meo-month').value, document.getElementById('e-meo-end-month').value)) return;
+                // 満了予定月を来月以降に書き換えたら、その月までの契約に戻す(毎月の自動更新はいったん止まり、その月を過ぎたらまた自動延長)
+                const meoEndInput = document.getElementById('e-meo-end-month').value;
+                const autoPatch = meoEndInput && meoEndInput > window.MeoWork.ymOf(new Date()) ? { autoRenew: false } : {};
                 await Store.updateCustomer('meo', id, {
+                    ...autoPatch,
                     client: document.getElementById('e-meo-client').value,
                     plan: document.getElementById('e-meo-plan').value,
                     startMonth: document.getElementById('e-meo-month').value,
