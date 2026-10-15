@@ -107,6 +107,49 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
         return true;
     };
 
+    // 写真/動画アップロード: 月ごとに6個のチェック。保存先は data.media = { 'YYYY-MM': [true/false ×6] }
+    // 投稿状況: 月ごとに12個のチェック。保存先は data.posts = { 'YYYY-MM': [true/false ×12] }
+    // どちらも年+月で分けて保存するので、月(年)が変わると新しい月は空の状態から始まる。プルダウンは今月から過去12ヶ月分。
+    const MEO_MEDIA_COUNT = 6;
+    const meoMonthOptions = (() => {
+        const now = new Date();
+        const list = [];
+        for (let i = 0; i < 12; i++) {
+            const dt = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+            const label = dt.getFullYear() === now.getFullYear() ? `${dt.getMonth() + 1}月` : `${dt.getFullYear()}年${dt.getMonth() + 1}月`;
+            list.push({ key, label: i === 0 ? `${label}(今月)` : label });
+        }
+        return list;
+    })();
+
+    // 投稿状況の古い保存形式('1'〜'12' の月だけ)を、年+月('YYYY-MM')に1回だけ移し替える。
+    // 古い形式には年がないため、「今日から見て一番最近のその月」とみなす
+    // (例: 2026年10月に移し替えると '1'〜'10' は2026年、'11'・'12' は2025年)。移し替えたらデータベースにも保存する。
+    if (activeTab === 'meo') {
+        const now = new Date();
+        const legacyToYm = (k) => {
+            const m = parseInt(k, 10);
+            const y = m <= now.getMonth() + 1 ? now.getFullYear() : now.getFullYear() - 1;
+            return `${y}-${String(m).padStart(2, '0')}`;
+        };
+        for (const d of meoData) {
+            if (!d.posts || typeof d.posts !== 'object' || Array.isArray(d.posts)) continue;
+            const legacyKeys = Object.keys(d.posts).filter(k => /^\d{1,2}$/.test(k) && +k >= 1 && +k <= 12);
+            if (!legacyKeys.length) continue;
+            const next = {};
+            Object.keys(d.posts).filter(k => !legacyKeys.includes(k)).forEach(k => { next[k] = d.posts[k]; });
+            legacyKeys.forEach(k => {
+                const ym = legacyToYm(k);
+                const old = Array.isArray(d.posts[k]) ? d.posts[k] : [];
+                const cur = Array.isArray(next[ym]) ? next[ym] : [];
+                next[ym] = Array.from({ length: Math.max(12, old.length, cur.length) }, (_, i) => !!(old[i] || cur[i]));
+            });
+            d.posts = next;
+            try { await Store.updateCustomer('meo', d.id, { posts: next }); } catch (e) { console.error('投稿状況の移し替えに失敗', d.id, e); }
+        }
+    }
+
     // 契約満了が近い(1ヶ月前〜)・過ぎた「契約中」の顧客
     const meoExpiry = {};
     meoData.forEach(d => { meoExpiry[d.id] = window.getMeoExpiryInfo(d); });
@@ -376,7 +419,7 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                     ` : ''}
 
                     ${activeTab === 'meo' ? `
-                        ${renderTableHead(['顧客名', '契約情報', '投稿状況', 'ブログ履歴', 'GBP情報', 'ステータス'])}
+                        ${renderTableHead(['顧客名', '契約情報', '写真/動画アップロード', '投稿状況', 'ブログ履歴', 'GBP情報', 'ステータス'])}
                         <tbody>
                             ${meoData.map(d => `
                                 <tr class="${meoExpiry[d.id] ? `meo-exp-row-${meoExpiry[d.id].level}` : ''}" data-expiry="${meoExpiry[d.id] ? meoExpiry[d.id].level : ''}">
@@ -390,8 +433,16 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                                     </td>
                                     <td>
                                         <div style="display:flex; flex-direction: column; gap: 4px; max-width: 140px;">
+                                            <select onchange="renderMeoMediaUI(${d.id}, this.value)" style="padding: 2px; font-size: 0.8rem; border-radius: 4px;">
+                                                ${meoMonthOptions.map(o => `<option value="${o.key}" ${o.key === meoMonthOptions[0].key ? 'selected' : ''}>${o.label}</option>`).join('')}
+                                            </select>
+                                            <div id="media-container-${d.id}" style="display:flex; gap:2px; flex-wrap:wrap; margin-top: 4px; align-items:center;"></div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div style="display:flex; flex-direction: column; gap: 4px; max-width: 140px;">
                                             <select onchange="renderMeoPostsUI(${d.id}, this.value)" style="padding: 2px; font-size: 0.8rem; border-radius: 4px;">
-                                                ${[1,2,3,4,5,6,7,8,9,10,11,12].map(m => `<option value="${m}" ${new Date().getMonth()+1 === m ? 'selected' : ''}>${m}月</option>`).join('')}
+                                                ${meoMonthOptions.map(o => `<option value="${o.key}" ${o.key === meoMonthOptions[0].key ? 'selected' : ''}>${o.label}</option>`).join('')}
                                             </select>
                                             <div id="posts-container-${d.id}" style="display:flex; gap:2px; flex-wrap:wrap; margin-top: 4px;">
                                                 <!-- Dynamic posts rendered here -->
@@ -815,11 +866,35 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                 `).join('');
             };
 
+            // ----- 写真/動画アップロード(月ごとに6個) -----
+            window.updateMeoMedia = async (id, monthKey, idx, checked) => {
+                const c = meoData.find(x => x.id === id);
+                if (!c) return;
+                if (!c.media || typeof c.media !== 'object' || Array.isArray(c.media)) c.media = {};
+                if (!Array.isArray(c.media[monthKey])) c.media[monthKey] = Array(MEO_MEDIA_COUNT).fill(false);
+                c.media[monthKey][idx] = checked;
+                renderMeoMediaUI(id, monthKey);
+                await Store.updateCustomer('meo', id, { media: c.media });
+            };
+
+            window.renderMeoMediaUI = (id, monthKey) => {
+                const el = document.getElementById(`media-container-${id}`);
+                if (!el) return;
+                const d = meoData.find(c => c.id === id);
+                if (!d) return;
+                const saved = d.media && !Array.isArray(d.media) && Array.isArray(d.media[monthKey]) ? d.media[monthKey] : [];
+                const checks = Array.from({ length: MEO_MEDIA_COUNT }, (_, i) => !!saved[i]);
+                const done = checks.filter(Boolean).length;
+                el.innerHTML = checks.map((checked, i) => `
+                    <input type="checkbox" title="${i + 1}件目" ${checked ? 'checked' : ''} onchange="updateMeoMedia(${id}, '${monthKey}', ${i}, this.checked)">
+                `).join('') + `<span style="font-size:0.72rem; margin-left:4px; font-weight:700; color:${done === MEO_MEDIA_COUNT ? 'var(--success)' : 'var(--text-secondary)'};">${done}/${MEO_MEDIA_COUNT}</span>`;
+            };
+
             // Initial render for MEO posts
             setTimeout(() => {
-                const currentM = new Date().getMonth() + 1;
                 meoData.forEach(d => {
-                    renderMeoPostsUI(d.id, currentM.toString());
+                    renderMeoPostsUI(d.id, meoMonthOptions[0].key);
+                    renderMeoMediaUI(d.id, meoMonthOptions[0].key);
                 });
             }, 0);
 
