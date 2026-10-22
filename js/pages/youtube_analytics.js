@@ -96,6 +96,8 @@
         return gisLoading;
     }
     const tokenOk = () => !!S.token && Date.now() < S.tokenExp;
+    // 「サーバーの自動ログイン」が使えるとき(Vercelの環境変数に更新用の鍵があるとき)は、画面でのログインは要らない
+    const ready = () => S.server === true || tokenOk();
     async function connect() {
         if (!S.clientId) throw new Error('先に「Googleのクライアント ID」を保存してください');
         await loadGis();
@@ -134,7 +136,52 @@
         if (status === 400) return new ApiError(status, reason, `この条件の数字は取得できませんでした${msg ? '(' + msg + ')' : ''}`, 'bad');
         return new ApiError(status, reason, `YouTubeから数字を取得できませんでした(${status}${msg ? ': ' + msg : ''})`, 'other');
     }
+    function serverDown(j) {
+        S.server = false; S.serverMsg = (j && j.message) || '';
+        refreshLogin();
+        return new ApiError(401, '', 'サーバーの自動ログインが使えなくなりました。「Googleにログイン」を押して、手動でログインしてください', 'auth');
+    }
+    // サーバー経由: 画面は同じサイトの /api/youtube-proxy だけに問い合わせる(アクセストークンは画面に来ない)
+    async function serverApi(url) {
+        const u = new URL(url);
+        const q = new URLSearchParams();
+        if (u.hostname === 'youtubeanalytics.googleapis.com' && u.pathname === '/v2/reports') { q.set('t', 'analytics'); u.searchParams.forEach((v, k) => { if (k !== 'ids') q.set(k, v); }); }
+        else if (u.hostname === 'www.googleapis.com' && u.pathname === '/youtube/v3/channels') q.set('t', 'channels');
+        else if (u.hostname === 'www.googleapis.com' && u.pathname === '/youtube/v3/videos') { q.set('t', 'videos'); q.set('id', u.searchParams.get('id') || ''); }
+        else throw new ApiError(0, '', 'この数字はサーバー経由では取得できません', 'other');
+        let r;
+        try { r = await fetch('/api/youtube-proxy?' + q.toString(), { cache: 'no-store' }); }
+        catch (e) { throw new ApiError(0, '', 'サーバーに接続できませんでした。通信状態を確認してください', 'net'); }
+        const text = await r.text();
+        if (!r.ok) {
+            let j = null; try { j = JSON.parse(text); } catch (e) { /* */ }
+            if (j && (j.error === 'refresh_token_invalid' || j.error === 'not_configured')) throw serverDown(j);
+            throw classify(r.status, text);
+        }
+        try { return JSON.parse(text); } catch (e) { throw new ApiError(r.status, '', 'サーバーからの応答を読み取れませんでした', 'other'); }
+    }
+    async function detectServer() {
+        try {
+            const r = await fetch('/api/youtube-proxy?t=ping', { cache: 'no-store' });
+            const j = await r.json().catch(() => ({}));
+            if (r.ok && j && j.ok) { S.server = true; S.serverMsg = ''; return; }
+            S.server = false; S.serverMsg = j && j.error === 'refresh_token_invalid' ? (j.message || '') : '';
+        } catch (e) { S.server = false; S.serverMsg = ''; }
+    }
+    async function serverSync(action) {
+        let r;
+        try { r = await fetch('/api/youtube-sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }), cache: 'no-store' }); }
+        catch (e) { throw new ApiError(0, '', 'サーバーに接続できませんでした。通信状態を確認してください', 'net'); }
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) {
+            if (j.error === 'refresh_token_invalid' || j.error === 'not_configured') throw serverDown(j);
+            if (j.error === 'api_disabled') throw new ApiError(403, '', 'Google Cloudで「YouTube Reporting API」が有効になっていません。下の「準備」の手順で有効にしてください', 'setup');
+            throw new ApiError(r.status, '', j.message || 'サーバーでの取り込みに失敗しました', 'other');
+        }
+        return j;
+    }
     async function api(url, opt) {
+        if (S.server === true) return serverApi(url);
         if (!tokenOk()) throw new ApiError(401, '', 'ログインが必要です。「Googleにログイン」を押してください', 'auth');
         let r;
         try { r = await fetch(url, { ...(opt || {}), headers: { ...((opt && opt.headers) || {}), Authorization: 'Bearer ' + S.token } }); }
@@ -611,11 +658,18 @@
     async function loadReach(range, run, rankP) {
         loading('ya-reach');
         try {
-            await loadReachStore();
             S.reachInfo = { hasJob: false, createTime: '', available: 0, fetched: 0, pending: 0, saveFailed: false, syncError: '' };
-            const jobs = await listJobs();
-            const job = jobs.find(j => j && j.reportTypeId === REACH_TYPE);
-            if (job) { S.reachInfo.hasJob = true; S.reachInfo.createTime = job.createTime || ''; S.reachInfo.jobId = job.id; await syncReach(job, run); }
+            if (S.server === true) {
+                // サーバー(Vercel)が毎日取り込んでデータベースにためている。ここでは、足りない日があれば続きを取り込んでもらい、結果を読むだけ
+                const st = await serverSync('sync');
+                Object.assign(S.reachInfo, { hasJob: !!st.hasJob, createTime: st.createTime || '', available: st.available || 0, fetched: st.fetched || 0, pending: st.pending || 0, saveFailed: st.saved === false, syncError: st.syncError || '' });
+                await loadReachStore();
+            } else {
+                await loadReachStore();
+                const jobs = await listJobs();
+                const job = jobs.find(j => j && j.reportTypeId === REACH_TYPE);
+                if (job) { S.reachInfo.hasJob = true; S.reachInfo.createTime = job.createTime || ''; S.reachInfo.jobId = job.id; await syncReach(job, run); }
+            }
             if (run !== S.run) return;
             if (S.type !== 'all' && rankP) await rankP;
             if (run !== S.run) return;
@@ -708,7 +762,7 @@
         if (start) start.addEventListener('click', async () => {
             const m = box('ya-reach-msg'); start.disabled = true;
             if (m) { m.textContent = '登録しています…'; m.className = 'ya-msg'; }
-            try { await createReachJob(); const r = currentRange(); if (!r.error) { await loadReach(r, S.run, null); } }
+            try { if (S.server === true) await serverSync('create-job'); else await createReachJob(); const r = currentRange(); if (!r.error) { await loadReach(r, S.run, null); } }
             catch (e) { if (m) { m.textContent = e.message || '登録できませんでした'; m.className = 'ya-msg err'; } start.disabled = false; if (e && e.kind === 'setup') showErr('ya-reach', e); }
         });
     }
@@ -912,9 +966,11 @@ ${extra ? `\n【運営者からの補足(事業・発信内容・想定する視
     // ---------- 画面全体 ----------
     function refreshLogin() {
         const ls = box('ya-login-state'); if (!ls) return;
-        ls.textContent = tokenOk() ? 'ログイン中(この画面を開いている間だけ有効です)' : (S.clientId ? '未ログイン' : 'クライアント ID を保存してください');
-        ls.className = 'ya-login-state' + (tokenOk() ? ' ok' : '');
-        const b = box('ya-load'); if (b) b.disabled = !tokenOk();
+        ls.textContent = S.server === true ? 'サーバーが自動でログインしています(ログインの操作は不要です)' : (tokenOk() ? 'ログイン中(この画面を開いている間だけ有効です)' : (S.clientId ? '未ログイン' : 'クライアント ID を保存してください'));
+        if (S.server !== true && !tokenOk() && S.serverMsg) ls.textContent += ' ・ サーバーの自動ログイン: ' + S.serverMsg;
+        ls.className = 'ya-login-state' + (ready() ? ' ok' : '');
+        const lb = box('ya-login'); if (lb) lb.hidden = S.server === true;
+        const b = box('ya-load'); if (b) b.disabled = !ready();
     }
     function resetSections() {
         ['ya-summary', 'ya-trend', 'ya-rank', 'ya-src', 'ya-kw', 'ya-ext', 'ya-demo', 'ya-country', 'ya-device', 'ya-subs', 'ya-share', 'ya-loc', 'ya-channel', 'ya-reach'].forEach(id => setBody(id, ''));
@@ -926,7 +982,7 @@ ${extra ? `\n【運営者からの補足(事業・発信内容・想定する視
         const msg = box('ya-range-msg');
         if (range.error) { if (msg) { msg.textContent = range.error; msg.className = 'ya-msg err'; } return; }
         if (msg) { msg.textContent = `${fmtD(range.start)} 〜 ${fmtD(range.end)}(${range.len}日間・太平洋時間の日付)`; msg.className = 'ya-msg'; }
-        if (!tokenOk()) { refreshLogin(); return; }
+        if (!ready()) { refreshLogin(); return; }
         const run = ++S.run;
         S.rankShown = 20; S.snap = {};
         aiReset();
@@ -957,6 +1013,19 @@ ${extra ? `\n【運営者からの補足(事業・発信内容・想定する視
                     <li>「Googleにログイン」を押し、チャンネルを持つアカウントで、表示された項目すべてにチェックを入れて「続行」します。</li>
                 </ol>
                 <div class="ya-note">この画面は<b>読み取り専用</b>です。動画の投稿・変更・削除はできません。収益のデータは読み取らない設定にしています。</div>
+            </details>
+
+            <details class="card ya-card" id="ya-server-setup">
+                <summary class="ya-h">毎回のログインをなくす(サーバーの自動ログイン・任意)</summary>
+                <ol class="ya-steps">
+                    <li>Google Cloudの「Google Auth Platform」→「対象」で、<b>公開ステータスを「本番環境」</b>にします(「テスト中」のままだと、更新用の鍵が<b>7日で切れます</b>)。</li>
+                    <li>「クライアント」で使っているクライアントを開き、「承認済みのリダイレクト URI」に <code>https://developers.google.com/oauthplayground</code> を追加して保存します。同じ画面の「クライアント シークレット」を控えます。</li>
+                    <li><code>developers.google.com/oauthplayground</code> を開き、右上の歯車で「Use your own OAuth credentials」にチェックして、クライアントIDとシークレットを入れます。アクセスの種類は「Offline」にします。</li>
+                    <li>左の「Input your own scopes」に <code>https://www.googleapis.com/auth/yt-analytics.readonly https://www.googleapis.com/auth/youtube.readonly</code> を入れて「Authorize APIs」→ チャンネルのアカウントで許可 →「Exchange authorization code for tokens」を押し、出てきた <b>Refresh token</b> をコピーします。</li>
+                    <li>Vercelのプロジェクトの「Settings」→「Environment Variables」に、<code>YT_CLIENT_ID</code>(クライアントID)・<code>YT_CLIENT_SECRET</code>(シークレット)・<code>YT_REFRESH_TOKEN</code>(コピーした鍵)を追加します。できれば <code>CRON_SECRET</code>(16文字以上の適当な文字列)も追加します。</li>
+                    <li>Vercelで「Redeploy」し、このページを開き直します。ログイン欄に「サーバーが自動でログインしています」と出れば完了です。</li>
+                </ol>
+                <div class="ya-note">更新用の鍵は、チャンネルの分析データを読める大事な情報です。Vercelの環境変数以外(このサイトのデータベースやチャット)には貼らないでください。許可を取り消した・6か月使わなかったときは、鍵が使えなくなるので、手順4からやり直します(画面は自動で手動ログインに戻ります)。</div>
             </details>
 
             <div class="card ya-card">
@@ -1106,7 +1175,7 @@ ${extra ? `\n【運営者からの補足(事業・発信内容・想定する視
             box('ya-end').addEventListener('change', (e) => { S.end = e.target.value; });
             box('ya-type').addEventListener('change', (e) => { S.type = e.target.value; runAll(); });
             box('ya-load').addEventListener('click', () => runAll());
-            if (tokenOk()) runAll();   // ページを移動して戻ってきたときは、ログインが生きていればそのまま再表示
+            detectServer().then(() => { refreshLogin(); if (ready()) runAll(); });   // サーバーの自動ログインが使えれば操作なしで表示。ページを移動して戻ってきたときも、ログインが生きていればそのまま再表示
         });
     };
 })();

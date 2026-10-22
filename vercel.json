@@ -3,6 +3,10 @@
     {
       "path": "/api/threads-sync",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/youtube-sync",
+      "schedule": "17 21 * * *"
     }
   ]
 }
