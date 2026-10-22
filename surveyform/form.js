@@ -386,6 +386,14 @@ function updateView() {
                     sessionStorage.setItem(reachKey, 'true');
                 }
             } else if (type === 'review') {
+                // 確認画面に着いたことを記録(1セッション1回。記録に失敗してもフォームの動きには影響させない)
+                try {
+                    const reviewKey = `survey_${surveyId}_review_logged`;
+                    if (!sessionStorage.getItem(reviewKey)) {
+                        logStat('review');
+                        sessionStorage.setItem(reviewKey, 'true');
+                    }
+                } catch (e) { /* 記録だけの処理なので無視 */ }
                 renderReviewContent();
                 const nav = document.getElementById('nav-controls');
                 if (nav) nav.style.display = 'none';
@@ -430,10 +438,15 @@ async function submitForm() {
     if (!btn) return;
     btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> 送信中...';
     btn.disabled = true;
+    const submitT0 = Date.now();
 
     try {
-        await saveResponseProgress('completed');
-        await logStat('submission');
+        const savedOk = await saveResponseProgress('completed');
+        const loggedOk = await logStat('submission');
+        // 保存や記録に失敗しても、従来どおり完了画面へ進む(見える化のため、失敗した内容だけ記録する)
+        const failedParts = [savedOk === false ? 'save' : null, loggedOk === false ? 'stat' : null].filter(Boolean);
+        if (failedParts.length) { recordSubmitResult('error', Date.now() - submitT0, failedParts.join('+')); }
+        else { recordSubmitResult('ok', Date.now() - submitT0); }
 
         // Chatwork送信完了通知(分析フォームと共通のChatwork連携設定を再利用)
         const urlParams = new URLSearchParams(window.location.search);
@@ -448,6 +461,7 @@ async function submitForm() {
         updateView();
     } catch (e) {
         console.error("submitForm error:", e);
+        recordSubmitResult('error', Date.now() - submitT0, (e && e.message) || 'unknown');
         alert(e.message || "送信中にエラーが発生しました。もう一度お試しください。");
         btn.innerHTML = 'この内容で提出する';
         btn.disabled = false;
@@ -457,7 +471,7 @@ async function submitForm() {
 // 途中経過または完了時の回答データをリアルタイムで上書き保存・更新するメソッド
 async function saveResponseProgress(status = 'abandoned') {
     try {
-        if (!supabaseClient) return;
+        if (!supabaseClient) return false;
 
         // セッションごとのユニークIDの永続化(アンケートごとに名前空間を分ける)
         const responseIdKey = `survey_${surveyId}_response_id`;
@@ -477,26 +491,42 @@ async function saveResponseProgress(status = 'abandoned') {
         };
 
         // UPSERT (idをキーにして上書き)
-        await supabaseClient.from('customers').upsert([{
+        const { error } = await supabaseClient.from('customers').upsert([{
             id: parseInt(responseId),
             service_type: 'survey_response',
             data: responseData
         }]);
+        if (error) { console.error("saveResponseProgress error:", error); return false; }
+        return true;
 
     } catch (e) {
         console.error("saveResponseProgress error:", e);
+        return false;
     }
 }
 
 async function logStat(type, detailId = null) {
     try {
-        if (!supabaseClient) return;
+        if (!supabaseClient) return false;
         const id = Date.now() + Math.floor(Math.random() * 1000);
         const statData = { surveyId: surveyId, type: type, detail: detailId, timestamp: new Date().toISOString(), session: getSessionId() };
-        await supabaseClient.from('customers').insert([{ id, service_type: 'survey_stats', data: statData }]);
+        const { error } = await supabaseClient.from('customers').insert([{ id, service_type: 'survey_stats', data: statData }]);
+        if (error) { console.error("logStat error:", error); return false; }
+        return true;
     } catch (e) {
         console.error("logStat error:", e);
+        return false;
     }
+}
+
+// 送信の結果(成功/失敗・所要ミリ秒・失敗の内容)を1件記録する。待たずに送り、失敗してもフォームには影響させない。
+// detail の形式: 「結果|経路|所要ms」、失敗のときは末尾に「|内容」(例: error|form|8400|save)
+function recordSubmitResult(result, ms, reason) {
+    try {
+        let detail = `${result}|form|${Math.round(ms)}`;
+        if (reason) detail += '|' + String(reason).replace(/\s+/g, ' ').slice(0, 100);
+        logStat('submit_result', detail);
+    } catch (e) { /* 記録だけの処理なので無視 */ }
 }
 
 function getSessionId() {
