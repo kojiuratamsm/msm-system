@@ -34,7 +34,8 @@
         good: { icon: '🟢', label: '良好', cls: 'good', rank: 3 },
         normal: { icon: '🟡', label: '通常', cls: 'normal', rank: 1 },
         poor: { icon: '🔴', label: '要改善', cls: 'poor', rank: 0 },
-        hold: { icon: '⚪', label: '判定保留', cls: 'hold', rank: 2 }
+        hold: { icon: '⚪', label: '判定保留', cls: 'hold', rank: 2 },
+        na: { icon: '⚪', label: '算出不可', cls: 'na', rank: 2 }   // 分母0などで計算できない(判定保留とは別に表示)
     };
     const EV_TYPE = { view: 'access', start: 'start', submission: 'complete' };
 
@@ -60,38 +61,38 @@
         judgeCount(actual, set, pace, noData) {
             const s = set || {};
             const T = num(s.target);
-            if (noData) return { status: 'hold', reason: 'この期間は計測データがありません(計測開始前)。' };
-            if (T == null || T <= 0) return { status: 'hold', reason: '目標未設定のため判定していません。' };
+            if (noData) return { status: 'hold', code: 'nodata', short: '判定保留：計測開始前', reason: 'この期間は計測データがありません(計測開始前)。' };
+            if (T == null || T <= 0) return { status: 'hold', code: 'notarget', short: '判定保留：目標未設定', reason: '目標未設定のため判定していません。' };
             const good = num(s.good), poor = num(s.poor), minS = num(s.minSample);
             const paceTarget = T * pace;
             const paceAch = paceTarget > 0 ? actual / paceTarget * 100 : null;
             const base = pace < 1
                 ? `今の時点の目安(目標${fmtN(T)}件 × 経過${fmt1(pace * 100)}% = ${fmt1(paceTarget)}件)に対して実績${fmtN(actual)}件(${fmtP(paceAch)})`
                 : `目標${fmtN(T)}件に対して実績${fmtN(actual)}件(${fmtP(paceAch)})`;
-            if (good == null && poor == null) return { status: 'hold', reason: `${base}。判定基準(良好・要改善の境界)が未設定のため判定保留です。`, paceTarget, paceAch };
-            if (pace < 1 && paceTarget < 1) return { status: 'hold', reason: `${base}。今の時点で見込まれる件数がまだ1件未満のため、判断するには早い(サンプル不足)として判定保留です。`, paceTarget, paceAch, sample: true };
-            if (minS != null && paceTarget < minS) return { status: 'hold', reason: `${base}。今の時点の目安件数が${fmtN(minS)}件未満のため、判断するには早い(サンプル不足)として判定保留です。`, paceTarget, paceAch, sample: true };
+            if (good == null && poor == null) return { status: 'hold', code: 'nocriteria', short: '判定保留：基準未設定', reason: `${base}。判定基準(良好・要改善の境界)が未設定のため判定保留です。`, paceTarget, paceAch };
+            if (pace < 1 && paceTarget < 1) return { status: 'hold', code: 'sample', short: `判定保留：サンプル不足（今の時点の目安${fmt1(paceTarget)}件／必要1件）`, reason: `${base}。今の時点で見込まれる件数がまだ1件未満のため、判断するには早い(サンプル不足)として判定保留です。`, paceTarget, paceAch, sample: true };
+            if (minS != null && paceTarget < minS) return { status: 'hold', code: 'sample', short: `判定保留：サンプル不足（目安${fmt1(paceTarget)}件／必要${fmtN(minS)}件）`, reason: `${base}。今の時点の目安件数が${fmtN(minS)}件未満のため、判断するには早い(サンプル不足)として判定保留です。`, paceTarget, paceAch, sample: true };
             let status = 'normal';
             if (good != null && paceAch >= good) status = 'good';
             else if (poor != null && paceAch < poor) status = 'poor';
             const crit = [good != null ? `良好: ${fmt1(good)}%以上` : null, poor != null ? `要改善: ${fmt1(poor)}%未満` : null].filter(Boolean).join(' / ');
-            return { status, reason: `${base}。基準(${crit})と比べて「${STATUS[status].label}」。${pace < 1 ? '※期間の途中なので、最終目標ではなく経過に見合った目安と比べています。' : ''}`, paceTarget, paceAch };
+            return { status, code: 'judged', short: `${STATUS[status].label}：${pace < 1 ? '目安比' : '達成率'} ${fmtP(paceAch)}（${crit}）`, reason: `${base}。基準(${crit})と比べて「${STATUS[status].label}」。${pace < 1 ? '※期間の途中なので、最終目標ではなく経過に見合った目安と比べています。' : ''}`, paceTarget, paceAch };
         },
         // 率の判定
         judgeRate(numV, denV, set, noData) {
             const s = set || {};
-            if (noData) return { status: 'hold', reason: 'この期間は計測データがありません(計測開始前)。' };
+            if (noData) return { status: 'hold', code: 'nodata', short: '判定保留：計測開始前', reason: 'この期間は計測データがありません(計測開始前)。' };
             const r = Calc.rate(numV, denV);
-            if (r == null) return { status: 'hold', reason: '分母が0件のため算出不可です。' };
+            if (r == null) return { status: 'na', code: 'na', short: '算出不可：分母が0', reason: '分母が0件のため算出不可です。' };
             const good = num(s.good), poor = num(s.poor), minS = num(s.minSample);
             const base = `実績${fmtP(r)}(${fmtN(numV)} ÷ ${fmtN(denV)})`;
-            if (good == null && poor == null) return { status: 'hold', reason: `${base}。判定基準(良好・要改善の境界)が未設定のため判定保留です。` };
-            if (minS != null && denV < minS) return { status: 'hold', reason: `${base}。分母が${fmtN(minS)}件未満のため、率がぶれやすい(サンプル不足)として判定保留です。`, sample: true };
+            if (good == null && poor == null) return { status: 'hold', code: 'nocriteria', short: '判定保留：基準未設定', reason: `${base}。判定基準(良好・要改善の境界)が未設定のため判定保留です。` };
+            if (minS != null && denV < minS) return { status: 'hold', code: 'sample', short: `判定保留：サンプル不足（分母${fmtN(denV)}件／必要${fmtN(minS)}件）`, reason: `${base}。分母が${fmtN(minS)}件未満のため、率がぶれやすい(サンプル不足)として判定保留です。`, sample: true };
             let status = 'normal';
             if (good != null && r >= good) status = 'good';
             else if (poor != null && r < poor) status = 'poor';
             const crit = [good != null ? `良好: ${fmt1(good)}%以上` : null, poor != null ? `要改善: ${fmt1(poor)}%未満` : null].filter(Boolean).join(' / ');
-            return { status, reason: `${base}。基準(${crit})と比べて「${STATUS[status].label}」。` };
+            return { status, code: 'judged', short: `${STATUS[status].label}：${fmtP(r)}（${crit}）`, reason: `${base}。基準(${crit})と比べて「${STATUS[status].label}」。` };
         }
     };
     function num(v) { if (v === '' || v == null) return null; const n = Number(v); return Number.isFinite(n) ? n : null; }
@@ -111,8 +112,9 @@
         }
         return d;
     }
-    function validateSettings(st) {
-        const errs = [];
+    // 保存前の検証。errors = 保存を止める問題 / warnings = 確認すれば保存できる注意(率の指標のみ)
+    function checkSettings(st) {
+        const errs = [], warns = [];
         for (const t of ['daily', 'monthly', 'yearly']) for (const m of METRICS) {
             const s = st[t][m.key], where = `${TYPE_LABEL[t]}「${m.label}」`;
             for (const f of ['target', 'good', 'poor', 'minSample']) {
@@ -120,6 +122,14 @@
             }
             if (m.kind === 'rate') {
                 ['target', 'good', 'poor'].forEach(f => { if (s[f] != null && s[f] > 100) errs.push(`${where}: 率は0〜100%で入れてください。`); });
+                // 目標を達成しても「要改善」になってしまう組み合わせは保存しない(率は境界そのもので判定するため)
+                if (s.target != null && s.poor != null && s.target < s.poor) errs.push(`${where}: 目標値(${s.target}%)が要改善の境界(${s.poor}%)より低くなっています。このままだと目標を達成しても「要改善」と表示されます。目標値を${s.poor}%より高くするか、要改善の境界を${s.target}%より低くしてください。`);
+                // 目標が要改善の境界とちょうど同じ: 目標を達成しても境界ぎりぎりの「通常」にしかならない(保存しない)
+                if (s.target != null && s.poor != null && s.target === s.poor) errs.push(`${where}: 目標値(${s.target}%)が要改善の境界(${s.poor}%)と同じになっています。目標を達成しても境界ぎりぎりの「通常」にしかならず、目標達成の判定になりません。目標値を${s.poor}%より高くするか、要改善の境界を${s.target}%より低くしてください。`);
+                // 目標が良好の境界より低い: 目標を達成しても「良好」にならない(確認すれば保存できる)。同じ値は警告しない
+                if (s.target != null && s.good != null && s.target < s.good && !(s.poor != null && s.target <= s.poor)) warns.push(`${where}: 目標値(${s.target}%)が良好の境界(${s.good}%)より低くなっています。目標を達成しても「良好」にはならず、「通常」と表示されます。目標達成を「良好」としたい場合は、目標値を${s.good}%以上にするか、良好の境界を${s.target}%以下にしてください。`);
+                // 良好と要改善の境界が同じ: 「通常」の範囲がなくなる(確認すれば保存できる)
+                if (s.good != null && s.poor != null && s.good === s.poor) warns.push(`${where}: 良好の境界(${s.good}%)と要改善の境界(${s.poor}%)が同じ値です。「通常」の範囲がなくなり、${s.good}%以上は「良好」、${s.poor}%未満は「要改善」の二択になります。`);
             } else {
                 if ((s.good != null || s.poor != null) && !(s.target > 0)) errs.push(`${where}: 件数の判定は目標に対する達成率で行うため、先に目標値(1以上)を入れてください。`);
                 if (s.target != null && !Number.isInteger(s.target)) errs.push(`${where}: 目標件数は整数で入れてください。`);
@@ -127,8 +137,9 @@
             if (s.good != null && s.poor != null && s.poor > s.good) errs.push(`${where}: 「要改善の境界」は「良好の境界」以下にしてください(今: 良好${s.good} / 要改善${s.poor})。`);
             if (s.minSample != null && !Number.isInteger(s.minSample)) errs.push(`${where}: サンプル不足の件数は整数で入れてください。`);
         }
-        return [...new Set(errs)];
+        return { errors: [...new Set(errs)], warnings: [...new Set(warns)] };
     }
+    function validateSettings(st) { return checkSettings(st).errors; }
     async function loadSettings() {
         const rows = await Store.getCustomers('kpi_settings');
         const row = rows.slice().sort((a, b) => Number(a.id) - Number(b.id))[0];
@@ -150,7 +161,14 @@
         if (sel.mode === 'daily') {
             let y = t.y, m = t.m, d = t.d;
             if (sel.sub === 'yesterday') { const p = jp(jms(y, m, d) - 1); y = p.y; m = p.m; d = p.d; }
-            if (sel.sub === 'pick' && /^\d{4}-\d{2}-\d{2}$/.test(sel.day || '')) [y, m, d] = sel.day.split('-').map(Number);
+            if (sel.sub === 'pick') {
+                // 日付指定: 選んだ日を使う(未選択なら昨日。今日より未来は今日に丸める)。暗黙に今日を表示しない
+                const today = `${t.y}-${pad(t.m)}-${pad(t.d)}`;
+                let day = /^\d{4}-\d{2}-\d{2}$/.test(sel.day || '') ? sel.day : null;
+                if (!day) { const p2 = jp(jms(t.y, t.m, t.d) - 1); day = `${p2.y}-${pad(p2.m)}-${pad(p2.d)}`; }
+                if (day > today) day = today;
+                [y, m, d] = day.split('-').map(Number);
+            }
             start = jms(y, m, d); end = jms(y, m, d + 1); type = 'daily'; bucket = 'hour';
             label = `${y}年${m}月${d}日(${WD[jp(start).wd]})`;
         } else if (sel.mode === 'monthly') {
@@ -246,6 +264,25 @@
 
         App.mount(`<div id="kpi-root"></div>${STYLE}`, () => {
             window.kpiSet = (patch) => { Object.assign(UI, patch); render(); };
+            // 日付指定: 選んだ日を表示(未来の日は今日に丸める。空なら昨日)。今日を選んだら「今日」表示にする
+            window.kpiPickDay = (day) => {
+                const t = jp(Date.now());
+                const today = `${t.y}-${pad(t.m)}-${pad(t.d)}`;
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(day || '')) { const y = jp(jms(t.y, t.m, t.d) - 1); day = `${y.y}-${pad(y.m)}-${pad(y.d)}`; }
+                if (day > today) day = today;
+                Object.assign(UI, { mode: 'daily', sub: 'pick', day });
+                render();
+            };
+            // 前日・翌日へ移動(表示中の日を基準。日本時間の今日より先へは進まない)
+            window.kpiShiftDay = (delta) => {
+                const p0 = buildPeriod(UI, Date.now());
+                const a = jp(p0.start + delta * DAY + DAY / 2);
+                const t = jp(Date.now());
+                const today = `${t.y}-${pad(t.m)}-${pad(t.d)}`;
+                const day = `${a.y}-${pad(a.m)}-${pad(a.d)}`;
+                if (day >= today) { Object.assign(UI, { mode: 'daily', sub: 'today' }); render(); return; }
+                window.kpiPickDay(day);
+            };
             window.kpiOpenSettings = () => openSettings();
             render();
         });
@@ -300,9 +337,11 @@
 
             // 画面の並び: 1.期間切り替え 2.数値カード 3.ゲージ 4.ファネル 5.棒グラフ(推移・比較)と率の推移 6.判定・比較 7.改善提案 8.計算式
             const sugg = suggestionsHtml(p, results, cur, inProgress);
+            const dailySample = p.type === 'daily' && METRICS.some(m => results[m.key].j.code === 'sample');
             root.innerHTML = header(p)
                 + statusLine(p, inProgress, effEnd, cov, now)
                 + overviewHtml(results, sugg.top)
+                + (dailySample ? `<div class="kpi-daily-note">ℹ 1日のデータが少ないため、判定が安定しない場合があります(サンプル不足の指標: ${METRICS.filter(m => results[m.key].j.code === 'sample').map(m => m.label).join('、')})。月間KPIもあわせて確認してください。<button type="button" class="btn-secondary btn-sm" onclick="kpiSet({ mode: 'monthly', sub: 'this' })">月間KPIを見る</button></div>` : '')
                 + `<div class="kpi-cards kpi-cards-6">${METRICS.map(m => cardHtml(results[m.key], cur)).join('')}</div>`
                 + gaugesHtml(results, inProgress, pace)
                 + funnelHtml(p, results, cur, effEnd)
@@ -315,18 +354,47 @@
         }
 
         function header(p) {
-            const tabs = ['daily', 'monthly', 'yearly'].map(t => `<button type="button" class="kpi-tab ${UI.mode === t ? 'is-on' : ''}" onclick="kpiSet({ mode: '${t}', sub: '${t === 'daily' ? 'today' : t === 'monthly' ? 'this' : 'this'}' })">${TYPE_LABEL[t]}KPI</button>`).join('');
+            const now = Date.now();
+            const t = jp(now);
+            const todayStr = `${t.y}-${pad(t.m)}-${pad(t.d)}`;
+            const thisMonth = `${t.y}-${pad(t.m)}`;
+            const shown = jp(p.start);
+            const shownStr = `${shown.y}-${pad(shown.m)}-${pad(shown.d)}`;
+            const tabs = ['daily', 'monthly', 'yearly'].map(tp => `<button type="button" class="kpi-tab ${UI.mode === tp ? 'is-on' : ''}" onclick="kpiSet({ mode: '${tp}', sub: '${tp === 'daily' ? 'today' : 'this'}' })">${TYPE_LABEL[tp]}KPI</button>`).join('');
             let sub = '';
-            if (UI.mode === 'daily') sub = `
-                <select onchange="kpiSet({ sub: this.value })"><option value="today" ${UI.sub === 'today' ? 'selected' : ''}>今日</option><option value="yesterday" ${UI.sub === 'yesterday' ? 'selected' : ''}>昨日</option><option value="pick" ${UI.sub === 'pick' ? 'selected' : ''}>日付を選ぶ</option></select>
-                ${UI.sub === 'pick' ? `<input type="date" value="${esc(UI.day)}" onchange="kpiSet({ day: this.value })">` : ''}`;
+            if (UI.mode === 'daily') {
+                const isPick = UI.sub === 'pick';
+                sub = `
+                <div class="kpi-daybar">
+                    <div class="kpi-seg" role="group" aria-label="日付の選び方">
+                        <button type="button" class="${UI.sub === 'today' ? 'is-on' : ''}" onclick="kpiSet({ sub: 'today' })">今日</button>
+                        <button type="button" class="${UI.sub === 'yesterday' ? 'is-on' : ''}" onclick="kpiSet({ sub: 'yesterday' })">昨日</button>
+                        <button type="button" class="${isPick ? 'is-on' : ''}" onclick="kpiPickDay('${shownStr < todayStr ? shownStr : ''}')"><i class="ph ph-calendar-blank"></i> 日付を指定</button>
+                    </div>
+                    <div class="kpi-daynav">
+                        <button type="button" class="btn-secondary btn-sm" onclick="kpiShiftDay(-1)" title="前の日">◀ 前日</button>
+                        ${isPick ? `<input type="date" id="kpi-day-input" value="${esc(shownStr)}" max="${todayStr}" onchange="kpiPickDay(this.value)" aria-label="表示する日付">` : ''}
+                        <button type="button" class="btn-secondary btn-sm" onclick="kpiShiftDay(1)" title="次の日" ${shownStr >= todayStr ? 'disabled' : ''}>翌日 ▶</button>
+                    </div>
+                </div>`;
+            }
             else if (UI.mode === 'monthly') sub = `
                 <select onchange="kpiSet({ sub: this.value })"><option value="this" ${UI.sub === 'this' ? 'selected' : ''}>今月</option><option value="last" ${UI.sub === 'last' ? 'selected' : ''}>先月</option><option value="pick" ${UI.sub === 'pick' ? 'selected' : ''}>月を選ぶ</option></select>
-                ${UI.sub === 'pick' ? `<input type="month" value="${esc(UI.month)}" onchange="kpiSet({ month: this.value })">` : ''}`;
+                ${UI.sub === 'pick' ? `<input type="month" value="${esc(UI.month)}" max="${thisMonth}" onchange="kpiSet({ month: this.value > '${thisMonth}' ? '${thisMonth}' : this.value })">` : ''}`;
             else if (UI.mode === 'yearly') sub = `
                 <select onchange="kpiSet({ sub: this.value })"><option value="this" ${UI.sub === 'this' ? 'selected' : ''}>今年</option><option value="last" ${UI.sub === 'last' ? 'selected' : ''}>昨年</option></select>`;
             else sub = `
-                ${UI.sub === 'range' ? `<input type="date" value="${esc(UI.from)}" onchange="kpiSet({ from: this.value })"><span>〜</span><input type="date" value="${esc(UI.to)}" onchange="kpiSet({ to: this.value })">` : ''}`;
+                ${UI.sub === 'range' ? `<input type="date" value="${esc(UI.from)}" max="${todayStr}" onchange="kpiSet({ from: this.value > '${todayStr}' ? '${todayStr}' : this.value })"><span>〜</span><input type="date" value="${esc(UI.to)}" max="${todayStr}" onchange="kpiSet({ to: this.value > '${todayStr}' ? '${todayStr}' : this.value })">` : ''}`;
+            // 表示中の期間を大きく明示(今日=途中経過、過去=確定済みの実績)
+            let showing;
+            if (p.type === 'daily') {
+                const label = `${shown.y}年${shown.m}月${shown.d}日（${WD[shown.wd]}）`;
+                showing = shownStr === todayStr
+                    ? `表示中：今日 ${label}<span class="kpi-showing-sub">途中経過（0:00〜${t.h}:${pad(t.mi)}の集計）</span>`
+                    : `表示中：${label}の実績<span class="kpi-showing-sub">1日分の確定値（0:00〜翌日0:00未満）</span>`;
+            } else {
+                showing = `表示中：${esc(p.label)}の実績${now < p.end ? '<span class="kpi-showing-sub">途中経過</span>' : '<span class="kpi-showing-sub">確定値</span>'}`;
+            }
             return `
             <div class="card kpi-head">
                 <div class="kpi-head-row">
@@ -342,8 +410,9 @@
                     </div>
                 </div>
                 <div class="kpi-head-row" style="margin-top:12px;">
-                    <div class="kpi-period"><b>${esc(p.label)}</b> ${sub}</div>
+                    <div class="kpi-period">${UI.mode === 'daily' ? '' : `<b>${esc(p.label)}</b>`} ${sub}</div>
                 </div>
+                <div class="kpi-showing" data-showing="${p.type === 'daily' ? shownStr : esc(p.label)}">${showing}</div>
             </div>`;
         }
 
@@ -351,7 +420,7 @@
         function overviewHtml(results, top) {
             const cnt = (k) => METRICS.filter(m => results[m.key].j.status === k).length;
             return `<div class="card kpi-overview">
-                <div class="kpi-ov-chips">${['poor', 'normal', 'good', 'hold'].map(k => `<span class="kpi-chip kpi-chip-${STATUS[k].cls}">${STATUS[k].icon} ${STATUS[k].label} ${cnt(k)}</span>`).join('')}</div>
+                <div class="kpi-ov-chips">${['poor', 'normal', 'good', 'hold', 'na'].map(k => `<span class="kpi-chip kpi-chip-${STATUS[k].cls}">${STATUS[k].icon} ${STATUS[k].label} ${cnt(k)}</span>`).join('')}</div>
                 <div class="kpi-ov-top">${top ? `最優先で改善: <b>${STATUS[top.j.status].icon} ${top.m.label}</b>(${STATUS[top.j.status].label})<a href="#kpi-sugg" class="kpi-ov-link">改善提案を見る ↓</a>` : cnt('good') && !cnt('poor') && !cnt('normal') ? '判定できた指標はすべて良好です' : '目標・判定基準を設定すると、良し悪しと最優先の改善項目が表示されます'}</div>
             </div>`;
         }
@@ -370,8 +439,8 @@
             return `<div class="kpi-status">${parts.join('<br>')}</div>`;
         }
 
-        function compareText(m, cur, prev, cov, label) {
-            if (cov === 'none' || cov === 'future') return `<span class="kpi-cmp-na">${label}: 比較データなし</span>`;
+        function compareText(m, cur, prev, cov, label, noun) {
+            if (cov === 'none' || cov === 'future') return `<span class="kpi-cmp-na">${label}: 比較不可（${noun || label}の記録なし）</span>`;
             const note = cov === 'partial' ? '(比較先は一部期間のみ計測)' : '';
             if (m.kind === 'count') {
                 const a = cur, b = prev;
@@ -405,6 +474,7 @@
                 </div>
                 <div class="kpi-main">${main}</div>
                 <div class="kpi-mini">${sub ? `${sub} ・ ` : ''}目標 ${target ? `<b>${target}</b>` : '<span class="kpi-unset">目標未設定</span>'}</div>
+                <div class="kpi-short kpi-short-${st.cls}" title="${esc(j.reason)}">${esc(j.short)}</div>
             </div>`;
         }
 
@@ -430,7 +500,7 @@
                 const { m, set, j, value } = r;
                 const T = num(set && set.target);
                 const st = STATUS[j.status];
-                const head = `<div class="kpi-g-title">${m.label}<span class="kpi-chip kpi-chip-${st.cls}">${st.icon} ${st.label}</span></div>`;
+                const head = `<div class="kpi-g-title">${m.label}<span class="kpi-chip kpi-chip-${st.cls}">${st.icon} ${st.label}</span></div><div class="kpi-short kpi-short-${st.cls}" title="${esc(j.reason)}">${esc(j.short)}</div>`;
                 if (m.kind === 'count' ? !(T > 0) : T == null) {
                     return `<div class="kpi-gauge is-empty" data-metric="${m.key}" data-gauge="none">${head}
                         <div class="kpi-g-empty"><b>目標未設定</b><div class="kpi-mini">実績 ${m.kind === 'count' ? fmtN(value) + '件' : fmtP(value)}。「目標・判定基準」で目標を入れるとゲージを表示します。</div></div>${forecastHtml(m, value, null)}</div>`;
@@ -543,7 +613,7 @@
             <div class="kpi-charts">
                 <div class="card"><div class="kpi-sec-title" style="margin-top:0;">${barTitle}: アクセス・開始・完了</div><div class="kpi-chart-box"><canvas id="kpi-bar"></canvas></div><div class="kpi-note">計測開始前は「データなし」、これからの時間・日は「未到来」として棒を出していません(0件とは区別しています)。</div></div>
                 <div class="card"><div class="kpi-sec-title" style="margin-top:0;">${cmpLabel}</div>
-                    ${noCmp ? `<div class="kpi-g-empty kpi-cmp-none" style="height:260px;"><b>比較データなし</b><div class="kpi-mini">比較する${PREV_LABEL[p.type]}は計測開始前のため、比較のグラフは表示していません。</div></div>`
+                    ${noCmp ? `<div class="kpi-g-empty kpi-cmp-none" style="height:260px;"><b>比較不可（${PREV_LABEL[p.type]}の記録なし）</b><div class="kpi-mini">比較する${PREV_LABEL[p.type]}は計測開始前のため、比較のグラフは表示していません。</div></div>`
                         : `<div class="kpi-chart-box"><canvas id="kpi-cmpbar"></canvas></div><div class="kpi-note">${prevCov === 'partial' ? '※比較先の期間は途中からしか計測していません。' : ''}${inProgress ? '期間の途中なので、前の期間も同じ経過分(同じ日数・時刻まで)で比べています。' : ''}</div>`}
                 </div>
                 <div class="card kpi-chart-wide"><div class="kpi-sec-title" style="margin-top:0;">${lineTitle}</div><div class="kpi-chart-box"><canvas id="kpi-line"></canvas></div><div class="kpi-note">分母が0件の日は「算出不可」として線を切っています(0%にはしていません)。点線は目標率です(設定がある場合)。</div></div>
@@ -559,23 +629,23 @@
                 const v = m.kind === 'count' ? `${fmtN(r.value)}件` : fmtP(r.value);
                 const t = m.kind === 'count' ? (T > 0 ? `${fmtN(T)}件` : '目標未設定') : (T != null ? `${fmt1(T)}%` : '目標未設定');
                 const prevLabel = `${PREV_LABEL[p.type]}${inProgress ? '(同じ経過分)' : ''}`;
-                const cmp = [compareText(m, r.value, prevM[m.key], prevCov, prevLabel)];
-                if (wkM) cmp.push(compareText(m, r.value, wkM[m.key], wkCov, `先週の同じ曜日${inProgress ? '(同時刻まで)' : ''}`));
+                const cmp = [compareText(m, r.value, prevM[m.key], prevCov, prevLabel, PREV_LABEL[p.type])];
+                if (wkM) cmp.push(compareText(m, r.value, wkM[m.key], wkCov, `先週の同じ曜日${inProgress ? '(同時刻まで)' : ''}`, '先週の同じ曜日'));
                 if (inProgress && m.kind === 'count' && prevCov !== 'none' && prevCov !== 'future') cmp.push(`<span class="kpi-cmp-na">${PREV_LABEL[p.type]}の確定値: ${fmtN(prevFullC[m.key])}件</span>`);
                 return `<div class="kpi-judge" data-metric="${m.key}" data-status="${r.j.status}">
                     <div class="kpi-j-name">${m.label}</div>
                     <div class="kpi-j-val"><span>実績</span><b>${v}</b></div>
                     <div class="kpi-j-val"><span>目標</span><b class="${t === '目標未設定' ? 'kpi-unset' : ''}">${t}</b></div>
-                    <div class="kpi-j-st"><span class="kpi-chip kpi-chip-${st.cls}">${st.icon} ${st.label}</span><details class="kpi-why"><summary>判定の理由</summary><div>${esc(r.j.reason)}</div></details></div>
+                    <div class="kpi-j-st"><span class="kpi-chip kpi-chip-${st.cls}">${st.icon} ${st.label}</span><div class="kpi-short kpi-short-${st.cls}">${esc(r.j.short)}</div><details class="kpi-why"><summary>判定の理由</summary><div>${esc(r.j.reason)}</div></details></div>
                     <div class="kpi-cmp">${cmp.join('<br>')}</div>
                 </div>`;
             }).join('');
-            const judgedAny = METRICS.some(m => results[m.key].j.status !== 'hold');
+            const judgedAny = METRICS.some(m => !['hold', 'na'].includes(results[m.key].j.status));
             return `<div class="kpi-sec-title">判定と前の期間との比較</div>
                 <div class="kpi-judge-wrap">
                     <div class="card kpi-donut-card"><div class="kpi-donut-title">6つの指標の判定の内訳</div>
-                        ${judgedAny ? '<div class="kpi-donut-box"><canvas id="kpi-donut"></canvas></div>' : '<div class="kpi-g-empty" style="height:150px;"><b>すべて判定保留</b><div class="kpi-mini">目標・判定基準が未設定、またはデータ不足のため。</div></div>'}
-                        <div class="kpi-donut-legend">${['good', 'normal', 'poor', 'hold'].map(k => `<span class="kpi-chip kpi-chip-${STATUS[k].cls}">${STATUS[k].icon} ${STATUS[k].label} ${cnt(k)}</span>`).join('')}</div>
+                        ${judgedAny ? '<div class="kpi-donut-box"><canvas id="kpi-donut"></canvas></div>' : '<div class="kpi-g-empty" style="height:150px;"><b>すべて判定保留・算出不可</b><div class="kpi-mini">目標・判定基準が未設定、データ不足、または分母が0のため。</div></div>'}
+                        <div class="kpi-donut-legend">${['good', 'normal', 'poor', 'hold', 'na'].map(k => `<span class="kpi-chip kpi-chip-${STATUS[k].cls}">${STATUS[k].icon} ${STATUS[k].label} ${cnt(k)}</span>`).join('')}</div>
                     </div>
                     <div class="card kpi-judge-list">${rows}</div>
                 </div>`;
@@ -583,7 +653,7 @@
 
         function drawCharts(p, now, setsFor, results, inProgress, pace, cur, prevC, prevCov) {
             if (typeof Chart === 'undefined') return;
-            const COL = { good: '#2F9E44', normal: '#F59F00', poor: '#E03131', hold: '#ADB5BD' };
+            const COL = { good: '#2F9E44', normal: '#F59F00', poor: '#E03131', hold: '#ADB5BD', na: '#868E96' };
             // ゲージ
             gaugeList(results).forEach(r => {
                 const el = document.getElementById(`kpi-gauge-${r.m.key}`);
@@ -667,7 +737,7 @@
             // 判定の内訳(実際の6指標の判定の数)
             const donutEl = document.getElementById('kpi-donut');
             if (donutEl) {
-                const keys = ['good', 'normal', 'poor', 'hold'];
+                const keys = ['good', 'normal', 'poor', 'hold', 'na'];
                 const counts = keys.map(k => METRICS.filter(m => results[m.key].j.status === k).length);
                 charts.push(new Chart(donutEl, {
                     type: 'doughnut',
@@ -683,8 +753,8 @@
                 : p.type === 'monthly' ? { span: '1〜2週間後と月末', how: '月間KPIの日別推移' }
                     : p.type === 'yearly' ? { span: '翌月末・翌四半期末', how: '年間KPIの月別推移' }
                         : { span: '同じ日数の次の期間', how: 'この期間設定' };
-            const judged = METRICS.map(m => results[m.key]).filter(r => r.j.status !== 'hold');
-            const holds = METRICS.map(m => results[m.key]).filter(r => r.j.status === 'hold');
+            const judged = METRICS.map(m => results[m.key]).filter(r => !['hold', 'na'].includes(r.j.status));
+            const holds = METRICS.map(m => results[m.key]).filter(r => ['hold', 'na'].includes(r.j.status));
             if (!judged.length) {
                 const unset = holds.filter(r => /未設定/.test(r.j.reason)).map(r => r.m.label);
                 const sample = holds.filter(r => r.j.sample).map(r => r.m.label);
@@ -793,6 +863,7 @@
         function openSettings() {
             let tab = UI.mode === 'monthly' || UI.mode === 'yearly' ? UI.mode : 'daily';
             const draft = JSON.parse(JSON.stringify(settingsInfo.settings));
+            let armedKey = null; // 警告を表示済み(この内容の警告を確認して保存できる状態)のときの警告内容
             const ov = document.createElement('div');
             ov.className = 'modal-overlay active';
             ov.id = 'kpi-settings-modal';
@@ -831,6 +902,7 @@
                         }).join('')}</tbody>
                     </table></div>
                     <div id="kpi-set-err" class="kpi-err" style="display:none;"></div>
+                    <div id="kpi-set-warn" class="kpi-warnbox" style="display:none;"></div>
                     <div class="modal-footer" style="align-items:center;">
                         <button class="btn-secondary" id="kpi-set-cancel">${ro ? '閉じる' : 'キャンセル'}</button>
                         ${ro ? '' : '<button class="btn-primary" id="kpi-set-save">保存する</button>'}
@@ -841,15 +913,20 @@
                     draft[tab][inp.dataset.k][inp.dataset.f] = num(inp.value);
                     const cell = ov.querySelector(`#kpi-normal-${inp.dataset.k}`);
                     if (cell) cell.textContent = normalText(draft[tab][inp.dataset.k]);
+                    refreshChecks();
                 });
                 ov.querySelector('#kpi-set-close').onclick = close;
                 ov.querySelector('#kpi-set-cancel').onclick = close;
                 const save = ov.querySelector('#kpi-set-save');
                 if (save) save.onclick = async () => {
                     if (!checkAdminLocal()) return;
-                    const errs = validateSettings(draft);
-                    const box = ov.querySelector('#kpi-set-err');
-                    if (errs.length) { box.style.display = ''; box.innerHTML = '保存できません:<br>' + errs.map(esc).join('<br>'); return; }
+                    const { errors, warnings } = checkSettings(draft);
+                    const key = JSON.stringify(warnings);
+                    if (errors.length) { armedKey = null; showChecks(errors, warnings); return; }
+                    if (warnings.length && armedKey !== key) {
+                        // 初回: 保存せず、警告を確認できる状態にする(次に「警告を確認して保存する」を押すと保存)
+                        armedKey = key; showChecks(errors, warnings); return;
+                    }
                     save.disabled = true; save.textContent = '保存中...';
                     try {
                         settingsInfo = await saveSettings(settingsInfo.rowId, draft, user);
@@ -857,10 +934,31 @@
                         close();
                         render();
                     } catch (e) {
+                        const box = ov.querySelector('#kpi-set-err');
                         box.style.display = ''; box.textContent = '保存に失敗しました: ' + (e.message || '');
-                        save.disabled = false; save.textContent = '保存する';
+                        save.disabled = false; save.textContent = armedKey ? '警告を確認して保存する' : '保存する';
                     }
                 };
+                if (armedKey != null) refreshChecks();
+            };
+            // 保存できない問題(errors)と、確認が必要な警告(warnings)を表示する。警告は確認ボタンを押したときだけ保存できる
+            const showChecks = (errors, warnings) => {
+                const box = ov.querySelector('#kpi-set-err'), wbox = ov.querySelector('#kpi-set-warn'), save = ov.querySelector('#kpi-set-save');
+                if (!box || !wbox) return;
+                box.style.display = errors.length ? '' : 'none';
+                box.innerHTML = errors.length ? '保存できません(次の設定を直してください):<br>' + errors.map(esc).join('<br>') : '';
+                wbox.style.display = warnings.length ? '' : 'none';
+                wbox.innerHTML = warnings.length ? `確認してください(${warnings.length}件)。内容を確認したうえで、よければ「警告を確認して保存する」を押してください。<ul>${warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : '';
+                if (save && !save.disabled) save.textContent = (armedKey != null && warnings.length && !errors.length) ? '警告を確認して保存する' : '保存する';
+            };
+            // 警告を表示している間に設定を直したら、表示を最新にする(解消した警告は消える)
+            const refreshChecks = () => {
+                const eb = ov.querySelector('#kpi-set-err'), wb = ov.querySelector('#kpi-set-warn');
+                const shown = armedKey != null || (eb && eb.style.display !== 'none') || (wb && wb.style.display !== 'none');
+                if (!shown) return;
+                const { errors, warnings } = checkSettings(draft);
+                if (armedKey != null) armedKey = (!errors.length && warnings.length) ? JSON.stringify(warnings) : null;
+                showChecks(errors, warnings);
             };
             const close = () => ov.remove();
             draw();
@@ -882,7 +980,7 @@
     function fmtDate(ms) { const a = jp(ms); return `${a.y}/${a.m}/${a.d} ${a.h}:${pad(a.mi)}`; }
 
     // テスト用に中身を公開(画面の動作には使わない)
-    window.KpiInternals = { buildPeriod, prevPeriod, buckets, countIn, coverage, validateSettings, mergeSettings, defaultSettings, jms, jp };
+    window.KpiInternals = { buildPeriod, prevPeriod, buckets, countIn, coverage, validateSettings, checkSettings, mergeSettings, defaultSettings, jms, jp };
 
     const STYLE = `<style>
         .kpi-head { padding: 16px 20px; margin-bottom: 14px; }
@@ -893,6 +991,22 @@
         .kpi-other { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
         .kpi-other select, .kpi-period select, .kpi-period input { width: auto; padding: 6px 10px; font-size: 0.85rem; }
         .kpi-period { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 1.1rem; }
+        .kpi-daybar { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; }
+        .kpi-seg { display: inline-flex; border: 1px solid var(--border-light, #ddd); border-radius: 10px; overflow: hidden; }
+        .kpi-seg button { border: none; background: #fff; padding: 8px 14px; font-size: 0.88rem; font-weight: 600; cursor: pointer; font-family: inherit; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 4px; }
+        .kpi-seg button + button { border-left: 1px solid var(--border-light, #ddd); }
+        .kpi-seg button.is-on { background: #1C64D8; color: #fff; }
+        .kpi-daynav { display: inline-flex; align-items: center; gap: 6px; }
+        .kpi-daynav input[type=date] { width: auto; padding: 6px 10px; font-size: 0.9rem; }
+        .kpi-daynav button:disabled { opacity: .4; cursor: not-allowed; }
+        .kpi-showing { margin-top: 12px; padding: 10px 14px; background: #F1F6FF; border-left: 4px solid #1C64D8; border-radius: 8px; font-size: 1.05rem; font-weight: 800; color: #1A3D7C; }
+        .kpi-showing-sub { display: inline-block; margin-left: 10px; font-size: 0.78rem; font-weight: 600; color: #4A6FA5; }
+        .kpi-short { font-size: 0.72rem; margin-top: 6px; line-height: 1.5; color: var(--text-secondary); }
+        .kpi-short-hold, .kpi-short-na { color: #495057; font-weight: 600; }
+        .kpi-short-poor { color: #C92A2A; } .kpi-short-good { color: #2B8A3E; } .kpi-short-normal { color: #B07500; }
+        .kpi-chip-na { background: #E9ECEF; color: #495057; border: 1px dashed #868E96; }
+        .kpi-st-na { border-top-color: #868E96; }
+        .kpi-daily-note { margin: 10px 0 0; padding: 10px 14px; background: #FFF9DB; border: 1px solid #FFE066; border-radius: 10px; font-size: 0.82rem; line-height: 1.7; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: space-between; }
         .kpi-status { font-size: 0.85rem; line-height: 1.9; margin: 0 4px 14px; color: var(--text-secondary); }
         .kpi-badge { display: inline-block; font-size: 0.72rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; margin-right: 4px; }
         .kpi-badge-run { background: #E7F1FF; color: #1C64D8; }
@@ -1014,6 +1128,8 @@
         .kpi-set-table th, .kpi-set-table td { padding: 8px 6px; font-size: 0.8rem; vertical-align: middle; }
         .kpi-set-table input { width: 84px; padding: 6px 8px; font-size: 0.85rem; border: 1px solid var(--border-light, #ddd); border-radius: 6px; }
         .kpi-set-table td span { font-size: 0.72rem; color: var(--text-secondary); margin-left: 4px; }
+        .kpi-warnbox { margin-top: 10px; color: #8A4B00; background: #FFF6E5; border: 1px solid #F2C879; border-radius: 8px; padding: 10px 12px; font-size: 0.82rem; line-height: 1.7; }
+        .kpi-warnbox ul { margin: 6px 0 0; padding-left: 1.2em; }
         .kpi-err { margin-top: 10px; color: #C92A2A; background: #FFF0F0; border-radius: 8px; padding: 10px 12px; font-size: 0.82rem; line-height: 1.7; }
         @media (max-width: 900px) { .kpi-cards-6 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .kpi-charts { grid-template-columns: 1fr; } .kpi-fn-grid, .kpi-judge-wrap { grid-template-columns: 1fr; } .kpi-judge { grid-template-columns: 1fr 1fr; } .kpi-j-name, .kpi-judge .kpi-cmp { grid-column: 1 / -1; } }
         @media (max-width: 600px) { .kpi-fs { grid-template-columns: 1fr 70px; } .kpi-fs-track { grid-column: 1 / -1; grid-row: 2; } .kpi-fs-flow { grid-column: 1 / -1; justify-content: flex-start; } .kpi-ss { grid-template-columns: 1fr 50px 50px; } .kpi-ss .kpi-fs-track { grid-column: 1 / -1; grid-row: 2; } .kpi-gauges { grid-template-columns: 1fr; } }
