@@ -9,7 +9,9 @@ App.Pages.youtube = async function(targetScriptId = null) {
         return;
     }
 
-    let activeTab = targetScriptId ? 'script' : (window.ytActiveTab || 'video');
+    // 「動画進捗」の画面は廃止した(データは残してある)。以前の画面の記憶が残っていても、台本作成を開く
+    if (window.ytActiveTab === 'video') window.ytActiveTab = 'script';
+    let activeTab = targetScriptId ? 'script' : (window.ytActiveTab || 'script');
     if (targetScriptId) {
         window.ytActiveTab = 'script';
     }
@@ -42,7 +44,6 @@ App.Pages.youtube = async function(targetScriptId = null) {
                 <h2 style="font-size:1.5rem; margin:0;">YouTube 管理</h2>
             </div>
             <div style="display:flex; gap:8px;">
-                <button class="btn-sm ${activeTab === 'video' ? 'btn-primary' : 'btn-secondary'}" onclick="window.ytActiveTab='video'; App.navigate('youtube')"><i class="ph ph-video-camera"></i> 動画進捗</button>
                 <button class="btn-sm ${activeTab === 'script' ? 'btn-primary' : 'btn-secondary'}" onclick="window.ytActiveTab='script'; App.navigate('youtube')"><i class="ph ph-notebook"></i> 台本作成</button>
                 <button class="btn-sm ${activeTab === 'line' ? 'btn-primary' : 'btn-secondary'}" onclick="window.ytActiveTab='line'; App.navigate('youtube')"><i class="ph ph-chat-circle-dots"></i> 公式LINE</button>
                 <button class="btn-success btn-sm" onclick="syncAllChannels()"><i class="ph ph-arrows-clockwise"></i> 全てのChを一括更新</button>

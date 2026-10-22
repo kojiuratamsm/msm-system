@@ -26,7 +26,7 @@
     const VIDEO_EXT = /\.(mp4|mov|m4v|webm|avi|mkv|mpg|mpeg|wmv|3gp)$/i;
     const DEFAULTS = { clientId: '', hour: 19, minute: 0, description: '#Shorts', tags: '', categoryId: '22', kids: 'default' };
 
-    const S = window.ShortUploadState = window.ShortUploadState || { items: [], settings: null, settingsRowId: null, log: [], token: null, tokenExp: 0, uploading: false, seq: 0 };
+    const S = window.ShortUploadState = window.ShortUploadState || { items: [], settings: null, settingsRowId: null, log: [], token: null, tokenExp: 0, uploading: false, seq: 0, startDay: '' };
 
     const esc = (v) => String(v ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
     const pad = (n) => String(n).padStart(2, '0');
@@ -74,9 +74,12 @@
     // ---------- 公開日時の自動割り当て(1日1本・設定した時刻) ----------
     function nextSlot(now, occupied) {
         const st = S.settings, t = jp(now);
+        const fm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(S.startDay || '');
+        const floor = fm ? jms(+fm[1], +fm[2], +fm[3], 0, 0) : null;
         for (let i = 0; i < 800; i++) {
             const c = jms(t.y, t.m, t.d + i, st.hour, st.minute);
             if (c < now + MIN_LEAD) continue;
+            if (floor != null && c < floor) continue;   // 「最初の公開日」より前の日には入れない
             if (occupied.has(dayKey(c))) continue;
             return c;
         }
@@ -346,6 +349,7 @@
                     <span class="su-login-state" id="su-login-state"></span>
                 </div>
                 <label class="su-drop" id="su-drop"><i class="ph ph-upload-simple"></i><span>ここに動画をドラッグするか、クリックして選びます(複数選べます)</span><input type="file" id="su-files" accept="video/*,.mp4,.mov,.m4v,.webm" multiple hidden></label>
+                <div class="su-startday"><label for="su-startday">最初の公開日(この日から1日1本ずつ入ります。空欄なら、いちばん早い空き日から)</label><input type="date" id="su-startday" value="${esc(S.startDay)}"><div class="su-hint">YouTube Studioで直接予約した動画は、この画面からは見えません。その日を避けたいときは、ここで開始日を指定してください。</div></div>
                 <div class="su-hintline">タイトルはファイル名から入ります(あとで直せます)。公開日時は、設定の時刻に1日1本ずつ、空いている日へ順番に入ります。</div>
                 <div id="su-list"></div>
                 <div class="su-btns">
@@ -379,6 +383,8 @@
             .su-drop { display: flex; align-items: center; justify-content: center; gap: 10px; border: 2px dashed var(--border-light, #ccc); border-radius: 12px; padding: 22px 12px; cursor: pointer; color: var(--text-secondary); font-size: 0.9rem; text-align: center; }
             .su-drop.is-over { border-color: var(--primary-color, #4c6ef5); background: rgba(76,110,245,.06); }
             .su-drop i { font-size: 1.5rem; }
+            .su-startday { margin: 12px 0 0; font-size: 0.85rem; } .su-startday label { display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 4px; }
+            .su-startday input[type="date"] { width: auto; padding: 8px 12px; font-size: 0.9rem; }
             .su-hintline { font-size: 0.78rem; color: var(--text-secondary); margin: 8px 0 12px; line-height: 1.7; }
             .su-row { border: 1px solid var(--border-light, #e3e3e3); border-radius: 10px; padding: 12px; margin-bottom: 10px; }
             .su-row.done { background: rgba(47,158,68,.05); } .su-row.err { border-color: #FFA8A8; background: #FFF8F8; }
@@ -458,6 +464,7 @@
             ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('is-over'); }));
             ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('is-over'); }));
             drop.addEventListener('drop', (e) => addFiles(e.dataTransfer && e.dataTransfer.files));
+            $('su-startday').addEventListener('change', (e) => { S.startDay = e.target.value || ''; assignSlots(); renderList(); });
             $('su-test').addEventListener('change', () => { S.items.forEach(it => { if (it.state === 'wait' || it.state === 'err') it.test = $('su-test').checked; }); assignSlots(); renderList(); });
             const list = $('su-list');
             list.addEventListener('input', (e) => {
