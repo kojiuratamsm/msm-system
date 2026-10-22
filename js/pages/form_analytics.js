@@ -154,11 +154,32 @@ App.Pages.form_analytics = async function() {
     }, 100);
 
     // データの取得
-    const [formData, statsData, responsesData] = await Promise.all([
-        Store.getMEOForm(),
-        Store.getMEOFormStats(),
-        Store.getMEOFormResponses()
-    ]);
+    // 統計(meo_form_stats)と回答(meo_form_response)は、Supabase の1回あたりの取得上限で途中までしか読めないことがあるため、
+    // Store.getAllRows で全件を読み、総件数と照合する。取得エラーや件数の不一致があれば、不完全な数字は表示しない。
+    let formData, statsData, responsesData, statsLoad, responsesLoad;
+    try {
+        const [f, st, rs] = await Promise.all([
+            Store.getMEOForm(),
+            Store.getAllRows('meo_form_stats'),
+            Store.getAllRows('meo_form_response')
+        ]);
+        formData = f;
+        statsData = st.rows;
+        statsLoad = st;
+        responsesData = rs.rows.sort((a, b) => Number(b.id) - Number(a.id));   // 以前と同じく新しい回答が上
+        responsesLoad = rs;
+    } catch (e) {
+        console.error(e);
+        const box = document.getElementById('analytics-content');
+        if (box) box.innerHTML = `
+            <div class="card" style="padding:32px; text-align:left; border-left:4px solid #dc3545;">
+                <h3 style="margin-bottom:8px;">分析データを読み込めませんでした</h3>
+                <p style="line-height:1.8;">${String(e.message || '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]))}</p>
+                <p style="color:var(--text-secondary); font-size:0.85rem; line-height:1.8;">記録の一部しか読み込めていない可能性があるため、不正確な数字を出さないよう表示していません。時間をおいてもう一度読み込んでください。</p>
+                <button class="btn btn-primary" style="margin-top:16px;" onclick="App.navigate('form_analytics')">もう一度読み込む</button>
+            </div>`;
+        return;
+    }
 
     if (!formData) {
         document.getElementById('analytics-content').innerHTML = `
@@ -365,8 +386,14 @@ App.Pages.form_analytics = async function() {
         </div>
     `;
 
+    const loadInfoHtml = `
+        <div style="font-size:0.75rem; color:var(--text-secondary); margin:-8px 0 16px; text-align:right;" title="記録を全件読み込み、総件数と照合しています">
+            データの読み込み: 統計の記録 ${statsLoad.rows.length.toLocaleString()}件 / 総数 ${statsLoad.total.toLocaleString()}件(一致) ・ 回答 ${responsesLoad.rows.length.toLocaleString()}件 / 総数 ${responsesLoad.total.toLocaleString()}件(一致)
+        </div>`;
+
     document.getElementById('analytics-content').innerHTML = `
         <div style="text-align:left;">
+            ${loadInfoHtml}
             ${diagnosisCountHtml}
             ${kpiHtml}
             ${funnelHtml}

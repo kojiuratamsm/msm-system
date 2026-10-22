@@ -167,6 +167,51 @@ const Store = {
         const { data } = await supabase.from('customers').select('*').eq('service_type', 'meo_form_stats');
         return (data || []).map(r => ({ id: r.id, ...r.data }));
     },
+    // 指定した種類の行を「全件」読み込み、総件数と照合して返す(KPI状況・分析フォームで使用)。
+    //   戻り値: { rows: [{ id, ...data }], total: 総件数, pages: 問い合わせ回数 }
+    // ・Supabase が1回で返す件数には上限がある(初期設定1,000件。設定で小さくもできる)。上限が1,000件より小さくても
+    //   途中で止まらないよう、「短いページが来たら終わり」ではなく「次の id より大きい行が0件になるまで」読み続ける(id 順のキーセット方式)。
+    // ・読み始める前に「今ある最大の id」と「その id までの総件数」を確定し、その範囲だけを読む(読み込み中に増えた記録は対象外)。
+    // ・取得エラー・id の並びの異常・読み込んだ件数と総件数の不一致のどれかがあれば例外を投げる(不完全なデータは返さない)。
+    async getAllRows(serviceType) {
+        const PAGE = 1000;
+        const fail = (msg) => { const e = new Error(msg); e.fetchFailed = true; throw e; };
+        const errText = (er) => (er && (er.message || er.code)) || '不明なエラー';
+        // 1) 今ある最大の id
+        const top = await supabase.from('customers').select('id').eq('service_type', serviceType).order('id', { ascending: false }).limit(1);
+        if (top.error) fail(`最新の記録を確認できませんでした(${errText(top.error)})`);
+        if (!top.data || top.data.length === 0) {
+            const c0 = await supabase.from('customers').select('id', { count: 'exact', head: true }).eq('service_type', serviceType);
+            if (c0.error || typeof c0.count !== 'number') fail(`総件数を確認できませんでした(${errText(c0.error)})`);
+            if (c0.count !== 0) fail(`記録が見つからないのに総件数が${c0.count}件になっています(取得の異常)`);
+            return { rows: [], total: 0, pages: 0 };
+        }
+        const maxId = top.data[0].id;
+        // 2) その id までの総件数
+        const cnt = await supabase.from('customers').select('id', { count: 'exact', head: true }).eq('service_type', serviceType).lte('id', maxId);
+        if (cnt.error || typeof cnt.count !== 'number') fail(`総件数を確認できませんでした(${errText(cnt.error)})`);
+        const total = cnt.count;
+        // 3) id の小さい順に、空のページが返るまで読む
+        const rows = [];
+        let last = null, pages = 0;
+        for (;;) {
+            if (pages > total + 1) fail('問い合わせの回数が想定を超えたため中止しました(ページングの異常)');
+            let q = supabase.from('customers').select('id, data').eq('service_type', serviceType).lte('id', maxId).order('id', { ascending: true }).limit(PAGE);
+            if (last !== null) q = q.gt('id', last);
+            const { data, error } = await q;
+            pages++;
+            if (error) fail(`${rows.length.toLocaleString()}件まで読んだところで取得エラーが起きました(${errText(error)})`);
+            if (!data || data.length === 0) break;
+            for (const r of data) {
+                if (last !== null && !(r.id > last)) fail('記録の並び順が正しくないため中止しました(ページングの異常)');
+                last = r.id;
+                rows.push({ id: r.id, ...(r.data || {}) });
+            }
+            if (rows.length > total) fail(`読み込んだ件数(${rows.length.toLocaleString()}件)が総件数(${total.toLocaleString()}件)を超えました(取得の異常)`);
+        }
+        if (rows.length !== total) fail(`読み込んだ件数(${rows.length.toLocaleString()}件)が総件数(${total.toLocaleString()}件)と一致しません。読み込み中に記録が削除された可能性があります。もう一度読み込んでください`);
+        return { rows, total, pages };
+    },
     async clearMEOFormStatsAndResponses() {
         await supabase.from('customers').delete().eq('service_type', 'meo_form_stats');
         await supabase.from('customers').delete().eq('service_type', 'meo_form_response');

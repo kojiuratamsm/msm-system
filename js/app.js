@@ -13,6 +13,7 @@ const App = {
 
         const titleMap = {
             'dashboard': 'ダッシュボード',
+            'kpi': 'KPI状況',
             'ai_office': 'AI OFFICE',
             'services': 'サービス一覧',
             'customers': '顧客管理 / 案件管理',
@@ -203,7 +204,7 @@ const App = {
             
             // Sidebar will explicitly show all items to all users now.
             // When clicked, non-admins will see a rejection screen for restricted pages.
-            const allNavs = ['dashboard', 'ai_office', 'services', 'customers', 'sales', 'finance', 'payroll', 'tasks', 'research', 'youtube', 'youtube_short', 'youtube_subtitles', 'ai_planner', 'sales_leads', 'form_analytics', 'surveys', 'mindmaps', 'meo_users', 'invites', 'settings', 'threads', 'photo_convert', 'qr_code', 'meo_progress'];
+            const allNavs = ['dashboard', 'ai_office', 'services', 'customers', 'sales', 'finance', 'payroll', 'tasks', 'research', 'youtube', 'youtube_short', 'youtube_subtitles', 'ai_planner', 'sales_leads', 'form_analytics', 'surveys', 'mindmaps', 'meo_users', 'invites', 'settings', 'threads', 'photo_convert', 'qr_code', 'meo_progress', 'kpi'];
             allNavs.forEach(nav => {
                 const el = document.querySelector(`li[data-target="${nav}"]`);
                 if (el) el.style.display = 'flex';
