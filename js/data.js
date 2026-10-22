@@ -103,6 +103,7 @@ CONSTANTS.MEO_PLANS.splice(0, CONSTANTS.MEO_PLANS.length, ...CONSTANTS.MEO_PLANS
 
 // ===== MEOの月ごとの作業(投稿状況・写真/動画アップロード)の共通部品 =====
 // 保存先: 顧客データの posts = { 'YYYY-MM': [true/false ×12] } / media = { 'YYYY-MM': [true/false ×6] }
+// 写真/動画のチェックを付けた日: mediaDates = { 'YYYY-MM': ['YYYY-MM-DD' または null ×6] }(media とは別に保存。日付の記録を始める前のチェックは null)
 window.MeoWork = {
     POSTS_MAX: 12,
     MEDIA_MAX: 6,
@@ -123,6 +124,36 @@ window.MeoWork = {
         const obj = customer && customer[type];
         const saved = obj && typeof obj === 'object' && !Array.isArray(obj) && Array.isArray(obj[ym]) ? obj[ym] : [];
         return Array.from({ length: max }, (_, i) => !!saved[i]);
+    },
+    // 今日の日付('YYYY-MM-DD')。この端末の日付(日本で使うので日本時間)で作る
+    dayKey(dt = new Date()) { return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`; },
+    // 写真/動画のその月の「チェックを付けた日」(日付の配列。記録がないものは null)
+    mediaDates(customer, ym) {
+        const obj = customer && customer.mediaDates;
+        const saved = obj && typeof obj === 'object' && !Array.isArray(obj) && Array.isArray(obj[ym]) ? obj[ym] : [];
+        return Array.from({ length: this.MEDIA_MAX }, (_, i) => (typeof saved[i] === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(saved[i])) ? saved[i] : null);
+    },
+    // チェックを付けた/外したときの日付を customer.mediaDates に反映する(付けたら今日、外したら消す)。保存する mediaDates を返す
+    setMediaDate(customer, ym, idx, checked, now = new Date()) {
+        if (!customer.mediaDates || typeof customer.mediaDates !== 'object' || Array.isArray(customer.mediaDates)) customer.mediaDates = {};
+        const arr = this.mediaDates(customer, ym);
+        arr[idx] = checked ? this.dayKey(now) : null;
+        customer.mediaDates[ym] = arr;
+        return customer.mediaDates;
+    },
+    // 今週(月曜〜日曜)の範囲('YYYY-MM-DD')
+    weekRange(now = new Date()) {
+        const dow = (now.getDay() + 6) % 7; // 月曜=0
+        const mon = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dow);
+        const sun = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dow + 6);
+        return { start: this.dayKey(mon), end: this.dayKey(sun) };
+    },
+    // 日付の表示用: 「10/22」と、ホバーで見える「2026年10月22日(水)」
+    dayLabel(key) {
+        const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key || '');
+        if (!m) return null;
+        const dt = new Date(+m[1], +m[2] - 1, +m[3]);
+        return { short: `${+m[2]}/${+m[3]}`, full: `${+m[1]}年${+m[2]}月${+m[3]}日(${'日月火水木金土'[dt.getDay()]})` };
     },
     // 投稿状況の古い保存形式('1'〜'12' の月だけ)を、年+月('YYYY-MM')に1回だけ移し替えてデータベースにも保存する。
     // 古い形式には年がないため「移し替える日から見て一番最近のその月」とみなす

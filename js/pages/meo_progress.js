@@ -62,7 +62,8 @@ App.Pages.meo_progress = async function (selectedYm) {
     const boxes = (r, type) => {
         const list = type === 'media' ? r.media : r.posts;
         const target = type === 'media' ? r.tm : r.tp;
-        return list.map((on, i) => `<input type="checkbox" class="${i >= target ? 'mp-extra' : ''}" title="${i + 1}件目${i >= target ? '(目標外)' : ''}" ${on ? 'checked' : ''} onchange="mpToggle(${r.d.id}, '${type}', ${i}, this.checked)">`).join('');
+        const dates = type === 'media' ? W.mediaDates(r.d, ym) : [];
+        return list.map((on, i) => { const lb = on && dates[i] ? W.dayLabel(dates[i]) : null; return `<input type="checkbox" class="${i >= target ? 'mp-extra' : ''}" title="${i + 1}件目${i >= target ? '(目標外)' : ''}${lb ? `(${lb.full}にチェック)` : ''}" ${on ? 'checked' : ''} onchange="mpToggle(${r.d.id}, '${type}', ${i}, this.checked)">`; }).join('');
     };
     const todo = (r) => {
         if (r.level === 'done') return '<span class="mp-todo-ok">今月分 完了</span>';
@@ -204,13 +205,14 @@ App.Pages.meo_progress = async function (selectedYm) {
             const arr = W.checks(d, type, ym).slice(0, max);
             arr[idx] = checked;
             d[type][ym] = arr;
+            if (type === 'media') W.setMediaDate(d, ym, idx, checked); // 写真/動画は、チェックを付けた日も記録する(顧客管理の画面と同じ)
             rows[i] = calc(d);
             const tr = document.querySelector(`#mp-tbody tr[data-id="${id}"]`);
             if (tr) tr.outerHTML = rowHtml(rows[i]);
             redrawSummary();
             const b = document.getElementById('mp-resort'); if (b) b.classList.add('is-pending');
             try {
-                await Store.updateCustomer('meo', id, { [type]: d[type] });
+                await Store.updateCustomer('meo', id, type === 'media' ? { media: d.media, mediaDates: d.mediaDates } : { [type]: d[type] });
             } catch (e) {
                 alert('保存できませんでした。通信状態を確認して、もう一度お試しください。');
             }

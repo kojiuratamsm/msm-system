@@ -413,7 +413,7 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                                             <select onchange="renderMeoMediaUI(${d.id}, this.value)" style="padding: 2px; font-size: 0.8rem; border-radius: 4px;">
                                                 ${meoMonthOptions.map(o => `<option value="${o.key}" ${o.key === meoMonthOptions[0].key ? 'selected' : ''}>${o.label}</option>`).join('')}
                                             </select>
-                                            <div id="media-container-${d.id}" style="display:flex; gap:2px; flex-wrap:wrap; margin-top: 4px; align-items:center;"></div>
+                                            <div id="media-container-${d.id}" style="display:flex; gap:2px; flex-wrap:wrap; margin-top: 4px; align-items:flex-start;"></div>
                                         </div>
                                     </td>
                                     <td>
@@ -543,6 +543,10 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
 
         <style>
             .meo-plan-info { font-size: 0.75rem; color: var(--text-secondary); margin-top: 6px; line-height: 1.5; }
+            .meo-media-item { display: inline-flex; flex-direction: column; align-items: center; justify-content: flex-start; min-width: 38px; min-height: 32px; }
+            .meo-media-date { font-size: 0.62rem; line-height: 1.2; color: var(--text-secondary); white-space: nowrap; }
+            .meo-media-date.is-week { color: var(--success); font-weight: 700; }
+            .meo-media-date.is-none { color: #ADB5BD; }
             .meo-exp-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 0.72rem; font-weight: 700; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
             .meo-exp-soon { background: #FFF4E5; color: #C25E00; border: 1px solid #FFC078; }
             .meo-exp-expired { background: #FFF0F0; color: #C92A2A; border: 1px solid #FFA8A8; }
@@ -853,8 +857,10 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                 if (!c.media || typeof c.media !== 'object' || Array.isArray(c.media)) c.media = {};
                 if (!Array.isArray(c.media[monthKey])) c.media[monthKey] = Array(MEO_MEDIA_COUNT).fill(false);
                 c.media[monthKey][idx] = checked;
+                // チェックを付けた日を記録する(外したら消す)。media とは別の項目に保存し、media の形式は変えない
+                window.MeoWork.setMediaDate(c, monthKey, idx, checked);
                 renderMeoMediaUI(id, monthKey);
-                await Store.updateCustomer('meo', id, { media: c.media });
+                await Store.updateCustomer('meo', id, { media: c.media, mediaDates: c.mediaDates });
             };
 
             window.renderMeoMediaUI = (id, monthKey) => {
@@ -865,9 +871,17 @@ App.Pages.customers = async function(activeTab = 'plusOne', selectedMonth = 'all
                 const saved = d.media && !Array.isArray(d.media) && Array.isArray(d.media[monthKey]) ? d.media[monthKey] : [];
                 const checks = Array.from({ length: MEO_MEDIA_COUNT }, (_, i) => !!saved[i]);
                 const done = checks.filter(Boolean).length;
-                el.innerHTML = checks.map((checked, i) => `
-                    <input type="checkbox" title="${i + 1}件目" ${checked ? 'checked' : ''} onchange="updateMeoMedia(${id}, '${monthKey}', ${i}, this.checked)">
-                `).join('') + `<span style="font-size:0.72rem; margin-left:4px; font-weight:700; color:${done === MEO_MEDIA_COUNT ? 'var(--success)' : 'var(--text-secondary)'};">${done}/${MEO_MEDIA_COUNT}</span>`;
+                // チェックを付けた日を、各チェックの下に表示する(今週に付けたものは緑で目立たせる)
+                const dates = window.MeoWork.mediaDates(d, monthKey);
+                const wk = window.MeoWork.weekRange();
+                el.innerHTML = checks.map((checked, i) => {
+                    const lb = checked ? window.MeoWork.dayLabel(dates[i]) : null;
+                    const thisWeek = !!(lb && dates[i] >= wk.start && dates[i] <= wk.end);
+                    const dateHtml = !checked ? ''
+                        : lb ? `<span class="meo-media-date${thisWeek ? ' is-week' : ''}" title="${lb.full}にチェック${thisWeek ? '(今週)' : ''}">${lb.short}</span>`
+                            : `<span class="meo-media-date is-none" title="日付の記録を始める前にチェックされたため、日付がありません">日付なし</span>`;
+                    return `<div class="meo-media-item"><input type="checkbox" title="${i + 1}件目${lb ? `(${lb.full}にチェック)` : ''}" ${checked ? 'checked' : ''} onchange="updateMeoMedia(${id}, '${monthKey}', ${i}, this.checked)">${dateHtml}</div>`;
+                }).join('') + `<span style="font-size:0.72rem; margin-left:4px; margin-top:2px; font-weight:700; color:${done === MEO_MEDIA_COUNT ? 'var(--success)' : 'var(--text-secondary)'};">${done}/${MEO_MEDIA_COUNT}</span>`;
             };
 
             // Initial render for MEO posts
