@@ -125,7 +125,7 @@
         const low = (msg + ' ' + reason).toLowerCase();
         if (status === 401) return new ApiError(status, reason, 'ログインの有効期限が切れました。「Googleにログイン」を押してください', 'auth');
         if (status === 403 && (/accessnotconfigured|servicedisabled|has not been used|is disabled|api has not/.test(low))) {
-            const which = /analytics/.test(low) ? 'YouTube Analytics API' : (/data api|youtube\.googleapis|youtube data/.test(low) ? 'YouTube Data API v3' : 'YouTube Analytics API');
+            const which = /reporting/.test(low) ? 'YouTube Reporting API' : /analytics/.test(low) ? 'YouTube Analytics API' :(/data api|youtube\.googleapis|youtube data/.test(low) ? 'YouTube Data API v3' : 'YouTube Analytics API');
             return new ApiError(status, reason, `Google Cloudで「${which}」が有効になっていません。下の「準備」の手順で有効にしてください`, 'setup');
         }
         if (status === 403 && /insufficient|scope/.test(low)) return new ApiError(status, reason, '許可が足りません。「Googleにログイン」を押し直して、表示された項目すべてにチェックを入れてください', 'scope');
@@ -134,10 +134,10 @@
         if (status === 400) return new ApiError(status, reason, `この条件の数字は取得できませんでした${msg ? '(' + msg + ')' : ''}`, 'bad');
         return new ApiError(status, reason, `YouTubeから数字を取得できませんでした(${status}${msg ? ': ' + msg : ''})`, 'other');
     }
-    async function api(url) {
+    async function api(url, opt) {
         if (!tokenOk()) throw new ApiError(401, '', 'ログインが必要です。「Googleにログイン」を押してください', 'auth');
         let r;
-        try { r = await fetch(url, { headers: { Authorization: 'Bearer ' + S.token } }); }
+        try { r = await fetch(url, { ...(opt || {}), headers: { ...((opt && opt.headers) || {}), Authorization: 'Bearer ' + S.token } }); }
         catch (e) { throw new ApiError(0, '', 'YouTubeに接続できませんでした。通信状態を確認してください', 'net'); }
         const text = await r.text();
         if (!r.ok) throw classify(r.status, text);
@@ -449,6 +449,270 @@
         } catch (e) { if (run !== S.run) return; if (e.kind === 'bad') setBody('ya-ret', emptyHtml('この動画の視聴維持率は取得できませんでした')); else showErr('ya-ret', e); }
     }
 
+    // ---------- サムネイルの表示回数・クリック率(YouTube Reporting API) ----------
+    // この2つの数字は、通常の集計(Analytics API の reports.query)では取れず、Reporting API の「リーチレポート」で毎日CSVとして配られる。
+    //   ・出典: https://developers.google.com/youtube/reporting/v1/reports (ジョブの作り方・ダウンロード・保管期間)
+    //          https://developers.google.com/youtube/reporting/v1/reports/channel_reports (channel_reach_basic_a1: date, channel_id, video_id / video_thumbnail_impressions, video_thumbnail_impressions_ctr)
+    //   ・流れ: ジョブを1回登録 → Googleが毎日1ファイル(太平洋時間の1日分)作る → このページが未保存の日だけダウンロードして、データベースに「月ごとに1行」で保存する。
+    //   ・保管期間は60日(さかのぼり分は30日)なので、ためておかないと消える。保存するのは動画IDと数字だけで、ログイン情報は入れない。
+    //   ・ログイン情報(アクセストークン)を送るのは youtubereporting.googleapis.com のURLだけ。
+    const REPORTING = 'https://youtubereporting.googleapis.com/v1';
+    const REACH_TYPE = 'channel_reach_basic_a1';
+    const REACH_JOB_NAME = 'msm-reach-basic';
+    const REACH_STORE = 'yt_reach_daily';   // { month:'2026-10', days:{ '2026-10-03': { 動画ID: [表示回数, クリック率(0〜1)] } }, updatedAt }
+    const REACH_MAX_DL = 70;
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+    function csvRows(text) {
+        const t = String(text || '').replace(/^﻿/, '');
+        const rows = []; let row = [], cur = '', q = false;
+        const flush = () => { row.push(cur); cur = ''; if (row.length > 1 || row[0] !== '') rows.push(row); row = []; };
+        for (let i = 0; i < t.length; i++) {
+            const c = t[i];
+            if (q) { if (c === '"') { if (t[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; }
+            else if (c === '"') q = true;
+            else if (c === ',') { row.push(cur); cur = ''; }
+            else if (c === '\n' || c === '\r') { if (c === '\r' && t[i + 1] === '\n') i++; flush(); }
+            else cur += c;
+        }
+        if (cur !== '' || row.length) flush();
+        return rows;
+    }
+    // 1日分のCSV → { 動画ID: [表示回数, クリック率(0〜1)] }。動画IDが空の行(削除済みの動画など)は '_' にまとめる
+    function parseReach(text) {
+        const rows = csvRows(text);
+        if (!rows.length) return {};   // 数字のない日は、見出し行だけ(または空)のファイルになる
+        const head = rows[0].map(h => h.trim());
+        const iV = head.indexOf('video_id'), iI = head.indexOf('video_thumbnail_impressions'), iC = head.indexOf('video_thumbnail_impressions_ctr');
+        if (iV < 0 || iI < 0 || iC < 0) throw new ApiError(0, '', 'レポートの列が想定と違うため読み取れませんでした(video_id / video_thumbnail_impressions / video_thumbnail_impressions_ctr)', 'other');
+        const body = rows.slice(1);
+        // クリック率の単位は公式の定義に「割合(クリック÷表示)」とあるだけで保存形式の記載がないため、1を超える値があれば%表記とみなして100で割る
+        const pct = body.some(r => num(r[iC]) > 1);
+        const out = {};
+        body.forEach(r => {
+            const vid = (r[iV] || '').trim() || '_';
+            const imp = num(r[iI]), ctr = num(r[iC]) / (pct ? 100 : 1);
+            const o = out[vid] || (out[vid] = { imp: 0, clicks: 0 });
+            o.imp += imp; o.clicks += imp * ctr;
+        });
+        return Object.fromEntries(Object.entries(out).map(([k, o]) => [k, [Math.round(o.imp), o.imp ? +(o.clicks / o.imp).toFixed(6) : 0]]));
+    }
+
+    async function fetchReportFile(url) {
+        if (!/^https:\/\/youtubereporting\.googleapis\.com\//.test(String(url || ''))) throw new ApiError(0, '', '想定外のダウンロード先だったため中止しました', 'other');
+        if (!tokenOk()) throw new ApiError(401, '', 'ログインが必要です。「Googleにログイン」を押してください', 'auth');
+        let r;
+        try { r = await fetch(url, { headers: { Authorization: 'Bearer ' + S.token } }); }
+        catch (e) { throw new ApiError(0, '', 'レポートのファイルを、このブラウザから直接ダウンロードできませんでした(Googleがブラウザからのアクセスを許可していない可能性があります)', 'dl'); }
+        const text = await r.text();
+        if (!r.ok) throw classify(r.status, text);
+        return text;
+    }
+    async function listJobs() {
+        const out = []; let token = '';
+        for (let i = 0; i < 10; i++) {
+            const j = await api(`${REPORTING}/jobs?pageSize=100${token ? '&pageToken=' + encodeURIComponent(token) : ''}`);
+            out.push(...(j.jobs || []));
+            token = j.nextPageToken || ''; if (!token) break;
+        }
+        return out;
+    }
+    async function createReachJob() {
+        try {
+            return await api(`${REPORTING}/jobs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reportTypeId: REACH_TYPE, name: REACH_JOB_NAME }) });
+        } catch (e) {
+            if (e.status === 409) return null;   // すでに登録済み
+            throw e;
+        }
+    }
+    async function listReports(jobId) {
+        const out = []; let token = '';
+        for (let i = 0; i < 10; i++) {
+            const j = await api(`${REPORTING}/jobs/${encodeURIComponent(jobId)}/reports?pageSize=100${token ? '&pageToken=' + encodeURIComponent(token) : ''}`);
+            out.push(...(j.reports || []));
+            token = j.nextPageToken || ''; if (!token) break;
+        }
+        return out;
+    }
+
+    // ---- 保存(customers テーブル、service_type = yt_reach_daily。月ごとに1行) ----
+    async function loadReachStore() {
+        const rows = await Store.getCustomers(REACH_STORE);
+        const byMonth = new Map(), days = {};
+        rows.filter(r => r && typeof r.month === 'string' && r.days && typeof r.days === 'object').sort((a, b) => Number(a.id) - Number(b.id)).forEach(r => {
+            if (!byMonth.has(r.month)) byMonth.set(r.month, r);
+            Object.assign(days, r.days);
+        });
+        S.reach = { rows: byMonth, days };
+    }
+    async function saveReachDays(newDays) {
+        const mem = { ...S.reach.days, ...newDays };
+        const months = Array.from(new Set(Object.keys(newDays).map(d => d.slice(0, 7)))).sort();
+        for (const month of months) {
+            const md = Object.fromEntries(Object.entries(mem).filter(([d]) => d.startsWith(month)));
+            const row = S.reach.rows.get(month);
+            if (row) await Store.updateCustomer(REACH_STORE, row.id, { days: md, updatedAt: new Date().toISOString() });
+            else { await Store.addCustomer(REACH_STORE, { month, days: md, updatedAt: new Date().toISOString() }); await sleep(15); }   // idは時刻から作られるため、連続保存で重ならないよう少し間をあける
+        }
+        await loadReachStore();
+        const ok = Object.keys(newDays).every(d => d in S.reach.days);   // Storeは保存に失敗しても例外を出さないため、読み直して確認
+        if (!ok) S.reach.days = mem;   // 保存できなかった分も、この画面では表示する
+        return ok;
+    }
+
+    async function syncReach(job, run) {
+        const info = S.reachInfo;
+        const list = await listReports(job.id);
+        const latest = new Map();   // 同じ日が複数ある(さかのぼり再作成)ときは、新しいものを使う
+        list.forEach(r => {
+            if (!r || !r.startTime || !r.downloadUrl) return;
+            const d = ptFmt.format(new Date(r.startTime));
+            const cur = latest.get(d);
+            if (!cur || String(r.createTime) > String(cur.createTime)) latest.set(d, r);
+        });
+        info.available = latest.size;
+        const need = Array.from(latest.entries()).filter(([d]) => !(d in S.reach.days)).sort((a, b) => b[0].localeCompare(a[0]));   // 新しい日から
+        const batch = need.slice(0, REACH_MAX_DL);
+        info.pending = need.length - batch.length;
+        const got = {}; let idx = 0, done = 0, firstErr = null;
+        const worker = async () => {
+            while (idx < batch.length && !firstErr) {
+                const [d, r] = batch[idx++];
+                try { got[d] = parseReach(await fetchReportFile(r.downloadUrl)); }
+                catch (e) { if (!firstErr) firstErr = e; }
+                done++;
+                if (run === S.run && batch.length > 3) setBody('ya-reach', `<div class="ya-loading"><i class="ph ph-spinner ph-spin"></i> 毎日のレポートを取り込んでいます… ${done}/${batch.length}</div>`);
+            }
+        };
+        await Promise.all(Array.from({ length: Math.min(4, batch.length) }, worker));
+        if (run !== S.run) return;
+        const keys = Object.keys(got);
+        if (keys.length) { info.fetched = keys.length; if (!(await saveReachDays(got))) info.saveFailed = true; }
+        if (firstErr) {
+            if (!keys.length && ['auth', 'setup', 'scope'].includes(firstErr.kind)) throw firstErr;
+            info.syncError = firstErr.message;
+        }
+    }
+
+    const dateList = (start, end) => { const out = []; for (let d = start; d <= end; d = addDays(d, 1)) out.push(d); return out; };
+    function reachAgg(dates, allow) {
+        let imp = 0, clicks = 0, n = 0; const per = new Map();
+        dates.forEach(d => {
+            const day = S.reach.days[d]; if (!day) return; n++;
+            Object.entries(day).forEach(([vid, v]) => {
+                if (allow && (vid === '_' || !allow.has(vid))) return;
+                const i = num(v[0]), c = i * num(v[1]); imp += i; clicks += c;
+                const p = per.get(vid) || { imp: 0, clicks: 0 }; p.imp += i; p.clicks += c; per.set(vid, p);
+            });
+        });
+        return { imp, clicks, ctr: imp ? clicks / imp * 100 : null, n, per };
+    }
+
+    async function loadReach(range, run, rankP) {
+        loading('ya-reach');
+        try {
+            await loadReachStore();
+            S.reachInfo = { hasJob: false, createTime: '', available: 0, fetched: 0, pending: 0, saveFailed: false, syncError: '' };
+            const jobs = await listJobs();
+            const job = jobs.find(j => j && j.reportTypeId === REACH_TYPE);
+            if (job) { S.reachInfo.hasJob = true; S.reachInfo.createTime = job.createTime || ''; S.reachInfo.jobId = job.id; await syncReach(job, run); }
+            if (run !== S.run) return;
+            if (S.type !== 'all' && rankP) await rankP;
+            if (run !== S.run) return;
+            await renderReach(range, run);
+        } catch (e) { if (run !== S.run) return; showErr('ya-reach', e); }
+    }
+
+    async function renderReach(range, run) {
+        const el = box('ya-reach'); if (!el) return;
+        const info = S.reachInfo || {};
+        const stored = Object.keys(S.reach.days).sort();
+        const warn = [];
+        if (info.syncError) warn.push(`新しい日のレポートを取り込めませんでした: ${info.syncError}`);
+        if (info.saveFailed) warn.push('取り込んだ数字をデータベースに保存できませんでした。この画面には表示していますが、レポートは60日で消えるため、通信状態を確認して画面を開き直してください。');
+        if (info.pending > 0) warn.push(`まだ取り込めていない日が${info.pending}日分あります。もう一度「この条件で表示する」を押すと続きを取り込みます。`);
+        const warnHtml = warn.map(w => `<div class="ya-warn">${esc(w)}</div>`).join('');
+        if (!info.hasJob) {
+            el.innerHTML = `${warnHtml}<div class="ya-note" style="margin:0 0 10px">サムネイルの表示回数・クリック率は、YouTubeが<b>毎日1回</b>まとめて作る専用のレポートからしか取れません。最初に1回だけ「集計の登録」をすると、登録の約2日後から数字が出はじめ、過去30日分もさかのぼって作られます。登録は、あとから変更・削除もできます。</div>
+                ${stored.length ? `<div class="ya-note">保存済みの数字があります(${esc(fmtD(stored[0]))} 〜 ${esc(fmtD(stored[stored.length - 1]))})。</div>` : ''}
+                <button type="button" class="btn-primary btn-sm" id="ya-reach-start">集計を登録する(1回だけ)</button> <span class="ya-msg" id="ya-reach-msg"></span>`;
+            bindReach(range); return;
+        }
+        if (!stored.length && info.syncError) {
+            el.innerHTML = `${warnHtml}<div class="ya-empty">集計は登録済みで、レポートも作られていますが、この画面に取り込めませんでした。</div>`;
+            return;
+        }
+        if (!stored.length) {
+            el.innerHTML = `${warnHtml}<div class="ya-empty">準備中です。集計を登録しました${info.createTime ? '(' + esc(String(info.createTime).slice(0, 10)) + ')' : ''}。最初の数字が出るまで、登録から最大約2日かかります。時間をおいて「この条件で表示する」を押してください。</div>`;
+            return;
+        }
+        // 種別(ショート/ロング)で絞るときは、この期間に再生された動画の種別から判定する(表示されただけで再生されなかった動画は数えられない)
+        let allow = null, typeNote = '';
+        if (S.type !== 'all') {
+            allow = new Set(((S.rank && S.rank.rows) || []).filter(r => r.creatorContentType === S.type).map(r => r.video));
+            typeNote = `種別「${TYPES[S.type]}」を選んでいるときは、この期間に再生された${TYPES[S.type]}の動画だけで数えています(1回も再生されなかった動画の表示回数は含みません)。`;
+        }
+        const dates = dateList(range.start, range.end), pdates = dateList(range.prev.start, range.prev.end);
+        const cur = reachAgg(dates, allow), prev = reachAgg(pdates, allow);
+        if (!cur.n) {
+            el.innerHTML = `${warnHtml}<div class="ya-empty">この期間の数字はまだ保存されていません(保存済み: ${esc(fmtD(stored[0]))} 〜 ${esc(fmtD(stored[stored.length - 1]))})。登録後に作られた日からたまります。</div>`;
+            return;
+        }
+        const full = prev.n === range.len;
+        const dImp = full ? delta(cur.imp, prev.imp) : null;
+        let dCtr = null;
+        if (full && prev.ctr != null && cur.ctr != null) { const d = +(cur.ctr - prev.ctr).toFixed(2); dCtr = { t: `${d > 0 ? '+' : ''}${d.toFixed(2)}pt`, cls: d > 0 ? 'up' : (d < 0 ? 'down' : 'flat') }; }
+        const tile = (k, v, s, d) => `<div class="ya-tile"><div class="ya-tile-k">${k}</div><div class="ya-tile-v">${v}</div><div class="ya-tile-s">${s}</div>${d ? `<div class="ya-tile-d ${d.cls}">前の期間比 ${esc(d.t)}</div>` : ''}</div>`;
+        const tiles = `<div class="ya-tiles ya-tiles-s">${tile('サムネイルの表示回数', fmtInt(cur.imp), `${cur.n}/${range.len}日分のデータ`, dImp)}${tile('クリック率', cur.ctr == null ? '-' : fmtPct(cur.ctr, 2), '表示されたうち、クリックされた割合', dCtr)}</div>`;
+        // 動画ごとの表
+        const sortKey = S.reachSort || 'imp', shownN = S.reachShown || 20, avg = cur.ctr;
+        const vids = Array.from(cur.per.entries()).filter(([v]) => v !== '_').map(([v, p]) => ({ video: v, imp: p.imp, ctr: p.imp ? p.clicks / p.imp * 100 : 0 }));
+        vids.sort((a, b) => sortKey === 'ctrHigh' ? b.ctr - a.ctr : (sortKey === 'ctrLow' ? a.ctr - b.ctr : b.imp - a.imp));
+        const shown = vids.slice(0, shownN);
+        const infoMap = await videoInfo(shown.map(v => v.video));
+        if (run != null && run !== S.run) return;
+        const views = new Map(((S.rank && S.rank.rows) || []).map(r => [r.video, num(r.views)]));
+        const unknown = cur.per.get('_');
+        const head = `<div class="ya-ctl"><label>並び順 <select id="ya-reachsort">${[['imp', '表示回数が多い順'], ['ctrHigh', 'クリック率が高い順'], ['ctrLow', 'クリック率が低い順']].map(([k, v]) => `<option value="${k}" ${sortKey === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label><span class="ya-note">表示回数が少ない動画は、クリック率が大きくぶれます。</span></div>`;
+        const table = vids.length ? `<div class="ya-table-wrap"><table class="ya-table ya-table-r"><thead><tr><th>#</th><th>動画</th><th>表示回数</th><th>クリック率</th><th>平均との差</th><th>再生数</th></tr></thead><tbody>
+            ${shown.map((r, i) => { const v = infoMap[r.video]; const title = v && v.title ? v.title : r.video; const d = avg == null ? null : +(r.ctr - avg).toFixed(2); return `<tr><td>${i + 1}</td>
+                <td class="ya-vcell">${v && v.thumb ? `<img src="${esc(v.thumb)}" alt="" loading="lazy">` : '<span class="ya-noimg"></span>'}<div><a href="https://www.youtube.com/watch?v=${encodeURIComponent(r.video)}" target="_blank" rel="noopener">${esc(title)}</a><div class="ya-sub">${v && v.publishedAt ? esc(v.publishedAt.slice(0, 10)) + ' 公開' : ''}</div></div></td>
+                <td>${fmtInt(r.imp)}</td><td>${fmtPct(r.ctr, 2)}</td><td class="${d == null ? '' : (d > 0 ? 'ya-up' : (d < 0 ? 'ya-down' : ''))}">${d == null ? '-' : (d > 0 ? '+' : '') + d.toFixed(2) + 'pt'}</td><td>${views.has(r.video) ? fmtInt(views.get(r.video)) : '-'}</td></tr>`; }).join('')}
+            </tbody></table></div>${vids.length > shown.length ? `<div class="ya-more"><button type="button" class="btn-secondary btn-sm" id="ya-reach-more">もっと見る(${shown.length}/${vids.length})</button></div>` : ''}` : emptyHtml();
+        el.innerHTML = `${warnHtml}${tiles}
+            <div class="ya-chart ya-chart-s"><canvas id="ya-reach-cv"></canvas></div>
+            ${head}${table}
+            <div class="ya-note">${unknown ? `動画が特定できない分(削除された動画など)の表示回数 ${fmtInt(unknown.imp)} 回は、上の合計には入っていますが、表には出していません。<br>` : ''}${esc(typeNote)}${typeNote ? '<br>' : ''}保存済みの日: ${esc(fmtD(stored[0]))} 〜 ${esc(fmtD(stored[stored.length - 1]))}(${stored.length}日分)。数字は、YouTubeが毎日作るレポートを取り込んでデータベースにためたものです。最初のうちは、YouTube Studioの数字と見比べて、単位や大きさが合っているか確認してください。</div>`;
+        const series = dates.map(d => { const a = reachAgg([d], allow); return a.n ? a : null; });
+        makeChart('reach', box('ya-reach-cv'), { type: 'bar', data: { labels: dates.map(d => bucketLabel(d, 'day')), datasets: [
+            { type: 'bar', label: '表示回数', yAxisID: 'y', backgroundColor: 'rgba(116,192,252,.7)', data: series.map(a => a ? a.imp : null) },
+            { type: 'line', label: 'クリック率(%)', yAxisID: 'y1', borderColor: '#E8590C', backgroundColor: '#E8590C', pointRadius: 2, borderWidth: 2, spanGaps: false, data: series.map(a => a && a.ctr != null ? +a.ctr.toFixed(2) : null) }] },
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, title: { display: true, text: '表示回数' } }, y1: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, title: { display: true, text: 'クリック率(%)' } }, x: { ticks: { maxTicksLimit: 12 } } } } });
+        // AI分析に渡す要約(画面のメモリだけ)
+        const ids = vids.slice().sort((a, b) => b.imp - a.imp).slice(0, 10);
+        const low = vids.slice().sort((a, b) => b.imp - a.imp).slice(0, 30).sort((a, b) => a.ctr - b.ctr).slice(0, 5);
+        await videoInfo(Array.from(new Set([...ids, ...low].map(v => v.video))));
+        const f = (v) => { const x = S.vcache.get('v:' + v.video) || {}; return { 題名: x.title || v.video, 表示回数: Math.round(v.imp), クリック率_パーセント: +v.ctr.toFixed(2), 再生数: views.has(v.video) ? views.get(v.video) : null }; };
+        S.snap.reach = { 注意: 'YouTube上でサムネイルが表示された回数と、そのクリック率', 今期: { 表示回数: Math.round(cur.imp), クリック率_パーセント: cur.ctr == null ? null : +cur.ctr.toFixed(2), データのある日数: cur.n, 期間の日数: range.len }, 前の期間: full ? { 表示回数: Math.round(prev.imp), クリック率_パーセント: prev.ctr == null ? null : +prev.ctr.toFixed(2) } : '前の期間は数字がそろっていないため比較なし', 表示回数の多い上位10本: ids.map(f), 表示回数上位30本のうちクリック率の低い5本: low.map(f) };
+        aiRefresh();
+        bindReachTable();
+    }
+    function bindReachTable() {
+        const sel = box('ya-reachsort');
+        if (sel) sel.addEventListener('change', (e) => { S.reachSort = e.target.value; S.reachShown = 20; const r = currentRange(); if (!r.error) renderReach(r, S.run); });
+        const more = box('ya-reach-more');
+        if (more) more.addEventListener('click', () => { S.reachShown = (S.reachShown || 20) + 20; const r = currentRange(); if (!r.error) renderReach(r, S.run); });
+    }
+    function bindReach(range) {
+        const start = box('ya-reach-start');
+        if (start) start.addEventListener('click', async () => {
+            const m = box('ya-reach-msg'); start.disabled = true;
+            if (m) { m.textContent = '登録しています…'; m.className = 'ya-msg'; }
+            try { await createReachJob(); const r = currentRange(); if (!r.error) { await loadReach(r, S.run, null); } }
+            catch (e) { if (m) { m.textContent = e.message || '登録できませんでした'; m.className = 'ya-msg err'; } start.disabled = false; if (e && e.kind === 'setup') showErr('ya-reach', e); }
+        });
+    }
+
     // ---------- AI分析(仮説と対策) ----------
     // 画面に出ている数字をOpenAIに渡し、分析・仮説・対策案を文章で返してもらう。AIの返答は「仮説」であり、事実ではない。
     //   ・APIキーは他のAI画面(テロップ生成・AI企画室)と同じく、このブラウザの保存領域にある「openai_api_key」を使う。データベースには入れない。
@@ -494,7 +758,8 @@ ${extra ? `\n【運営者からの補足(事業・発信内容・想定する視
 4. 「お問い合わせ・集客への導線」では、YouTubeの数字だけでは問い合わせ数は分からない点を明記し、動画の説明欄・固定コメント・プロフィール・動画内での案内など、問い合わせにつなげる具体策と、その効果を測る方法(例: 専用リンクの計測)を示してください。
 5. top_priorities は、最優先の対策を最大3つ(理由つき)。experiments は、次の1〜2週間で試す小さな実験を最大3つ(仮説と、成功の判定に使う数字つき)。
 6. caveats には、この分析の限界(期間の短さ、サンプルの少なさ、取得できなかったデータ、因果と相関の違いなど)を書いてください。
-7. 専門用語には短い説明を添えてください。励ましや一般論は不要です。この数字から言えることだけを書いてください。`;
+7. 専門用語には短い説明を添えてください。励ましや一般論は不要です。この数字から言えることだけを書いてください。
+8. 「サムネイルの表示回数とクリック率」が含まれている場合は、「動画ごとの違い」や「流入元」で使ってください。表示回数が多いのにクリック率が低い動画は、サムネイルや題名が見る人に響いていない可能性がある、という見方ができます(仮説として書くこと)。クリック率は、表示される場所(ホーム・検索・関連動画)で大きく違うため、動画どうしの比較は慎重に書いてください。表示回数が少ない動画のクリック率はぶれやすい点も、落とし穴に書いてください。`;
 
     async function buildPacket() {
         const sm = S.snap.summary; if (!sm) return null;
@@ -538,6 +803,7 @@ ${extra ? `\n【運営者からの補足(事業・発信内容・想定する視
         take('subs', '登録者か否か', rows => L(rows, x => SUBS_LABEL[x.subscribedStatus] || x.subscribedStatus, 'views', '区分'));
         take('share', '共有された先上位', rows => L(rows, x => SHARE_LABEL[x.sharingService] || x.sharingService, 'shares', '共有先'));
         take('loc', '再生された場所', rows => L(rows, x => LOC_LABEL[x.insightPlaybackLocationType] || x.insightPlaybackLocationType, 'views', '場所'));
+        take('reach', 'サムネイルの表示回数とクリック率', x => x);
         if (missing.length) out.取得できなかったデータ = missing;
         return JSON.parse(JSON.stringify(out));   // undefined を除く
     }
@@ -651,7 +917,7 @@ ${extra ? `\n【運営者からの補足(事業・発信内容・想定する視
         const b = box('ya-load'); if (b) b.disabled = !tokenOk();
     }
     function resetSections() {
-        ['ya-summary', 'ya-trend', 'ya-rank', 'ya-src', 'ya-kw', 'ya-ext', 'ya-demo', 'ya-country', 'ya-device', 'ya-subs', 'ya-share', 'ya-loc', 'ya-channel'].forEach(id => setBody(id, ''));
+        ['ya-summary', 'ya-trend', 'ya-rank', 'ya-src', 'ya-kw', 'ya-ext', 'ya-demo', 'ya-country', 'ya-device', 'ya-subs', 'ya-share', 'ya-loc', 'ya-channel', 'ya-reach'].forEach(id => setBody(id, ''));
         Object.keys(charts).forEach(destroyChart);
         const r = box('ya-ret-card'); if (r) r.hidden = true;
     }
@@ -665,7 +931,9 @@ ${extra ? `\n【運営者からの補足(事業・発信内容・想定する視
         S.rankShown = 20; S.snap = {};
         aiReset();
         const r = box('ya-ret-card'); if (r) r.hidden = true;
-        await Promise.all([loadChannel(), loadSummary(range, run), loadRank(range, run), loadSources(range, run), loadAudience(range, run)]);
+        S.reachShown = 20;
+        const rankP = loadRank(range, run);
+        await Promise.all([loadChannel(), loadSummary(range, run), rankP, loadSources(range, run), loadAudience(range, run), loadReach(range, run, rankP)]);
     }
 
     App.Pages.youtube_analytics = async function () {
@@ -683,7 +951,7 @@ ${extra ? `\n【運営者からの補足(事業・発信内容・想定する視
                 <summary class="ya-h">使う前の準備(最初の1回だけ)</summary>
                 <ol class="ya-steps">
                     <li>Google Cloud(console.cloud.google.com)で、ショート投稿予約と同じプロジェクトを開きます。</li>
-                    <li>「API とサービス」→「ライブラリ」で、<b>「YouTube Analytics API」</b>と<b>「YouTube Data API v3」</b>の両方を「有効にする」にします。</li>
+                    <li>「API とサービス」→「ライブラリ」で、<b>「YouTube Analytics API」</b>・<b>「YouTube Data API v3」</b>・<b>「YouTube Reporting API」</b>の3つを「有効にする」にします(Reporting APIは、サムネイルの表示回数・クリック率に使います)。</li>
                     <li>「Google Auth Platform」→「データアクセス」で、次の2つの許可を追加しておくと確実です(ログインで「アクセスをブロック」と出たとき): <code>yt-analytics.readonly</code> と <code>youtube.readonly</code>。</li>
                     <li>「Googleのクライアント ID」を、下の欄に貼って保存します(ショート投稿予約の設定と共通です)。</li>
                     <li>「Googleにログイン」を押し、チャンネルを持つアカウントで、表示された項目すべてにチェックを入れて「続行」します。</li>
@@ -742,6 +1010,7 @@ ${extra ? `\n【運営者からの補足(事業・発信内容・想定する視
                 <div id="ya-ai-hist">${histHtml()}</div>
             </div>
             <div class="card ya-card"><div class="ya-h">動画ごとのランキング</div><div id="ya-rank"></div></div>
+            <div class="card ya-card"><div class="ya-h">サムネイルの表示回数・クリック率</div><div id="ya-reach"></div></div>
             <div class="card ya-card" id="ya-ret-card" hidden><div class="ya-h">動画の視聴維持率</div><div id="ya-ret"></div></div>
 
             <div class="ya-h2">視聴者はどこから来たか</div>
@@ -760,7 +1029,7 @@ ${extra ? `\n【運営者からの補足(事業・発信内容・想定する視
                 <div class="card ya-card"><div class="ya-h">共有された先(上位10)</div><div id="ya-share"></div></div>
                 <div class="card ya-card"><div class="ya-h">再生された場所</div><div id="ya-loc"></div></div>
             </div>
-            <div class="ya-note">YouTube Analytics APIで取れない数字(サムネイルの表示回数・クリック率、リアルタイム、収益など)は、この画面には出ません。それらはYouTube Studioで確認してください。</div>
+            <div class="ya-note">リアルタイムの数字や収益は、この画面には出ません。YouTube Studioで確認してください。サムネイルの表示回数・クリック率は、YouTubeが毎日作るレポートを取り込んでためた数字です(登録の約2日後から出はじめます)。</div>
         </div>
         <style>
             .ya-wrap { display: flex; flex-direction: column; gap: 16px; max-width: 1200px; }
@@ -803,6 +1072,7 @@ ${extra ? `\n【運営者からの補足(事業・発信内容・想定する視
             .ya-vcell { display: flex; align-items: center; gap: 10px; } .ya-vcell img, .ya-noimg { width: 72px; height: 40px; object-fit: cover; border-radius: 4px; background: #e9ecef; flex: none; display: block; }
             .ya-vcell a { color: inherit; font-weight: 600; text-decoration: none; } .ya-vcell a:hover { text-decoration: underline; } .ya-sub { font-size: 0.72rem; color: var(--text-secondary); }
             .ya-chip { font-size: 0.74rem; font-weight: 600; color: var(--c); border: 1px solid var(--c); border-radius: 999px; padding: 1px 8px; }
+            .ya-table-r { min-width: 640px; } .ya-table-r th:nth-child(3), .ya-table-r td:nth-child(3) { text-align: right; } .ya-up { color: #2B8A3E; font-weight: 600; } .ya-down { color: #C92A2A; font-weight: 600; }
             .ya-more { text-align: center; margin-top: 10px; } .ya-ret-title { font-weight: 700; margin-bottom: 10px; }
             .ya-ai-meta { font-size: 0.78rem; color: var(--text-secondary); line-height: 1.7; margin: 12px 0; } .ya-ai-sum { font-size: 0.95rem; line-height: 1.9; background: #F8F9FA; border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
             .ya-ai-box { border: 1px solid var(--border-light, #e3e3e3); border-radius: 10px; padding: 12px 16px; margin-bottom: 14px; font-size: 0.88rem; line-height: 1.8; } .ya-ai-box ol, .ya-ai-box ul { margin: 6px 0 0; padding-left: 1.3em; } .ya-ai-box li { margin-bottom: 6px; } .ya-ai-box li span { color: var(--text-secondary); }
