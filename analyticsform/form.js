@@ -216,6 +216,98 @@ function escapeHtmlText(s) {
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
+function sanitizeRichHtml(html) {
+    // 管理画面のリッチテキスト(補足説明・POP文言)を、許可した要素・書式だけに絞って返す。
+    // ホワイトリスト方式: 許可タグ以外は外し(script等は中身ごと破棄)、style は
+    // 色・背景色・文字サイズ・太さ・斜体・下線/取消線・配置だけを形式チェックして残す。
+    // リンクは http(s)/mailto/tel のみ。出力は createElement で組み立て直すので、
+    // 入力に含まれる属性(onclick 等)が出力に混ざることはない。
+    // ※ 同じ関数が js/pages/form_editor.js(MEOFormPreview)にもある。変更時は両方そろえること。
+    const src = String(html == null ? '' : html).slice(0, 30000);
+    const doc = new DOMParser().parseFromString('<!doctype html><body>' + src, 'text/html');
+    const out = document.createElement('div');
+    const ALLOW = { B:'b', STRONG:'b', I:'i', EM:'i', U:'u', S:'s', STRIKE:'s', DEL:'s', SPAN:'span', DIV:'div', P:'p', BR:'br', UL:'ul', OL:'ol', LI:'li', A:'a', HR:'hr' };
+    const DROP = new Set(['SCRIPT','STYLE','IFRAME','OBJECT','EMBED','SVG','MATH','TEMPLATE','NOSCRIPT','IMG','VIDEO','AUDIO','FORM','INPUT','BUTTON','TEXTAREA','SELECT','LINK','META','BASE','HEAD','TITLE','CANVAS','FRAME','FRAMESET','APPLET']);
+    const cssColor = (v) => {
+        v = String(v == null ? '' : v).trim();
+        if (/^#[0-9a-fA-F]{3,8}$/.test(v)) return v;
+        if (/^rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*(,\s*(0|1|0?\.\d+)\s*)?\)$/.test(v)) return v;
+        if (/^[a-zA-Z]{3,20}$/.test(v) && !/^(initial|inherit|unset|revert|revertlayer)$/i.test(v)) return v;
+        return '';
+    };
+    const cleanStyle = (from, to) => {
+        const s = from.style;
+        if (!s) return;
+        const col = cssColor(s.getPropertyValue('color'));
+        if (col) to.style.color = col;
+        const bg = cssColor(s.getPropertyValue('background-color'));
+        if (bg) to.style.backgroundColor = bg;
+        const fs = s.getPropertyValue('font-size').trim();
+        const m = /^(\d+(?:\.\d+)?)(rem|em|px|%)$/.exec(fs);
+        if (m) {
+            const n = parseFloat(m[1]);
+            const lim = { rem: 6, em: 6, px: 120, '%': 600 }[m[2]];
+            if (n > 0 && n <= lim) to.style.fontSize = fs;
+        }
+        const fw = s.getPropertyValue('font-weight').trim();
+        if (/^(normal|bold|bolder|lighter|[1-9]00)$/.test(fw)) to.style.fontWeight = fw;
+        const fst = s.getPropertyValue('font-style').trim();
+        if (/^(normal|italic)$/.test(fst)) to.style.fontStyle = fst;
+        const td = (s.getPropertyValue('text-decoration-line') || s.getPropertyValue('text-decoration')).trim();
+        if (td && td.split(/\s+/).every(t => /^(underline|line-through|none)$/.test(t))) to.style.textDecoration = td;
+        const ta = s.getPropertyValue('text-align').trim();
+        if (/^(left|center|right|justify)$/.test(ta)) to.style.textAlign = ta;
+    };
+    const walk = (node, parent, depth) => {
+        if (depth > 30) return;
+        node.childNodes.forEach(ch => {
+            if (ch.nodeType === 3) { parent.appendChild(document.createTextNode(ch.nodeValue)); return; }
+            if (ch.nodeType !== 1) return;
+            const tag = ch.tagName;
+            if (DROP.has(tag)) return;
+            if (tag === 'FONT') {
+                const span = document.createElement('span');
+                const c = cssColor(ch.getAttribute('color'));
+                if (c) span.style.color = c;
+                parent.appendChild(span);
+                walk(ch, span, depth + 1);
+                return;
+            }
+            const name = ALLOW[tag];
+            if (!name) { walk(ch, parent, depth + 1); return; }
+            if (name === 'br' || name === 'hr') { parent.appendChild(document.createElement(name)); return; }
+            if (name === 'a') {
+                const href = String(ch.getAttribute('href') || '').trim();
+                if (!/^(https?:\/\/|mailto:|tel:)/i.test(href) || /[\u0000-\u001f\s]/.test(href)) { walk(ch, parent, depth + 1); return; }
+                const a = document.createElement('a');
+                a.setAttribute('href', href);
+                a.setAttribute('target', '_blank');
+                a.setAttribute('rel', 'noopener noreferrer');
+                walk(ch, a, depth + 1);
+                parent.appendChild(a);
+                return;
+            }
+            const el = document.createElement(name);
+            cleanStyle(ch, el);
+            walk(ch, el, depth + 1);
+            parent.appendChild(el);
+        });
+    };
+    walk(doc.body, out, 0);
+    return out.innerHTML;
+}
+
+// 補足説明の表示用HTML: 管理画面のリッチテキスト(descHtml)があればそれを、
+// なければ従来のプレーンテキスト(description)を、どちらもサニタイズして返す。
+function richDescHtml(o, fallbackText) {
+    o = o || {};
+    if (typeof o.descHtml === 'string' && o.descHtml.trim() !== '') return sanitizeRichHtml(o.descHtml);
+    const plain = String(o.description || fallbackText || '');
+    return sanitizeRichHtml(plain.replace(/\r?\n/g, '<br>'));
+}
+function hasDescContent(o) {
+    return !!(o && ((typeof o.descHtml === 'string' && o.descHtml.trim() !== '') || o.description));
+}
 function safeCssColor(v) {
     return (typeof v === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(v.trim())) ? v.trim() : '';
 }
@@ -264,7 +356,10 @@ function getClosePopupConfig() {
         title: pick('title') || DEFAULT_CLOSE_POPUP.title,
         body: (typeof c.body === 'string') ? c.body : DEFAULT_CLOSE_POPUP.body,
         continueText: pick('continueText') || DEFAULT_CLOSE_POPUP.continueText,
-        exitText: pick('exitText') || DEFAULT_CLOSE_POPUP.exitText
+        exitText: pick('exitText') || DEFAULT_CLOSE_POPUP.exitText,
+        // 管理画面のリッチテキスト(あればこちらを優先。なければ上の plain 文言)
+        titleHtml: (typeof c.titleHtml === 'string') ? c.titleHtml : '',
+        bodyHtml: (typeof c.bodyHtml === 'string') ? c.bodyHtml : ''
     };
 }
 // 本文: 改行はそのまま、**太字** だけ使える簡易記法(それ以外のHTMLは無効化)
@@ -277,8 +372,12 @@ function applyClosePopupConfig() {
     const cfg = getClosePopupConfig();
     const set = (sel, fn) => { const el = document.querySelector(sel); if (el) fn(el); };
     set('#confirm-overlay .confirm-icon', el => { el.textContent = cfg.icon; el.style.display = cfg.icon ? '' : 'none'; });
-    set('#confirm-overlay .confirm-title', el => { el.textContent = cfg.title; });
-    set('#confirm-overlay .confirm-body', el => { el.innerHTML = renderPopupBodyHtml(cfg.body); });
+    set('#confirm-overlay .confirm-title', el => {
+        if (cfg.titleHtml.trim() !== '') el.innerHTML = sanitizeRichHtml(cfg.titleHtml); else el.textContent = cfg.title;
+    });
+    set('#confirm-overlay .confirm-body', el => {
+        el.innerHTML = (cfg.bodyHtml.trim() !== '') ? sanitizeRichHtml(cfg.bodyHtml) : renderPopupBodyHtml(cfg.body);
+    });
     set('#confirm-continue-btn', el => { el.textContent = cfg.continueText; });
     set('#confirm-exit-btn', el => { el.textContent = cfg.exitText; });
     return cfg;
@@ -313,7 +412,7 @@ function renderForm() {
         <div class="slide ${getAlignClass(formData.op)}" id="slide-0" data-type="op">
             ${formData.op.imageUrl ? `<div class="slide-img-container"><img src="${formData.op.imageUrl}" class="slide-img"></div>` : ''}
             <div class="slide-title" style="${applyThemeStyle(true, formData.op)}">${formData.op.title || ''}</div>
-            <div class="slide-desc" style="${applyThemeStyle(false, formData.op)}">${(formData.op.description || '').replace(/\n/g, '<br>')}</div>
+            <div class="slide-desc" style="${applyThemeStyle(false, formData.op)}">${richDescHtml(formData.op)}</div>
             <button class="btn-primary" onclick="handleOpStart()">${formData.op.buttonText || 'スタート'}</button>
             ${renderDiagnosisCountHtml(formData.op)}
         </div>
@@ -330,8 +429,8 @@ function renderForm() {
         }
         const reqMark = q.required ? '<span class="required-mark">*</span>' : '';
         html += `<div class="slide-title" style="${applyThemeStyle(true, q)}">${idx + 1}. ${q.title || ''}${reqMark}</div>`;
-        if (q.description) {
-            html += `<div class="slide-desc" style="${applyThemeStyle(false, q)}">${q.description.replace(/\n/g, '<br>')}</div>`;
+        if (hasDescContent(q)) {
+            html += `<div class="slide-desc" style="${applyThemeStyle(false, q)}">${richDescHtml(q)}</div>`;
         }
 
         const placeholderText = q.placeholder !== undefined ? q.placeholder : "こちらに回答を入力...";
@@ -384,7 +483,7 @@ function renderForm() {
     html += `
         <div class="slide scrollable ${getAlignClass(formData.review)}" id="slide-${reviewIdx}" data-type="review">
             <div class="slide-title" style="${applyThemeStyle(true, formData.review)}">${formData.review.title || '回答内容の確認'}</div>
-            <div class="slide-desc" style="${applyThemeStyle(false, formData.review)}">${formData.review.description || '以下の内容でよろしいですか？'}</div>
+            <div class="slide-desc" style="${applyThemeStyle(false, formData.review)}">${richDescHtml(formData.review, '以下の内容でよろしいですか？')}</div>
             <div id="review-content" style="margin-bottom:32px; width:100%;"></div>
             <button class="btn-primary" id="submit-btn" onclick="submitForm()">${formData.review.buttonText || 'この内容で提出する'}</button>
         </div>
@@ -396,7 +495,7 @@ function renderForm() {
         <div class="slide ${getAlignClass(formData.ed)}" id="slide-${edIdx}" data-type="ed">
             ${formData.ed.imageUrl ? `<div class="slide-img-container"><img src="${formData.ed.imageUrl}" class="slide-img"></div>` : ''}
             <div class="slide-title" style="${applyThemeStyle(true, formData.ed)}">${formData.ed.title || ''}</div>
-            <div class="slide-desc" style="${applyThemeStyle(false, formData.ed)}">${(formData.ed.description || '').replace(/\n/g, '<br>')}</div>
+            <div class="slide-desc" style="${applyThemeStyle(false, formData.ed)}">${richDescHtml(formData.ed)}</div>
             <button class="btn-primary" onclick="closeFormWindow()">${formData.ed.buttonText || '終了する'}</button>
             <div id="close-guide" style="font-size:0.8rem; color:var(--text-secondary); margin-top:12px; display:none; width: 100%;">※自動で画面が閉じない場合は、ブラウザのタブを閉じてください。</div>
         </div>

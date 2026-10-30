@@ -113,7 +113,88 @@ function getMonthlyDiagnosisCount(targetDate) {
     };
     // POP本文: 改行はそのまま、**太字** だけ使える簡易記法(それ以外のHTMLは無効)
     const popupBodyHtml = (text) => esc(text).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\r?\n/g, '<br>');
-    window.MEOFormPreview = { getMonthlyDiagnosisCount, esc, color, countLine, resolveCount, popupBodyHtml, DEFAULT_COUNT_TEXT, DEFAULT_CLOSE_POPUP };
+    function sanitizeRichHtml(html) {
+        // 管理画面のリッチテキスト(補足説明・POP文言)を、許可した要素・書式だけに絞って返す。
+        // ホワイトリスト方式: 許可タグ以外は外し(script等は中身ごと破棄)、style は
+        // 色・背景色・文字サイズ・太さ・斜体・下線/取消線・配置だけを形式チェックして残す。
+        // リンクは http(s)/mailto/tel のみ。出力は createElement で組み立て直すので、
+        // 入力に含まれる属性(onclick 等)が出力に混ざることはない。
+        // ※ 同じ関数が js/pages/form_editor.js(MEOFormPreview)にもある。変更時は両方そろえること。
+        const src = String(html == null ? '' : html).slice(0, 30000);
+        const doc = new DOMParser().parseFromString('<!doctype html><body>' + src, 'text/html');
+        const out = document.createElement('div');
+        const ALLOW = { B:'b', STRONG:'b', I:'i', EM:'i', U:'u', S:'s', STRIKE:'s', DEL:'s', SPAN:'span', DIV:'div', P:'p', BR:'br', UL:'ul', OL:'ol', LI:'li', A:'a', HR:'hr' };
+        const DROP = new Set(['SCRIPT','STYLE','IFRAME','OBJECT','EMBED','SVG','MATH','TEMPLATE','NOSCRIPT','IMG','VIDEO','AUDIO','FORM','INPUT','BUTTON','TEXTAREA','SELECT','LINK','META','BASE','HEAD','TITLE','CANVAS','FRAME','FRAMESET','APPLET']);
+        const cssColor = (v) => {
+            v = String(v == null ? '' : v).trim();
+            if (/^#[0-9a-fA-F]{3,8}$/.test(v)) return v;
+            if (/^rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*(,\s*(0|1|0?\.\d+)\s*)?\)$/.test(v)) return v;
+            if (/^[a-zA-Z]{3,20}$/.test(v) && !/^(initial|inherit|unset|revert|revertlayer)$/i.test(v)) return v;
+            return '';
+        };
+        const cleanStyle = (from, to) => {
+            const s = from.style;
+            if (!s) return;
+            const col = cssColor(s.getPropertyValue('color'));
+            if (col) to.style.color = col;
+            const bg = cssColor(s.getPropertyValue('background-color'));
+            if (bg) to.style.backgroundColor = bg;
+            const fs = s.getPropertyValue('font-size').trim();
+            const m = /^(\d+(?:\.\d+)?)(rem|em|px|%)$/.exec(fs);
+            if (m) {
+                const n = parseFloat(m[1]);
+                const lim = { rem: 6, em: 6, px: 120, '%': 600 }[m[2]];
+                if (n > 0 && n <= lim) to.style.fontSize = fs;
+            }
+            const fw = s.getPropertyValue('font-weight').trim();
+            if (/^(normal|bold|bolder|lighter|[1-9]00)$/.test(fw)) to.style.fontWeight = fw;
+            const fst = s.getPropertyValue('font-style').trim();
+            if (/^(normal|italic)$/.test(fst)) to.style.fontStyle = fst;
+            const td = (s.getPropertyValue('text-decoration-line') || s.getPropertyValue('text-decoration')).trim();
+            if (td && td.split(/\s+/).every(t => /^(underline|line-through|none)$/.test(t))) to.style.textDecoration = td;
+            const ta = s.getPropertyValue('text-align').trim();
+            if (/^(left|center|right|justify)$/.test(ta)) to.style.textAlign = ta;
+        };
+        const walk = (node, parent, depth) => {
+            if (depth > 30) return;
+            node.childNodes.forEach(ch => {
+                if (ch.nodeType === 3) { parent.appendChild(document.createTextNode(ch.nodeValue)); return; }
+                if (ch.nodeType !== 1) return;
+                const tag = ch.tagName;
+                if (DROP.has(tag)) return;
+                if (tag === 'FONT') {
+                    const span = document.createElement('span');
+                    const c = cssColor(ch.getAttribute('color'));
+                    if (c) span.style.color = c;
+                    parent.appendChild(span);
+                    walk(ch, span, depth + 1);
+                    return;
+                }
+                const name = ALLOW[tag];
+                if (!name) { walk(ch, parent, depth + 1); return; }
+                if (name === 'br' || name === 'hr') { parent.appendChild(document.createElement(name)); return; }
+                if (name === 'a') {
+                    const href = String(ch.getAttribute('href') || '').trim();
+                    if (!/^(https?:\/\/|mailto:|tel:)/i.test(href) || /[\u0000-\u001f\s]/.test(href)) { walk(ch, parent, depth + 1); return; }
+                    const a = document.createElement('a');
+                    a.setAttribute('href', href);
+                    a.setAttribute('target', '_blank');
+                    a.setAttribute('rel', 'noopener noreferrer');
+                    walk(ch, a, depth + 1);
+                    parent.appendChild(a);
+                    return;
+                }
+                const el = document.createElement(name);
+                cleanStyle(ch, el);
+                walk(ch, el, depth + 1);
+                parent.appendChild(el);
+            });
+        };
+        walk(doc.body, out, 0);
+        return out.innerHTML;
+    }
+
+    window.MEOFormPreview = { sanitizeRichHtml, getMonthlyDiagnosisCount, esc, color, countLine, resolveCount, popupBodyHtml, DEFAULT_COUNT_TEXT, DEFAULT_CLOSE_POPUP };
 })();
 
 App.Pages.form_editor = async function() {
@@ -203,7 +284,9 @@ App.Pages.form_editor = async function() {
         title: typeof cp.title === 'string' ? cp.title : PV.DEFAULT_CLOSE_POPUP.title,
         body: typeof cp.body === 'string' ? cp.body : PV.DEFAULT_CLOSE_POPUP.body,
         continueText: typeof cp.continueText === 'string' ? cp.continueText : PV.DEFAULT_CLOSE_POPUP.continueText,
-        exitText: typeof cp.exitText === 'string' ? cp.exitText : PV.DEFAULT_CLOSE_POPUP.exitText
+        exitText: typeof cp.exitText === 'string' ? cp.exitText : PV.DEFAULT_CLOSE_POPUP.exitText,
+        titleHtml: typeof cp.titleHtml === 'string' ? cp.titleHtml : '',
+        bodyHtml: typeof cp.bodyHtml === 'string' ? cp.bodyHtml : ''
     };
     // OP画面の申込人数表示(既定は従来どおり: 表示する・自動計算)
     formData.op.countShow = formData.op.countShow !== false;
@@ -341,6 +424,22 @@ App.Pages.form_editor = async function() {
                 .fmt-hint { font-size: 0.78rem; color: #666; line-height: 1.5; margin-top: 4px; }
                 .fmt-section { margin-top: 24px; padding: 14px; background: #f8f9fc; border-radius: 10px; }
                 .fmt-section h4 { margin: 0 0 12px; font-size: 0.95rem; }
+                .rich-toolbar { background: #fff; border: 1px solid #e3e6ee; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+                .rt-title { font-size: 0.7rem; letter-spacing: 0.06em; font-weight: 700; color: #7a8aa6; margin-bottom: 8px; }
+                .rt-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 6px; }
+                .rt-btn { min-width: 30px; height: 34px; border: 1px solid #dfe3ec; background: #fff; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font-size: 0.95rem; padding: 0 6px; position: relative; color: #333; line-height: 1; }
+                .rt-btn:hover { background: #eef2f7; }
+                .rt-btn.rt-wide { font-size: 0.8rem; }
+                .rt-btn input[type=color] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; padding: 0; border: 0; }
+                .rt-a { font-weight: 700; padding-bottom: 1px; }
+                .rt-size { width: 100%; height: auto; line-height: 1.4; border: 1px solid #dfe3ec; border-radius: 6px; background: #fff; padding: 8px; font-size: 0.85rem; box-sizing: border-box; }
+                .rich-editor { min-height: 90px; max-height: 240px; overflow: auto; border: 1px solid #d6dbe6; border-radius: 8px; padding: 10px; background: #fff; line-height: 1.6; font-size: 0.95rem; white-space: pre-wrap; outline: none; color: #222; }
+                .rich-editor.single { min-height: 0; padding: 8px 10px; }
+                .rich-editor:focus { border-color: #0d6efd; box-shadow: 0 0 0 2px rgba(13,110,253,0.15); }
+                .rich-editor:empty:before { content: attr(data-placeholder); color: #aaa; }
+                .rich-editor ul, .rich-editor ol, .mockup-editable ul, .mockup-editable ol, #pp-body ul, #pp-body ol { padding-left: 1.4em; margin: 0.3em 0; text-align: left; }
+                .rich-editor a, .mockup-editable a, #pp-body a { color: #0d6efd; text-decoration: underline; }
+                .rich-editor hr, .mockup-editable hr, #pp-body hr { border: none; border-top: 1px solid rgba(0,0,0,0.25); margin: 0.6em 0; }
             </style>
             
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
@@ -472,7 +571,7 @@ App.Pages.form_editor = async function() {
                 <div class="mockup-editable" id="mock-title-node" data-prop="title" data-placeholder="タイトル..." contenteditable="true" style="flex:1; margin-bottom:0; font-size: inherit; color: inherit;">${obj.title || ''}</div>
                 ${(type === 'question' && obj.required) ? '<span class="required-mark">*</span>' : ''}
             </div>
-            <div class="mockup-editable" id="mock-desc-node" data-prop="description" data-placeholder="説明文..." contenteditable="true" style="width: 100%; margin-bottom: 32px; line-height: 1.6; color: ${PV.color(obj.descColor) || formData.theme.descColor}; font-size: ${descSize}; ${obj.descBold ? 'font-weight: 700;' : ''} white-space: pre-wrap;">${obj.description || ''}</div>
+            <div class="mockup-editable" id="mock-desc-node" data-prop="description" data-placeholder="説明文..." contenteditable="true" data-rich="1" style="width: 100%; margin-bottom: 32px; line-height: 1.6; color: ${PV.color(obj.descColor) || formData.theme.descColor}; font-size: ${descSize}; ${obj.descBold ? 'font-weight: 700;' : ''} white-space: pre-wrap;">${descInitialHtml(obj)}</div>
         `;
 
         if ((type === 'op' || type === 'ed') && type !== 'review') {
@@ -538,6 +637,7 @@ App.Pages.form_editor = async function() {
         return html + '</div>';
     };
 
+    let richDescHook = null;   // 補足説明のリッチテキスト入力フック(bindDescStyleAndCountEvents で設定)
     const bindMockupEditableEvents = (obj, type) => {
         document.querySelectorAll('.mockup-editable').forEach(el => {
             el.addEventListener('paste', (e) => {
@@ -550,6 +650,7 @@ App.Pages.form_editor = async function() {
             });
             el.addEventListener('input', (e) => {
                 const prop = el.getAttribute('data-prop');
+                if (prop === 'description' && richDescHook) { richDescHook(el); return; }
                 obj[prop] = el.innerText;
                 const rightInput = document.getElementById('set-' + prop);
                 if (rightInput) rightInput.value = obj[prop];
@@ -601,7 +702,10 @@ App.Pages.form_editor = async function() {
 
         html += `
             <div class="form-group"><label>${titleLabel} (プレビュー直接編集可)</label><textarea id="set-title" class="input-field" style="height:60px;">${obj.title || ''}</textarea></div>
-            <div class="form-group"><label>補足説明 (プレビュー直接編集可)</label><textarea id="set-desc" class="input-field" style="height:80px;">${obj.description || ''}</textarea></div>
+            <div class="form-group"><label>補足説明 (プレビュー直接編集可)</label>
+                ${richToolbarHtml('desc')}
+                <div id="set-desc-rich" class="rich-editor" contenteditable="true" data-placeholder="説明文を入力...">${descInitialHtml(obj)}</div>
+                <div class="fmt-hint">文字を選択してから、上のボタンで太字・色・サイズなどを変えられます。</div></div>
         `;
 
         if (type === 'question' && (obj.type === 'short_text' || obj.type === 'long_text')) {
@@ -1051,9 +1155,142 @@ App.Pages.form_editor = async function() {
         }
     };
 
+    // ===== リッチテキスト編集(ツールバー) =====
+    // 補足説明とPOP文言で共通。document.execCommand で選択範囲に書式をつけ、
+    // 保存時・表示時には必ず sanitizeRichHtml(許可した書式だけ残す)を通す。
+    const descInitialHtml = (o) => (o.descHtml && o.descHtml.trim()) ? PV.sanitizeRichHtml(o.descHtml) : PV.esc(o.description || '');
+    const RICH_SIZES = [['0.8rem', '極小'], ['0.9rem', '小'], ['1rem', '標準'], ['1.2rem', '大'], ['1.5rem', '特大'], ['1.8rem', '最大'], ['2.2rem', '超特大']];
+    const richToolbarHtml = (gid) => `
+        <div class="rich-toolbar" id="rt-${gid}">
+            <div class="rt-title">TEXT FORMATTING</div>
+            <div class="rt-row">
+                <select class="rt-size" title="選択した文字のサイズ"><option value="">文字サイズ</option>${RICH_SIZES.map(s => `<option value="${s[0]}">${s[1]}（${s[0]}）</option>`).join('')}</select>
+            </div>
+            <div class="rt-row">
+                <button type="button" class="rt-btn" data-cmd="bold" title="太字"><b>B</b></button>
+                <button type="button" class="rt-btn" data-cmd="italic" title="斜体"><i>I</i></button>
+                <button type="button" class="rt-btn" data-cmd="underline" title="下線"><u>U</u></button>
+                <button type="button" class="rt-btn" data-cmd="strikeThrough" title="取り消し線"><s>S</s></button>
+            </div>
+            <div class="rt-row">
+                <label class="rt-btn" title="文字色"><span class="rt-a" style="border-bottom:3px solid #dc3545;">A</span><input type="color" data-color="foreColor" value="#dc3545"></label>
+                <label class="rt-btn" title="背景色(マーカー)"><span class="rt-a" style="background:#fff200; padding:0 4px;">A</span><input type="color" data-color="hiliteColor" value="#fff200"></label>
+                <button type="button" class="rt-btn" data-cmd="justifyLeft" title="左寄せ">⇤</button>
+                <button type="button" class="rt-btn" data-cmd="justifyCenter" title="中央">↔</button>
+                <button type="button" class="rt-btn" data-cmd="justifyRight" title="右寄せ">⇥</button>
+                <button type="button" class="rt-btn" data-cmd="insertOrderedList" title="番号つきリスト">1.</button>
+                <button type="button" class="rt-btn" data-cmd="insertUnorderedList" title="箇条書き">•</button>
+            </div>
+            <div class="rt-row">
+                <button type="button" class="rt-btn rt-wide" data-cmd="createLink" title="リンク">🔗 リンク</button>
+                <button type="button" class="rt-btn rt-wide" data-cmd="insertHorizontalRule" title="区切り線">― 区切り線</button>
+                <button type="button" class="rt-btn rt-wide" data-cmd="removeFormat" title="書式を消す">Tx 書式を消す</button>
+            </div>
+        </div>`;
+
+    // 貼り付けは常にプレーンテキスト(外部サイトの書式が紛れ込まないように)
+    const plainPaste = (e) => {
+        e.preventDefault();
+        const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+        document.execCommand('insertText', false, text);
+    };
+
+    const bindRichGroup = (gid, editors, onChange) => {
+        const tb = document.getElementById('rt-' + gid);
+        if (!tb || !editors.length) return;
+        let target = editors[0];
+        let saved = null;   // { ed, range }
+        const saveSel = () => {
+            const sel = window.getSelection();
+            if (!sel || sel.rangeCount === 0) return;
+            const r = sel.getRangeAt(0);
+            const ed = editors.find(x => x.contains(r.commonAncestorContainer));
+            if (ed) { saved = { ed, range: r.cloneRange() }; target = ed; }
+        };
+        editors.forEach(ed => {
+            ['keyup', 'mouseup', 'focusout', 'input'].forEach(ev => ed.addEventListener(ev, saveSel));
+            ed.addEventListener('focusin', () => { target = ed; });
+            // プレビュー内の編集欄(data-prop付き)は共通の入力処理側で扱う。それ以外はここで反映する。
+            if (!ed.hasAttribute('data-prop')) ed.addEventListener('input', () => onChange(ed));
+        });
+        const fixFontSize = (ed, size) => {
+            ed.querySelectorAll('font, span').forEach(n => {
+                const isFont = n.tagName === 'FONT' && n.getAttribute('size') === '7';
+                const isSpan = n.tagName === 'SPAN' && n.style && n.style.fontSize === 'xxx-large';
+                if (!isFont && !isSpan) return;
+                let span = n;
+                if (isFont) {
+                    span = document.createElement('span');
+                    while (n.firstChild) span.appendChild(n.firstChild);
+                    n.replaceWith(span);
+                }
+                // 既に同じ要素についている太字・色などは残したまま、サイズだけ指定値にする
+                span.style.fontSize = size;
+                span.querySelectorAll('[style]').forEach(c => {
+                    if (c.style.fontSize) { c.style.fontSize = ''; if (!c.getAttribute('style')) c.removeAttribute('style'); }
+                });
+            });
+        };
+        const run = (fn) => {
+            const ed = (saved && saved.ed) || target;
+            if (!ed) return;
+            ed.focus();
+            const sel = window.getSelection();
+            if (saved && saved.ed === ed) { sel.removeAllRanges(); sel.addRange(saved.range); }
+            try { document.execCommand('styleWithCSS', false, true); } catch (e) {}
+            fn(ed);
+            saveSel();
+            onChange(ed);
+        };
+        // ボタンを押してもエディタの選択範囲が外れないようにする
+        tb.addEventListener('mousedown', (e) => { if (e.target.closest('button')) e.preventDefault(); });
+        tb.querySelectorAll('button[data-cmd]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const cmd = btn.getAttribute('data-cmd');
+                if (cmd === 'createLink') {
+                    const sel = window.getSelection();
+                    const hasSel = saved && !saved.range.collapsed;
+                    if (!hasSel) { alert('リンクにしたい文字を先に選択してください。'); return; }
+                    const url = (prompt('リンク先のURL（https:// から入力）', 'https://') || '').trim();
+                    if (!url) return;
+                    if (!/^(https?:\/\/|mailto:|tel:)\S+$/i.test(url)) { alert('リンクは https:// か http:// から始まるURLだけ使えます。'); return; }
+                    run(() => document.execCommand('createLink', false, url));
+                    return;
+                }
+                run(() => document.execCommand(cmd, false, null));
+            });
+        });
+        tb.querySelectorAll('input[type=color][data-color]').forEach(inp => {
+            inp.addEventListener('change', () => run(() => document.execCommand(inp.getAttribute('data-color'), false, inp.value)));
+        });
+        const sizeSel = tb.querySelector('select.rt-size');
+        if (sizeSel) sizeSel.addEventListener('change', () => {
+            const size = sizeSel.value;
+            if (!size) return;
+            run((ed) => { document.execCommand('fontSize', false, '7'); fixFontSize(ed, size); });
+            sizeSel.value = '';
+        });
+    };
+
     // ===== 補足説明の書式(色・太字・全ページ適用)と、OP画面の人数表示の設定イベント =====
     const bindDescStyleAndCountEvents = (obj, type) => {
         const mockDesc = () => document.getElementById('mock-desc-node');
+
+        // ---- 補足説明のリッチテキスト(右パネルの入力欄とプレビュー直接編集の両方に対応) ----
+        const rightEd = document.getElementById('set-desc-rich');
+        if (rightEd) {
+            const editors = [rightEd, mockDesc()].filter(Boolean);
+            richDescHook = (el) => {
+                const html = PV.sanitizeRichHtml(el.innerHTML);
+                const plain = (el.innerText || '').replace(/\u00a0/g, ' ').replace(/\n+$/, '');
+                const empty = plain.trim() === '' && !/<(hr|li)\b/.test(html);
+                obj.descHtml = empty ? '' : html;
+                obj.description = empty ? '' : plain;
+                editors.forEach(o => { if (o !== el) o.innerHTML = empty ? '' : html; });
+            };
+            bindRichGroup('desc', editors, richDescHook);
+            rightEd.addEventListener('paste', plainPaste);
+        }
 
         const colorEl = document.getElementById('set-desc-color');
         if (colorEl) colorEl.addEventListener('input', (e) => {
@@ -1113,12 +1350,16 @@ App.Pages.form_editor = async function() {
     };
 
     // ===== ×ボタン離脱確認POP: プレビューと設定 =====
+    const popupTitleHtml = (c) => (c.titleHtml && c.titleHtml.trim()) ? PV.sanitizeRichHtml(c.titleHtml) : PV.esc(c.title || PV.DEFAULT_CLOSE_POPUP.title);
+    const popupBodyHtmlOf = (c) => (c.bodyHtml && c.bodyHtml.trim()) ? PV.sanitizeRichHtml(c.bodyHtml) : PV.popupBodyHtml(c.body);
     const popupView = () => {
         const c = formData.closePopup;
         const D = PV.DEFAULT_CLOSE_POPUP;
         return {
             enabled: c.enabled !== false,
             icon: c.icon,
+            titleHtml: popupTitleHtml(c),
+            bodyHtml: popupBodyHtmlOf(c),
             title: c.title || D.title,
             body: c.body,
             continueText: c.continueText || D.continueText,
@@ -1133,8 +1374,8 @@ App.Pages.form_editor = async function() {
                 <div style="position:absolute; inset:0; background:rgba(0,0,0,0.55); z-index:1;"></div>
                 <div id="pp-card" style="position:relative; z-index:2; background:#fff; border-radius:16px; padding:28px 20px; width:calc(100% - 40px); text-align:center; box-shadow:0 20px 50px rgba(0,0,0,0.3); ${v.enabled ? '' : 'opacity:0.4;'}">
                     <div id="pp-icon" style="width:48px; height:48px; border-radius:50%; background:#fce8e6; color:#dc3545; font-size:1.5rem; font-weight:700; display:${v.icon ? 'flex' : 'none'}; align-items:center; justify-content:center; margin:0 auto 16px;">${PV.esc(v.icon)}</div>
-                    <div id="pp-title" style="font-size:1.1rem; font-weight:700; margin-bottom:12px; color:#1a1a1a;">${PV.esc(v.title)}</div>
-                    <div id="pp-body" style="font-size:0.9rem; color:#666; line-height:1.6; margin-bottom:24px;">${PV.popupBodyHtml(v.body)}</div>
+                    <div id="pp-title" style="font-size:1.1rem; font-weight:700; margin-bottom:12px; color:#1a1a1a;">${v.titleHtml}</div>
+                    <div id="pp-body" style="font-size:0.9rem; color:#666; line-height:1.6; margin-bottom:24px;">${v.bodyHtml}</div>
                     <div style="display:flex; flex-direction:column; gap:8px;">
                         <div id="pp-continue" style="padding:14px; border-radius:8px; background:#0d6efd; color:#fff; font-weight:600;">${PV.esc(v.continueText)}</div>
                         <div id="pp-exit" style="padding:14px; color:#666; font-weight:600;">${PV.esc(v.exitText)}</div>
@@ -1155,11 +1396,12 @@ App.Pages.form_editor = async function() {
             </label>
             <div class="form-group"><label>アイコン（1〜2文字。空欄で非表示）</label>
                 <input type="text" id="pp-set-icon" class="input-field" maxlength="4" value="${PV.esc(c.icon)}"></div>
+            ${richToolbarHtml('pp')}
+            <div class="fmt-hint" style="margin:-2px 0 10px;">下のタイトル・本文の文字を選択してから、ボタンで書式を変えられます。</div>
             <div class="form-group"><label>タイトル</label>
-                <input type="text" id="pp-set-title" class="input-field" value="${PV.esc(c.title)}"></div>
+                <div id="pp-set-title-rich" class="rich-editor single" contenteditable="true" data-placeholder="タイトル...">${(c.titleHtml && c.titleHtml.trim()) ? PV.sanitizeRichHtml(c.titleHtml) : PV.esc(c.title)}</div></div>
             <div class="form-group"><label>本文</label>
-                <textarea id="pp-set-body" class="input-field" style="height:120px;">${PV.esc(c.body)}</textarea>
-                <div class="fmt-hint">改行はそのまま反映されます。<code>**文字**</code> のように「**」で囲むと太字になります。</div></div>
+                <div id="pp-set-body-rich" class="rich-editor" contenteditable="true" data-placeholder="本文..." style="min-height:130px;">${popupBodyHtmlOf(c)}</div></div>
             <div class="form-group"><label>「続ける」側のボタン（回答に戻る）</label>
                 <input type="text" id="pp-set-continue" class="input-field" value="${PV.esc(c.continueText)}"></div>
             <div class="form-group"><label>「終了する」側のボタン（フォームを閉じる）</label>
@@ -1184,8 +1426,26 @@ App.Pages.form_editor = async function() {
             const n = $('pp-icon'); if (!n) return;
             n.textContent = c.icon; n.style.display = c.icon ? 'flex' : 'none';
         });
-        bindText('pp-set-title', 'title', () => { const n = $('pp-title'); if (n) n.textContent = c.title || D.title; });
-        bindText('pp-set-body', 'body', () => { const n = $('pp-body'); if (n) n.innerHTML = PV.popupBodyHtml(c.body); });
+        const titleEd = $('pp-set-title-rich'), bodyEd = $('pp-set-body-rich');
+        const plainOf = (el) => (el.innerText || '').replace(/\u00a0/g, ' ').replace(/\n+$/, '');
+        const onRich = (el) => {
+            const html = PV.sanitizeRichHtml(el.innerHTML);
+            const plain = plainOf(el);
+            const empty = plain.trim() === '' && !/<(hr|li)\b/.test(html);
+            if (el === titleEd) {
+                c.titleHtml = empty ? '' : html; c.title = empty ? '' : plain.replace(/\n/g, ' ');
+                const n = $('pp-title'); if (n) n.innerHTML = popupTitleHtml(c);
+            } else {
+                c.bodyHtml = empty ? '' : html; c.body = empty ? '' : plain;
+                const n = $('pp-body'); if (n) n.innerHTML = empty ? '' : html;
+            }
+        };
+        if (titleEd && bodyEd) {
+            bindRichGroup('pp', [titleEd, bodyEd], onRich);
+            titleEd.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
+            titleEd.addEventListener('paste', plainPaste);
+            bodyEd.addEventListener('paste', plainPaste);
+        }
         bindText('pp-set-continue', 'continueText', () => { const n = $('pp-continue'); if (n) n.textContent = c.continueText || D.continueText; });
         bindText('pp-set-exit', 'exitText', () => { const n = $('pp-exit'); if (n) n.textContent = c.exitText || D.exitText; });
         const reset = $('pp-reset');
