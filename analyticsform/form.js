@@ -205,6 +205,85 @@ function getMonthlyDiagnosisCount(targetDate) {
     return counts[Math.min(dayOfMonth, daysInMonth)];
 }
 
+// ============================================================================
+// 管理画面(分析フォームエディタ)で編集できる設定の反映用ヘルパー(2026-10 追加)
+// ・色/サイズはstyle属性に入るため、形式チェックを通った値だけを使う
+// ・テキストは必ずHTMLエスケープしてから挿入する(管理画面の入力値が
+//   そのままHTMLとして解釈されないようにする)
+// ============================================================================
+function escapeHtmlText(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function safeCssColor(v) {
+    return (typeof v === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(v.trim())) ? v.trim() : '';
+}
+function safeCssSize(v) {
+    return (typeof v === 'string' && /^[0-9]+(\.[0-9]+)?(rem|em|px)$/.test(v.trim())) ? v.trim() : '';
+}
+
+// 申込人数表示(OP画面のスタートボタン下)。
+// 既定(設定なし)は従来どおり getMonthlyDiagnosisCount() の自動計算値で、
+// 管理画面で「表示ON/OFF・文言({n}が人数)・手動人数・文字色」を変更できる。
+//   ※ この関数と同じ表示ロジックが js/pages/form_editor.js のプレビューにもある。
+//     変更するときは両方そろえること。
+const DEFAULT_COUNT_TEXT = '【今月{n}名が診断を申込しています】';
+function resolveDiagnosisCount(op) {
+    op = op || {};
+    if (op.countMode === 'manual' && op.countManual !== null && op.countManual !== undefined && String(op.countManual).trim() !== '') {
+        const n = Math.floor(Number(op.countManual));
+        if (Number.isFinite(n) && n >= 0) return n;
+    }
+    return getMonthlyDiagnosisCount();
+}
+function renderDiagnosisCountHtml(op) {
+    op = op || {};
+    if (op.countShow === false) return '';
+    const tpl = (typeof op.countText === 'string' && op.countText.trim() !== '') ? op.countText : DEFAULT_COUNT_TEXT;
+    const text = escapeHtmlText(tpl).replace(/\{n\}/g, String(resolveDiagnosisCount(op)));
+    const color = safeCssColor(op.countColor);
+    return `<div class="diagnosis-count-text"${color ? ` style="color: ${color};"` : ''}>${text}</div>`;
+}
+
+// ×ボタン離脱確認POPの文言(管理画面で編集可)。未設定なら従来の文言。
+const DEFAULT_CLOSE_POPUP = {
+    enabled: true,
+    icon: '!',
+    title: '回答を中断しますか？',
+    body: 'ここまで入力した回答内容は保存されず\n**すべて削除されます。**\n本当に終了しますか？',
+    continueText: '続ける',
+    exitText: '終了する'
+};
+function getClosePopupConfig() {
+    const c = (formData && formData.closePopup) || {};
+    const pick = (k) => (typeof c[k] === 'string' ? c[k] : DEFAULT_CLOSE_POPUP[k]);
+    return {
+        enabled: c.enabled !== false,
+        icon: (typeof c.icon === 'string') ? c.icon : DEFAULT_CLOSE_POPUP.icon,
+        title: pick('title') || DEFAULT_CLOSE_POPUP.title,
+        body: (typeof c.body === 'string') ? c.body : DEFAULT_CLOSE_POPUP.body,
+        continueText: pick('continueText') || DEFAULT_CLOSE_POPUP.continueText,
+        exitText: pick('exitText') || DEFAULT_CLOSE_POPUP.exitText
+    };
+}
+// 本文: 改行はそのまま、**太字** だけ使える簡易記法(それ以外のHTMLは無効化)
+function renderPopupBodyHtml(text) {
+    return escapeHtmlText(text)
+        .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+        .replace(/\r?\n/g, '<br>');
+}
+function applyClosePopupConfig() {
+    const cfg = getClosePopupConfig();
+    const set = (sel, fn) => { const el = document.querySelector(sel); if (el) fn(el); };
+    set('#confirm-overlay .confirm-icon', el => { el.textContent = cfg.icon; el.style.display = cfg.icon ? '' : 'none'; });
+    set('#confirm-overlay .confirm-title', el => { el.textContent = cfg.title; });
+    set('#confirm-overlay .confirm-body', el => { el.innerHTML = renderPopupBodyHtml(cfg.body); });
+    set('#confirm-continue-btn', el => { el.textContent = cfg.continueText; });
+    set('#confirm-exit-btn', el => { el.textContent = cfg.exitText; });
+    return cfg;
+}
+
 function renderForm() {
     const container = document.getElementById('slide-container');
     let html = '';
@@ -213,11 +292,16 @@ function renderForm() {
     const applyThemeStyle = (isTitle, pageObj) => {
         if (!formData.theme) return '';
         const alignVal = isTitle ? (pageObj.align || 'left') : (pageObj.descAlign || 'left');
-        const colorVal = isTitle ? (formData.theme.titleColor || 'inherit') : (formData.theme.descColor || 'inherit');
+        // 補足説明(isTitle=false)はページごとの色・太字を優先し、未設定なら全体設定を使う。
+        // 値はCSSとして属性に埋め込まれるため、色/サイズは形式を検証して不正値は捨てる。
+        const descColor = isTitle ? '' : safeCssColor(pageObj.descColor);
+        const descSizeOwn = isTitle ? '' : safeCssSize(pageObj.descSize);
+        const colorVal = isTitle ? (formData.theme.titleColor || 'inherit') : (descColor || formData.theme.descColor || 'inherit');
         const sizeVal = isTitle 
             ? (pageObj.titleSize || formData.theme.titleSize || 'inherit') 
-            : (pageObj.descSize || formData.theme.descSize || 'inherit');
-        return `color: ${colorVal}; font-size: ${sizeVal}; text-align: ${alignVal}; width: 100%;`;
+            : (descSizeOwn || formData.theme.descSize || 'inherit');
+        const boldCss = (!isTitle && (pageObj.descBold === true || pageObj.descBold === 'true')) ? ' font-weight: 700;' : '';
+        return `color: ${colorVal}; font-size: ${sizeVal}; text-align: ${alignVal}; width: 100%;${boldCss}`;
     };
 
     const getAlignClass = (obj) => {
@@ -231,7 +315,7 @@ function renderForm() {
             <div class="slide-title" style="${applyThemeStyle(true, formData.op)}">${formData.op.title || ''}</div>
             <div class="slide-desc" style="${applyThemeStyle(false, formData.op)}">${(formData.op.description || '').replace(/\n/g, '<br>')}</div>
             <button class="btn-primary" onclick="handleOpStart()">${formData.op.buttonText || 'スタート'}</button>
-            <div class="diagnosis-count-text">【今月${getMonthlyDiagnosisCount()}名が診断を申込しています】</div>
+            ${renderDiagnosisCountHtml(formData.op)}
         </div>
     `;
 
@@ -705,9 +789,27 @@ function setupCloseConfirm() {
         return type === 'question' || type === 'review';
     };
 
+    // 管理画面で編集されたPOP文言を反映(未設定なら従来の文言のまま)
+    const popupCfg = applyClosePopupConfig();
+
+    // 離脱処理: 入力途中の回答を最終保存してからタブを閉じる(従来の「終了する」と同じ)
+    const exitNow = async () => {
+        try {
+            await saveResponseProgress('abandoned');
+        } catch (e) {
+            console.error('final saveResponseProgress before exit failed:', e);
+        }
+        closeTabOnly();
+    };
+
     closeBtn.addEventListener('click', () => {
         if (hasUnsavedAnswer()) {
-            overlay.classList.add('show');
+            if (popupCfg.enabled) {
+                overlay.classList.add('show');
+            } else {
+                // 管理画面でPOPをOFFにした場合: 確認なしで離脱(進捗保存は従来どおり行う)
+                exitNow();
+            }
         } else {
             closeTabOnly();
         }
@@ -722,12 +824,7 @@ function setupCloseConfirm() {
         // 保存される前の)入力中の回答が answers オブジェクトには残っているため、
         // 管理画面の「回答データ一覧」で最後まで正確に反映されるよう、閉じる前に
         // 最終状態を一度だけ保存してから閉じる。
-        try {
-            await saveResponseProgress('abandoned');
-        } catch (e) {
-            console.error('final saveResponseProgress before exit failed:', e);
-        }
-        closeTabOnly();
+        await exitNow();
     });
 }
 
