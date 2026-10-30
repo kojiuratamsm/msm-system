@@ -4,6 +4,8 @@ App.Pages.tasks = async function() {
     const dept = Auth.getDepartment();
 
     let tasks = await Store.getTasks();
+    // 営業成績の自動タスクは管理者にだけ表示する
+    if (!isAdmin) tasks = tasks.filter(t => !t.adminOnly);
     if (!isAdmin && dept !== 'all') {
         const mapping = { 'plusOne': 'Plus One', 'meo': 'MEO対策チャンネル', 'telecom': '通信' };
         tasks = tasks.filter(t => t.service === mapping[dept]);
@@ -39,12 +41,12 @@ App.Pages.tasks = async function() {
                 ${showCheckbox ? `<input type="checkbox" ${t.done?'checked':''} onchange="toggleTaskStatus(${t.id})" style="margin-top:4px; width:18px; height:18px; cursor:pointer;">` : ''}
                 <div style="flex:1;">
                     <div style="font-weight:bold; cursor:pointer; color: ${t.done ? 'var(--text-secondary)' : 'var(--primary-dark)'}; text-decoration: ${t.done ? 'line-through' : 'none'};" onclick="toggleTaskDetails(${t.id})">
-                        ${t.text}
+                        ${t.auto === 'sales' ? dashEsc(t.text) : t.text}
                     </div>
                     <div id="task-details-${t.id}" style="display:none; margin-top:8px; padding-top:8px; border-top:1px dashed var(--border); font-size:0.85rem; color:var(--text-secondary);">
                         <div style="margin-bottom:4px;"><strong>期日:</strong> ${t.date}</div>
                         <div style="margin-bottom:4px;"><strong>サービス:</strong> ${t.service}</div>
-                        <div style="margin-bottom:4px;"><strong>案件・顧客名:</strong> ${t.customer || '指定なし'}</div>
+                        <div style="margin-bottom:4px;"><strong>案件・顧客名:</strong> ${t.auto === 'sales' ? dashEsc(t.customer) : (t.customer || '指定なし')}</div>
                         <div style="margin-top:8px;">
                             ${!t.done && !showCheckbox ? `<button class="btn-primary btn-sm p-1" onclick="toggleTaskStatus(${t.id})">完了にする</button>` : ''}
                             ${t.done ? `<button class="btn-secondary btn-sm p-1" onclick="toggleTaskStatus(${t.id})">未完了に戻す</button>` : ''}

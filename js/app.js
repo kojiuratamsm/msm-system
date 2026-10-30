@@ -8,12 +8,16 @@ const App = {
     },
     async navigate(target, ...args) {
         document.querySelectorAll('.sidebar-nav li').forEach(li => li.classList.remove('active'));
-        const navItem = document.querySelector(`.sidebar-nav li[data-target="${target}"]`);
+        // 「SNS関連」にまとめたページ(YouTube関連・Threads)を表示している間は、サイドバーの「SNS関連」を選択中にする
+        const snsInfo = window.SNS_PAGES && window.SNS_PAGES[target];
+        const navItem = document.querySelector(`.sidebar-nav li[data-target="${snsInfo ? 'sns' : target}"]`);
         if (navItem) navItem.classList.add('active');
 
         const titleMap = {
             'dashboard': 'ダッシュボード',
             'kpi': 'KPI状況',
+            'sns': 'SNS関連',
+            'sales_performance': '営業成績',
             'ai_office': 'AI OFFICE',
             'services': 'サービス一覧',
             'customers': '顧客管理 / 案件管理',
@@ -41,8 +45,10 @@ const App = {
             'qr_code': 'QRコード作成'
         };
         document.getElementById('page-title').textContent = titleMap[target] || '';
+        // SNS関連のページは、上部に現在地(SNS関連 ＞ YouTube ＞ ページ名)と戻るボタンを出す
+        if (snsInfo && window.SnsBreadcrumb) window.SnsBreadcrumb(target);
 
-        if (target === 'finance' || target === 'payroll' || target === 'invites' || target === 'meo_users' || target === 'sales_leads') {
+        if (target === 'finance' || target === 'payroll' || target === 'invites' || target === 'meo_users' || target === 'sales_leads' || target === 'sales_performance') {
             const user = Auth.getCurrentUser();
             if (!user || user.role !== 'admin') {
                 alert('管理者以外閲覧できません');
@@ -206,11 +212,14 @@ const App = {
             
             // Sidebar will explicitly show all items to all users now.
             // When clicked, non-admins will see a rejection screen for restricted pages.
-            const allNavs = ['dashboard', 'ai_office', 'services', 'customers', 'sales', 'finance', 'payroll', 'tasks', 'research', 'youtube', 'youtube_short', 'youtube_subtitles', 'short_upload', 'youtube_analytics', 'ai_planner', 'sales_leads', 'form_analytics', 'surveys', 'mindmaps', 'meo_users', 'invites', 'settings', 'threads', 'photo_convert', 'qr_code', 'meo_progress', 'kpi'];
+            const allNavs = ['dashboard', 'sns', 'ai_office', 'services', 'customers', 'sales', 'finance', 'payroll', 'tasks', 'research', 'youtube', 'youtube_short', 'youtube_subtitles', 'short_upload', 'youtube_analytics', 'ai_planner', 'sales_leads', 'form_analytics', 'surveys', 'mindmaps', 'meo_users', 'invites', 'settings', 'threads', 'photo_convert', 'qr_code', 'meo_progress', 'kpi'];
             allNavs.forEach(nav => {
                 const el = document.querySelector(`li[data-target="${nav}"]`);
                 if (el) el.style.display = 'flex';
             });
+            // 営業成績は顧客情報を含むため、管理者にだけサイドバーに表示する
+            const salesNav = document.querySelector('li[data-target="sales_performance"]');
+            if (salesNav) salesNav.style.display = user.role === 'admin' ? 'flex' : 'none';
             
             this.navigate('dashboard');
         } else {
@@ -264,6 +273,9 @@ document.addEventListener('DOMContentLoaded', () => {
     App.init();
 });
 
+// 営業成績の自動タスク(店舗名は分析フォームの回答者が入力した文字)を表示するときのエスケープ
+function dashEsc(v) { return String(v ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch])); }
+
 // App Dashboard Page
 App.Pages.dashboard = async function(selectedYearText = null) {
     const user = Auth.getCurrentUser();
@@ -304,10 +316,26 @@ App.Pages.dashboard = async function(selectedYearText = null) {
         </div>
     `).join('');
     
+    // 営業成績の商談日から、今日の分の自動タスク(前日・当日リマインド、商談)を作る。
+    // 毎日0:00(日本時間)の自動実行(api/sales-tasks.js)の保険。同じタスクは二重に作られない。
+    // ダッシュボードの表示を待たせないよう裏で実行し、追加・取り消しがあったときだけ(まだダッシュボードを表示中なら)表示し直す。
+    if (window.SalesTaskSync && !window.__salesTaskSyncRunning) {
+        window.__salesTaskSyncRunning = true;
+        window.SalesTaskSync().then(plan => {
+            window.__salesTaskSyncRunning = false;
+            const changed = plan && (plan.create.length || plan.remove.length);
+            const titleEl = document.getElementById('page-title');
+            if (changed && titleEl && titleEl.textContent === 'ダッシュボード') App.navigate('dashboard', selectedYearText);
+        }).catch(e => { window.__salesTaskSyncRunning = false; console.error('営業成績の自動タスクを更新できませんでした', e); });
+    }
+
     // Filter tasks if member
     let allTasks = await Store.getTasks();
-    const todayStr = new Date().toISOString().split('T')[0];
+    // 「本日」は日本時間で判定する(以前は世界標準時のため、0:00〜9:00は前日扱いになっていた)
+    const todayStr = new Date(Date.now() + 9 * 3600 * 1000).toISOString().split('T')[0];
     let tasks = allTasks.filter(t => !t.done || t.date === todayStr); // Display incomplete OR today's
+    // 営業成績の自動タスクは管理者にだけ表示する
+    if (!isAdmin) tasks = tasks.filter(t => !t.adminOnly);
     if (!isAdmin && dept !== 'all') {
         const mapping = { 'plusOne': 'Plus One', 'meo': 'MEO対策チャンネル', 'telecom': '通信' };
         tasks = tasks.filter(t => t.service === mapping[dept]);
@@ -335,14 +363,15 @@ App.Pages.dashboard = async function(selectedYearText = null) {
                     </h3>
                 </div>
                 ${tasks.length === 0 ? '<p style="color:var(--text-secondary); text-align:center; padding: 20px 0;">表示するタスクはありません 🎉</p>' : `
-                <div style="max-height: 250px; overflow-y: auto; padding-right: 8px;">
-                    ${tasks.slice(0, 10).map(t => `
-                        <div style="display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 8px; background: ${t.done ? '#f8f9fa' : 'var(--bg-color)'}; margin-bottom: 8px; border-left: 4px solid ${colors[t.service] || 'var(--border)'}; opacity: ${t.done ? '0.6' : '1'};">
+                <div id="dash-task-list" style="max-height: 250px; overflow-y: auto; padding-right: 8px;">
+                    ${tasks.map((t, ti) => `
+                        <div class="dash-task-item${ti >= 10 ? ' dash-task-more' : ''}" style="display: ${ti >= 10 ? 'none' : 'flex'}; align-items: center; gap: 12px; padding: 12px; border-radius: 8px; background: ${t.done ? '#f8f9fa' : 'var(--bg-color)'}; margin-bottom: 8px; border-left: 4px solid ${colors[t.service] || 'var(--border)'}; opacity: ${t.done ? '0.6' : '1'};">
                             <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleTaskStatus(${t.id})" style="width: 20px; height: 20px; cursor: pointer; accent-color: var(--success);" />
                             <div style="flex: 1;">
-                                <div style="font-weight: 600; margin-bottom: 4px; text-decoration: ${t.done ? 'line-through' : 'none'};">${t.text}</div>
-                                <div style="font-size: 0.85rem; color: var(--text-secondary); display: flex; gap: 8px;">
-                                    <span><i class="ph ph-buildings"></i> ${t.customer}</span>
+                                <div style="font-weight: 600; margin-bottom: 4px; text-decoration: ${t.done ? 'line-through' : 'none'};">${t.auto === 'sales' ? dashEsc(t.text) : t.text}</div>
+                                <div style="font-size: 0.85rem; color: var(--text-secondary); display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                                    <span><i class="ph ph-buildings"></i> ${t.auto === 'sales' ? dashEsc(t.customer) : t.customer}</span>
+                                    ${t.auto === 'sales' ? `<button type="button" class="btn-secondary btn-sm" style="padding:2px 8px; font-size:0.75rem;" onclick="dashOpenSales(${t.id})"><i class="ph ph-arrow-square-out"></i> 営業成績へ</button>` : ''}
                                     ${t.date === todayStr ? '<span style="color:var(--error); font-weight:bold;">本日</span>' : `<span>${t.date ? new Date(t.date).toLocaleDateString('ja-JP', {month:'short', day:'numeric'}) : ''}</span>`}
                                 </div>
                             </div>
@@ -350,6 +379,7 @@ App.Pages.dashboard = async function(selectedYearText = null) {
                         </div>
                     `).join('')}
                 </div>
+                ${tasks.length > 10 ? `<button type="button" id="dash-task-more-btn" class="btn-secondary btn-sm" style="width:100%; margin-top:8px;" onclick="dashToggleMoreTasks()">もっと見る(残り${tasks.length - 10}件)</button>` : ''}
                 `}
                 <div style="text-align: right; margin-top: 16px;">
                     <button class="btn-primary" onclick="App.navigate('tasks')" style="width: 100%;">タスク詳細画面へ <i class="ph ph-arrow-right"></i></button>
@@ -523,6 +553,19 @@ App.Pages.dashboard = async function(selectedYearText = null) {
         window.toggleTaskStatus = async (id) => {
             await Store.toggleTask(id);
             App.navigate('dashboard', selectedYear);
+        };
+        // 「もっと見る」: 11件目以降の表示・非表示
+        window.dashToggleMoreTasks = () => {
+            const more = document.querySelectorAll('#dash-task-list .dash-task-more');
+            const btn = document.getElementById('dash-task-more-btn');
+            const open = more.length && more[0].style.display === 'none';
+            more.forEach(el => { el.style.display = open ? 'flex' : 'none'; });
+            if (btn) btn.textContent = open ? '閉じる' : `もっと見る(残り${more.length}件)`;
+        };
+        // 営業成績の自動タスク → その店舗の行へ移動
+        window.dashOpenSales = (id) => {
+            const t = tasks.find(x => String(x.id) === String(id));
+            App.navigate('sales_performance', { focus: t ? t.salesKey : null });
         };
 
         window.saveTargetData = async () => {

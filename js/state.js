@@ -212,6 +212,36 @@ const Store = {
         if (rows.length !== total) fail(`読み込んだ件数(${rows.length.toLocaleString()}件)が総件数(${total.toLocaleString()}件)と一致しません。読み込み中に記録が削除された可能性があります。もう一度読み込んでください`);
         return { rows, total, pages };
     },
+    // ===== 営業成績(js/pages/sales_performance.js・ダッシュボードの自動タスク)専用 =====
+    // 既存の関数と違い、エラーは握りつぶさずに例外にする(保存・追加できたかを画面側で確認するため)。
+    // 使えるテーブルは customers と tasks だけ。
+    async salesUpsertIgnore(table, rows) {
+        if (!['customers', 'tasks'].includes(table)) throw new Error('不正なテーブル名です');
+        if (!rows || rows.length === 0) return;
+        // 同じ id がすでにある行は何もしない(ON CONFLICT DO NOTHING)= 二重登録されない
+        const { error } = await supabase.from(table).upsert(rows, { onConflict: 'id', ignoreDuplicates: true });
+        if (error) throw new Error(error.message || '追加に失敗しました');
+    },
+    async salesGetRow(table, id) {
+        if (!['customers', 'tasks'].includes(table)) throw new Error('不正なテーブル名です');
+        const { data, error } = await supabase.from(table).select('id, data').eq('id', id).maybeSingle();
+        if (error) throw new Error(error.message || '読み込みに失敗しました');
+        return data;
+    },
+    async salesUpdateData(table, id, dataObj) {
+        if (!['customers', 'tasks'].includes(table)) throw new Error('不正なテーブル名です');
+        const { error } = await supabase.from(table).update({ data: dataObj }).eq('id', id);
+        if (error) throw new Error(error.message || '保存に失敗しました');
+    },
+    async salesDeleteTask(id) {
+        const { error } = await supabase.from('tasks').delete().eq('id', id);
+        if (error) throw new Error(error.message || 'タスクの取り消しに失敗しました');
+    },
+    async salesGetTasks() {
+        const { data, error } = await supabase.from('tasks').select('id, data');
+        if (error) throw new Error(error.message || 'タスクを読み込めませんでした');
+        return (data || []).map(row => ({ id: row.id, ...(row.data || {}) }));
+    },
     async clearMEOFormStatsAndResponses() {
         await supabase.from('customers').delete().eq('service_type', 'meo_form_stats');
         await supabase.from('customers').delete().eq('service_type', 'meo_form_response');

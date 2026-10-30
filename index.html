@@ -133,7 +133,7 @@
                 <ul id="nav-list">
                     <li data-target="dashboard" class="active"><i class="ph ph-squares-four"></i><span>ダッシュボード</span></li>
                     <li data-target="kpi"><i class="ph ph-gauge"></i><span>KPI状況</span></li>
-                    <li data-target="ai_office"><i class="ph ph-buildings"></i> <span>AI OFFICE</span></li>
+                    <li data-target="sales_performance" class="admin-only" style="display:none;"><i class="ph ph-handshake"></i><span>営業成績</span></li>
                     <li data-target="services"><i class="ph ph-briefcase"></i> <span>サービス一覧</span></li>
                     <li data-target="customers"><i class="ph ph-users"></i><span>顧客管理 / 案件管理</span></li>
                     <li data-target="meo_progress"><i class="ph ph-list-checks"></i><span>MEO作業状況</span></li>
@@ -143,17 +143,12 @@
                     <li data-target="tasks"><i class="ph ph-check-square-offset"></i><span>タスク表</span></li>
                     <hr style="border:0; border-top:1px solid #333; margin:8px 0;">
                     <li data-target="research"><i class="ph ph-magnifying-glass"></i> <span>リサーチ機能</span></li>
-                    <li data-target="youtube"><i class="ph ph-youtube-logo"></i> <span>YouTube管理 (ロング)</span></li>
-                    <li data-target="youtube_short"><i class="ph ph-device-mobile"></i> <span>YouTube管理 (ショート)</span></li>
-                    <li data-target="youtube_analytics"><i class="ph ph-chart-line-up"></i> <span>YouTube分析データ</span></li>
-                    <li data-target="youtube_subtitles"><i class="ph ph-subtitles"></i> <span>YouTubeテロップ生成</span></li>
-                    <li data-target="short_upload"><i class="ph ph-calendar-check"></i> <span>ショート投稿予約</span></li>
+                    <li data-target="sns"><i class="ph ph-share-network"></i> <span>SNS関連</span></li>
                     <li data-target="ai_planner"><i class="ph ph-brain"></i> <span>AI企画室</span></li>
                     <li data-target="sales_leads"><i class="ph ph-address-book"></i> <span>MEO営業リスト作成</span></li>
                     <li data-target="form_analytics"><i class="ph ph-chart-bar"></i> <span>分析フォーム</span></li>
                     <li data-target="surveys"><i class="ph ph-clipboard-text"></i> <span>アンケート</span></li>
                     <li data-target="mindmaps"><i class="ph ph-tree-structure"></i> <span>マインドマップ</span></li>
-                    <li data-target="threads"><i class="ph ph-at"></i> <span>Threads運用代行</span></li>
                     <li data-target="photo_convert"><i class="ph ph-image"></i> <span>写真変換</span></li>
                     <li data-target="qr_code"><i class="ph ph-qr-code"></i> <span>QRコード作成</span></li>
                     <li data-target="meo_users" class="admin-only" style="display:none;"><i class="ph ph-users-three"></i> <span>MEOユーザー管理</span></li>
@@ -197,6 +192,9 @@
     <script src="./js/pages/customers.js"></script>
     <script src="./js/pages/meo_progress.js"></script>
     <script src="./js/pages/kpi.js"></script>
+    <script src="./lib/sales_core.js"></script>
+    <script src="./js/pages/sales_performance.js"></script>
+    <script src="./js/pages/sns.js"></script>
     <script src="./js/pages/sales.js"></script>
     <script src="./js/pages/finance.js"></script>
     <script src="./js/pages/tasks.js"></script>
