@@ -268,7 +268,12 @@
             state: 'saved', err: '', pending: null, me: user && user.email || '', myName: user && user.name || '',
             users: [], qa: null, qaSource: '', others: []
         };
-        C.SHEET_FIELDS.forEach(f => { H.base[f] = C.getField(H.sheet, f); });
+        // 保存する欄: 決まった欄 + マニュアルの（回答）ごとの入力欄
+        const man = window.HearingManual ? window.HearingManual.get() : null;
+        H.fields = [...C.SHEET_FIELDS];
+        (man || []).forEach(s => s.blocks.forEach(b => { if (b.aid) H.fields.push('answers.' + b.aid); }));
+        Object.keys((H.sheet && H.sheet.answers) || {}).forEach(k => { const f = 'answers.' + k; if (!H.fields.includes(f) && C.isSheetField(f)) H.fields.push(f); });
+        H.fields.forEach(f => { H.base[f] = C.getField(H.sheet, f); });
         H.base['rec.lostReason'] = H.rec.lostReason || '';
         // 保存できずに端末に残っていた入力を戻す
         const draft = ls.get(draftKey(H.id)) || {};
@@ -390,6 +395,12 @@
         if (b.type === 'ex') return `<details class="hs-b hs-b-ex"><summary>${esc(b.label)}<span class="hs-ex-hint">(クリックで開閉)</span></summary><div class="hs-b-text">${text}</div></details>`;
         if (b.type === 'branch') return `<div class="hs-b hs-b-branch">${esc(b.label)}${text ? `<div class="hs-b-text">${text}</div>` : ''}</div>`;
         if (b.type === 'text') return `<div class="hs-b hs-b-plain"><div class="hs-b-text">${text}</div></div>`;
+        // （回答）: 例文はそのまま表示し、その下にお客様の実際の回答を入力できる欄
+        if (b.type === 'ans' && b.aid) {
+            const f = 'answers.' + b.aid;
+            return `<div class="hs-b hs-b-ans" data-ans="${esc(b.aid)}"><span class="hs-b-label">${esc(b.label)}</span><div class="hs-b-text hs-ans-ex">${text}</div>
+                <textarea class="input-field hs-ans-in" data-field="${f}" rows="2" placeholder="お客様の回答を入力" aria-label="お客様の回答">${esc(val(f))}</textarea>${conflictHtml(f)}</div>`;
+        }
         const go = b.type === 'q' && b.field ? `<button type="button" class="hs-go" onclick="hsGoField('${b.field}', '${b.qid}')" title="右側の入力欄へ移動">入力欄「${esc((NOTES.find(n => n.k === b.field) || {}).label || '')}」へ <i class="ph ph-arrow-right"></i></button>` : '';
         return `<div class="hs-b hs-b-${b.type}" ${b.qid ? `id="${b.qid}" data-field-target="${b.field || ''}"` : ''}>${b.label ? `<span class="hs-b-label">${esc(b.label)}</span>` : ''}<div class="hs-b-text">${text}</div>${go}</div>`;
     }
@@ -497,7 +508,7 @@
         if (!cols || !pc) { window.removeEventListener('resize', fitHeight); return; }
         if (window.innerWidth <= 900) { cols.style.height = ''; return; }
         const top = cols.getBoundingClientRect().top - pc.getBoundingClientRect().top + pc.scrollTop;
-        const h = Math.max(460, pc.clientHeight - top - 24);
+        const h = Math.max(520, pc.clientHeight - top - 16);
         cols.style.height = h + 'px';
     }
 
@@ -570,7 +581,7 @@
     // 最新のシートの内容を画面に反映(自分がまだ保存していない欄・入力中の欄はそのまま)
     function applyLatestSheet(h, latest) {
         h.sheet = latest;
-        C.SHEET_FIELDS.forEach(f => {
+        (h.fields || C.SHEET_FIELDS).forEach(f => {
             const sv = C.getField(latest, f);
             if (same(sv, h.base[f])) return;
             if (f in h.dirty || h.conflicts[f]) return;   // 自分がまだ保存していない欄は、そのまま(保存時に競合を確認する)
@@ -587,7 +598,7 @@
             if (!el) return;
             const old = document.querySelector(`#hs-root [data-conflict="${CSS.escape(f)}"]`);
             if (old) old.remove();
-            const holder = el.closest('.hs-note, .hs-f, .hs-sec, .hs-lbl') || el.parentElement;
+            const holder = el.closest('.hs-b-ans, .hs-note, .hs-f, .hs-sec, .hs-lbl') || el.parentElement;
             const div = document.createElement('div');
             div.innerHTML = conflictHtml(f);
             const box = div.firstElementChild;
@@ -848,8 +859,9 @@
         .hs-lb-won { background: #D3F9D8; color: #2B8A3E; } .hs-lb-lost { background: #FFE3E3; color: #C92A2A; } .hs-lb-noshow { background: #FFF3BF; color: #8F5B00; }
         .hs-lb-plan { background: #E7F5FF; color: #1971C2; } .hs-lb-adj { background: #F1F3F5; color: #495057; } .hs-lb-miss { background: #FFE8CC; color: #D9480F; }
 
-        .hs-message { background: #fff; color: #E03131; font-weight: 800; font-size: 1.3rem; line-height: 1.55; padding: 14px 20px; border: 2px solid #FFC9C9; border-radius: 12px; margin-bottom: 12px; letter-spacing: 0.02em; }
-        .hs-info { padding: 12px 16px; margin-bottom: 12px; }
+        .hs-root { margin-top: -24px; }
+        .hs-message { background: #fff; color: #E03131; font-weight: 800; font-size: 0.95rem; line-height: 1.5; padding: 8px 16px; border: 2px solid #FFC9C9; border-radius: 10px; margin-bottom: 8px; display: flex; flex-wrap: wrap; column-gap: 1.4em; row-gap: 2px; }
+        .hs-info { padding: 8px 14px; margin-bottom: 10px; }
         .hs-info-grid { display: grid; grid-template-columns: minmax(180px, 1.4fr) minmax(200px, 1.2fr) minmax(150px, 1fr) minmax(160px, 1fr) minmax(130px, 0.8fr) minmax(170px, 1fr); gap: 12px 16px; align-items: start; }
         .hs-k { font-size: 0.72rem; color: var(--text-secondary); font-weight: 700; margin-bottom: 4px; }
         .hs-v { font-weight: 700; }
@@ -874,16 +886,18 @@
         .hs-nav-ex { border: none; background: none; color: #868E96; font-size: 0.75rem; cursor: pointer; text-decoration: underline; margin-left: auto; font-family: inherit; }
         .hs-sec { padding: 12px 0 8px; border-bottom: 1px dashed #DEE2E6; }
         .hs-sec-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
-        .hs-sec-head h3 { font-size: 1.05rem; margin: 0; }
+        .hs-sec-head h3 { font-size: 1.2rem; margin: 0; }
+        .hs-ans-ex { font-size: 0.92rem; }
+        .hs-ans-in { width: 100%; min-height: 64px; margin: 8px 0 0; font-size: 1rem; line-height: 1.6; resize: vertical; background: #fff; color: #212529; box-sizing: border-box; }
         .hs-check { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; font-weight: 700; padding: 4px 10px; border: 1px solid #DEE2E6; border-radius: 16px; cursor: pointer; white-space: nowrap; }
         .hs-check.is-done { background: #EBFBEE; border-color: #8CE99A; color: #2B8A3E; }
         .hs-check input { width: 16px; height: 16px; margin: 0; }
-        .hs-b { border-radius: 10px; padding: 10px 12px; margin: 8px 0; line-height: 1.75; font-size: 0.95rem; border: 1px solid transparent; }
+        .hs-b { border-radius: 10px; padding: 12px 14px; margin: 10px 0; line-height: 1.8; font-size: 1.05rem; border: 1px solid transparent; }
         .hs-b-label { display: inline-block; font-size: 0.75rem; font-weight: 800; padding: 1px 8px; border-radius: 8px; margin-bottom: 4px; }
         .hs-b-text { word-break: break-word; }
         .hs-b-ura { background: #E7F5FF; border-color: #A5D8FF; color: #1864AB; font-weight: 700; }
         .hs-b-ura .hs-b-label { background: #1C7ED6; color: #fff; }
-        .hs-b-q { background: #FFF4E6; border: 2px solid #FF922B; color: #D9480F; font-weight: 800; font-size: 1.02rem; box-shadow: 0 2px 6px rgba(255, 146, 43, 0.18); }
+        .hs-b-q { background: #FFF4E6; border: 2px solid #FF922B; color: #D9480F; font-weight: 800; font-size: 1.12rem; box-shadow: 0 2px 6px rgba(255, 146, 43, 0.18); }
         .hs-b-q .hs-b-label { background: #F76707; color: #fff; }
         .hs-b-ref { background: #FFF9F2; border: 1px dashed #FFC078; color: #9C4A14; font-size: 0.9rem; }
         .hs-b-ref .hs-b-label { background: #FFE8CC; color: #D9480F; }
@@ -904,9 +918,9 @@
         details.hs-card > summary { cursor: pointer; list-style: revert; }
         .hs-note { margin-bottom: 14px; border-radius: 10px; }
         .hs-note-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; }
-        .hs-note-head label { font-weight: 800; font-size: 0.95rem; }
+        .hs-note-head label { font-weight: 800; font-size: 1.05rem; }
         .hs-back-q { border: none; background: none; color: #D9480F; font-size: 0.75rem; cursor: pointer; font-family: inherit; white-space: nowrap; }
-        .hs-ta { width: 100%; min-height: 130px; font-size: 1rem; line-height: 1.7; resize: vertical; margin: 0; }
+        .hs-ta { width: 100%; min-height: 160px; font-size: 1.08rem; line-height: 1.7; resize: vertical; margin: 0; }
         .hs-ta-s { width: 100%; min-height: 80px; font-size: 0.95rem; line-height: 1.6; resize: vertical; margin: 4px 0 0; }
         .hs-lbl { display: block; font-weight: 700; font-size: 0.85rem; margin: 10px 0 2px; }
         .hs-lbl .input-field { font-weight: 400; }
@@ -924,7 +938,8 @@
         .hs-flash { animation: hsFlash 1.4s ease-out; }
         @media (max-width: 1280px) { .hs-info-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
         @media (max-width: 900px) {
-            .hs-message { font-size: 1.05rem; padding: 10px 14px; }
+            .hs-root { margin-top: 0; }
+            .hs-message { font-size: 0.85rem; padding: 6px 12px; column-gap: 1em; }
             .hs-info-grid { grid-template-columns: 1fr 1fr; }
             .hs-f-store { grid-column: 1 / -1; }
             .hs-tabs { display: flex; gap: 8px; margin-bottom: 10px; position: sticky; top: -16px; z-index: 3; background: var(--bg-primary, #F8F9FA); padding: 6px 0; }

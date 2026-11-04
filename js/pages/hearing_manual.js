@@ -306,11 +306,12 @@ YouTubeとかをみているだけです。
             block.gap = false;
             block.lines.push(line.trim());
         }
-        // 質問の番号と、対応する右側の入力欄
+        // 質問の番号と、対応する右側の入力欄。（回答）には入力欄の番号(セクション内で何番目の（回答）か)を付ける
         out.forEach(s => {
-            let n = 0;
+            let n = 0, na = 0;
             s.blocks.forEach(b => {
                 delete b.gap;
+                if (b.type === 'ans') { na++; b.aid = `${s.id}-${na}`; return; }
                 if (b.type !== 'q') return;
                 n++;
                 b.qid = `hs-q-${s.id}-${n}`;
