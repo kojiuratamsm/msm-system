@@ -7,6 +7,7 @@
 //        商談日の前日: 「(店舗名) 前日リマインド送信」
 //        商談日の当日: 「(店舗名) 当日リマインド送信」「(店舗名) 商談」
 //      商談日が変わった・結果が入った行の、未完了の自動タスクは取り消す(完了済みは残す)
+//   3) 営業成績の行ごとのヒアリングシート(service_type='hearing_sheet')が無ければ作る(既存のシートは書き換えない)
 //
 // 【実行時刻】 vercel.json の "0 15 * * *"(UTC 15:00 = 日本時間 0:00)。
 //   Vercel Hobby プランは「1日1回・実行時刻は最大59分ずれる(0:00〜0:59のどこか)」仕様。
@@ -14,7 +15,7 @@
 //   遅れても困らないよう、ダッシュボードを開いたときにも同じ処理(今日分の作成)を行う。
 // 【二重登録の防止】 営業成績の行の id は回答IDから、タスクの id は「行・商談日時・種類」から決まる値。
 //   すでに同じ id があれば何もしない(PostgREST の resolution=ignore-duplicates)。
-// 【書き込む先】 customers(service_type='sales_record')と tasks だけ。分析フォームの回答・計測は読むだけ。
+// 【書き込む先】 customers(service_type='sales_record' / 'hearing_sheet' の追加のみ)と tasks だけ。分析フォームの回答・計測は読むだけ。
 // 【認証】 CRON_SECRET を設定している場合は、Vercel が付ける Authorization: Bearer <値> を確認する。
 // ============================================================================
 const Core = require('../lib/sales_core.js');
@@ -47,7 +48,7 @@ async function insertIgnore(table, rows) {
 }
 
 async function run(nowMs) {
-    const out = { added: 0, tasksCreated: 0, tasksRemoved: 0, syncSkipped: '' };
+    const out = { added: 0, tasksCreated: 0, tasksRemoved: 0, sheetsCreated: 0, syncSkipped: '' };
     // 1) 同期(分析フォームの質問定義が読めないときは、店舗名を取り違えないよう同期しない)
     const forms = await (await sb('customers?select=id,data&service_type=eq.meo_form')).json();
     const form = Array.isArray(forms) && forms[0] && forms[0].data;
@@ -66,6 +67,11 @@ async function run(nowMs) {
     for (const id of tp.remove) await sb(`tasks?id=eq.${id}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
     out.tasksCreated = tp.create.length;
     out.tasksRemoved = tp.remove.length;
+    // 3) ヒアリングシート(id は営業成績の行から決まる値。すでにあれば何もしない)
+    const sheets = await readAll('customers', `service_type=eq.${Core.SERVICE_SHEET}`);
+    const sp = Core.planSheets(records, sheets, new Date(nowMs).toISOString());
+    await insertIgnore('customers', sp);
+    out.sheetsCreated = sp.length;
     return out;
 }
 

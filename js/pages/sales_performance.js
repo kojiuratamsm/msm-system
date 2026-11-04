@@ -57,6 +57,8 @@
             await loadRecords();
         }
         S.syncInfo = { at: Date.now(), added: plan.inserts.length, before: plan.before, noTime: plan.noTime, responses: res.rows.length };
+        // 営業成績の行ごとのヒアリングシートが無ければ作る(js/pages/sales_hub.js。失敗しても営業成績の表示は止めない)
+        try { if (window.HearingSheetEnsure) await window.HearingSheetEnsure(S.records); } catch (e) { console.error('hearing sheet ensure', e); }
         return plan.inserts.length;
     }
     async function loadSubmissions() {
@@ -74,6 +76,13 @@
         return plan;
     }
     window.SalesTaskSync = syncTasks;
+    // 営業(js/pages/sales_hub.js)から呼ぶ: 分析フォームの完了 → 営業成績 の同期(ヒアリングシートの作成も含む)と自動タスク
+    window.SalesSyncAll = async function () {
+        await loadRecords();
+        await syncResponses();
+        try { await syncTasks(S.records); } catch (e) { console.error(e); }
+        return S.records;
+    };
 
     // ---------- 1行の操作(保存前に最新を読み、他の人の更新を上書きしない。保存後に読み直して確認) ----------
     async function act(id, action, payload) {
@@ -200,6 +209,7 @@
         window.spPlan = (id, v) => act(id, 'setPlan', { plan: v });
         window.spWonDate = (id, v) => act(id, 'setWonDate', { date: v });
         window.spReason = (id, v) => act(id, 'setLostReason', { reason: v });
+        window.spLostCat = (id, v) => act(id, 'setLostCategory', { category: v });
         window.spExclude = (id, v) => {
             if (v && !confirm('この行を営業成績から除外します(集計に入れません)。あとで取り消せます。よろしいですか？')) return;
             act(id, 'exclude', { excluded: v });
@@ -466,7 +476,7 @@
                 <div class="sp-avg"><div>ドタキャン ${d(m.avgDays.noshow, m.nDays.noshow)}</div><div>実施(成約+不成約) ${d(m.avgDays.held, m.nDays.held)}</div><div>成約 ${d(m.avgDays.won, m.nDays.won)}</div></div>
                 <div class="kpi-note">日程の空き(完了から商談までの日数)がドタキャンに影響しているかを比べるための数字です。件数が少ないうちは参考程度に見てください。</div></div>
             <div class="card sp-ins-card"><div class="sp-ins-title">不成約理由の一覧(商談の予定日が期間内・${lost.length}件)</div>
-                ${lost.length ? `<div class="sp-reasons">${lost.map(x => `<div class="sp-reason-item"><div class="sp-reason-head"><button class="sp-link" onclick="spOpenDetail('${x.r.id}')">${esc(x.r.storeName || '(店舗名なし)')}</button><span>${fmtD(new Date(x.t).toISOString())}</span></div><div class="sp-reason-text">${esc(x.r.lostReason || '(理由未入力)')}</div></div>`).join('')}</div>` : '<div class="kpi-note">この期間の不成約はありません。</div>'}
+                ${lost.length ? `<div class="sp-reasons">${lost.map(x => `<div class="sp-reason-item"><div class="sp-reason-head"><button class="sp-link" onclick="spOpenDetail('${x.r.id}')">${esc(x.r.storeName || '(店舗名なし)')}</button><span>${fmtD(new Date(x.t).toISOString())}</span></div><div class="sp-reason-text">${x.r.lostCategory ? `<b>[${esc(x.r.lostCategory)}]</b> ` : ''}${esc(x.r.lostReason || (x.r.lostCategory ? '' : '(理由未入力)'))}</div></div>`).join('')}</div>` : '<div class="kpi-note">この期間の不成約はありません。</div>'}
             </div>
         </div>`;
     }
@@ -533,7 +543,8 @@
             extra = `<select class="sp-plan" onchange="spPlan('${id}', this.value)"><option value="">成約プランを選択</option>${C.PLANS.map(pl => `<option ${r.plan === pl ? 'selected' : ''}>${esc(pl)}</option>`).join('')}</select>
                 <label class="sp-mini-label">成約日 <input type="date" value="${esc(r.wonDate)}" onchange="spWonDate('${id}', this.value)"></label>`;
         } else if (r.status === 'lost') {
-            extra = `<textarea class="sp-reason" rows="2" placeholder="不成約理由を入力" onchange="spReason('${id}', this.value)">${esc(r.lostReason)}</textarea>
+            extra = `<select class="sp-plan sp-lostcat" onchange="spLostCat('${id}', this.value)"><option value="">理由の分類を選択</option>${C.LOST_CATEGORIES.map(c => `<option ${r.lostCategory === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
+                <textarea class="sp-reason" rows="2" placeholder="不成約理由を入力" onchange="spReason('${id}', this.value)">${esc(r.lostReason)}</textarea>
                 <button class="btn-secondary btn-sm sp-full" onclick="spOpenReason('${id}')"><i class="ph ph-arrows-out-simple"></i> 全文</button>`;
         } else if (r.status === 'noshow') {
             extra = `<button class="btn-primary btn-sm" onclick="spStartReadjust('${id}')"><i class="ph ph-calendar-plus"></i> 再調整</button>`;
@@ -592,7 +603,7 @@
                     <div class="kpi-mini">回答日時 ${esc(fmtDT(r.completedAt))}(回答内容は営業成績に追加した時点の写しです。分析フォームのデータをリセットしても残ります)</div></div>
                 <div class="sp-sec"><div class="sp-sec-title">成約プラン・不成約理由</div>
                     <div>成約プラン: ${esc(r.plan) || '-'} ・ 成約日: ${esc(r.wonDate) || '-'}</div>
-                    <div class="sp-reason-text" style="margin-top:6px;">不成約理由: ${esc(r.lostReason) || '-'}</div></div>
+                    <div class="sp-reason-text" style="margin-top:6px;">不成約理由: ${r.lostCategory ? `[${esc(r.lostCategory)}] ` : ''}${esc(r.lostReason) || (r.lostCategory ? '' : '-')}</div></div>
                 <div class="sp-sec"><div class="sp-sec-title">商談日の履歴</div>
                     ${meetings ? `<table class="sp-mini-table"><thead><tr><th>#</th><th>商談日</th><th>入力のきっかけ</th><th>結果</th><th>入力者</th></tr></thead><tbody>${meetings}</tbody></table>` : '<div class="kpi-note">まだ商談日はありません。</div>'}</div>
                 <div class="sp-sec"><div class="sp-sec-title">変更の履歴(誰が・いつ・何を)</div>
@@ -648,13 +659,13 @@
     function downloadCsv() {
         const now = Date.now();
         const cell = (v) => { let s = String(v == null ? '' : v); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return `"${s.replace(/"/g, '""')}"`; };
-        const head = ['完了日時', '店舗名', '再申込', '除外', '完了→商談(日)', '商談日', '成約状況', '表示ラベル', '成約プラン', '成約日', '不成約理由', '商談回数', 'ドタキャン回数', '日程変更回数'];
+        const head = ['完了日時', '店舗名', '再申込', '除外', '完了→商談(日)', '商談日', '成約状況', '表示ラベル', '成約プラン', '成約日', '不成約理由', '商談回数', 'ドタキャン回数', '日程変更回数', '不成約理由の分類'];
         const lines = [head.map(cell).join(',')];
         filtered().forEach(({ r, repeat }) => {
             const ms = r.meetings || [];
             const dd = C.daysToMeeting(r);
             lines.push([fmtDT(r.completedAt), r.storeName, repeat ? '再申込' : '', r.excluded ? '除外' : '', dd == null ? '' : fmt1(dd), fmtDT(r.meetingAt), C.STATUS_LABEL[r.status || ''], C.displayLabel(r, now).text, r.plan, r.wonDate, r.lostReason,
-                ms.length, ms.filter(m => m.outcome === 'noshow').length, ms.filter(m => m.outcome === 'reschedule').length].map(cell).join(','));
+                ms.length, ms.filter(m => m.outcome === 'noshow').length, ms.filter(m => m.outcome === 'reschedule').length, r.lostCategory || ''].map(cell).join(','));
         });
         const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
         const a = document.createElement('a');

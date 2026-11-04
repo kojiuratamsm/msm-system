@@ -10,7 +10,9 @@ const App = {
         document.querySelectorAll('.sidebar-nav li').forEach(li => li.classList.remove('active'));
         // 「SNS関連」にまとめたページ(YouTube関連・Threads)を表示している間は、サイドバーの「SNS関連」を選択中にする
         const snsInfo = window.SNS_PAGES && window.SNS_PAGES[target];
-        const navItem = document.querySelector(`.sidebar-nav li[data-target="${snsInfo ? 'sns' : target}"]`);
+        // 「営業」にまとめたページ(営業管理・ヒアリングシート・営業成績)を表示している間は、サイドバーの「営業」を選択中にする
+        const salesInfo = window.SALES_PAGES && window.SALES_PAGES[target];
+        const navItem = document.querySelector(`.sidebar-nav li[data-target="${snsInfo ? 'sns' : salesInfo ? 'sales_hub' : target}"]`);
         if (navItem) navItem.classList.add('active');
 
         const titleMap = {
@@ -18,6 +20,9 @@ const App = {
             'kpi': 'KPI状況',
             'sns': 'SNS関連',
             'sales_performance': '営業成績',
+            'sales_hub': '営業',
+            'sales_manage': '営業',
+            'hearing_sheet': 'ヒアリングシート',
             'ai_office': 'AI OFFICE',
             'services': 'サービス一覧',
             'customers': '顧客管理 / 案件管理',
@@ -47,8 +52,10 @@ const App = {
         document.getElementById('page-title').textContent = titleMap[target] || '';
         // SNS関連のページは、上部に現在地(SNS関連 ＞ YouTube ＞ ページ名)と戻るボタンを出す
         if (snsInfo && window.SnsBreadcrumb) window.SnsBreadcrumb(target);
+        // 営業のページも同じく、現在地(営業 ＞ ページ名)と戻るボタンを出す
+        if (salesInfo && window.SalesBreadcrumb) window.SalesBreadcrumb(target);
 
-        if (target === 'finance' || target === 'payroll' || target === 'invites' || target === 'meo_users' || target === 'sales_leads' || target === 'sales_performance') {
+        if (target === 'finance' || target === 'payroll' || target === 'invites' || target === 'meo_users' || target === 'sales_leads' || target === 'sales_performance' || target === 'sales_hub' || target === 'sales_manage' || target === 'hearing_sheet') {
             const user = Auth.getCurrentUser();
             if (!user || user.role !== 'admin') {
                 alert('管理者以外閲覧できません');
@@ -217,8 +224,8 @@ const App = {
                 const el = document.querySelector(`li[data-target="${nav}"]`);
                 if (el) el.style.display = 'flex';
             });
-            // 営業成績は顧客情報を含むため、管理者にだけサイドバーに表示する
-            const salesNav = document.querySelector('li[data-target="sales_performance"]');
+            // 営業(営業管理・ヒアリングシート・営業成績)は顧客情報を含むため、管理者にだけサイドバーに表示する
+            const salesNav = document.querySelector('li[data-target="sales_hub"]');
             if (salesNav) salesNav.style.display = user.role === 'admin' ? 'flex' : 'none';
             
             this.navigate('dashboard');
