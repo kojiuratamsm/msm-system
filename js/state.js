@@ -233,6 +233,18 @@ const Store = {
         const { error } = await supabase.from(table).update({ data: dataObj }).eq('id', id);
         if (error) throw new Error(error.message || '保存に失敗しました');
     },
+    // 同じ id があれば置き換える(分析データのファイル用)
+    async salesUpsert(table, rows) {
+        if (!['customers'].includes(table)) throw new Error('不正なテーブル名です');
+        if (!rows || rows.length === 0) return;
+        const { error } = await supabase.from(table).upsert(rows, { onConflict: 'id' });
+        if (error) throw new Error(error.message || '保存に失敗しました');
+    },
+    // 分析データのファイル(service_type='sales_file')だけを消す。ほかの種類の行は消さない
+    async salesDeleteFile(id) {
+        const { error } = await supabase.from('customers').delete().eq('id', id).eq('service_type', 'sales_file');
+        if (error) throw new Error(error.message || '削除に失敗しました');
+    },
     async salesDeleteTask(id) {
         const { error } = await supabase.from('tasks').delete().eq('id', id);
         if (error) throw new Error(error.message || 'タスクの取り消しに失敗しました');

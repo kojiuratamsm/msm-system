@@ -42,7 +42,7 @@
     const FIELD_LABEL = Object.assign({ nextAction: '次回アクション', nextContactDate: '次回連絡予定日', owner: '商談担当者', 'rec.lostReason': '不成約理由' },
         ...NOTES.map(n => ({ ['notes.' + n.k]: n.label })),
         ...C.SHEET_SECTIONS.map(k => ({ ['checks.' + k]: '進捗チェック' })));
-    const LABEL_CLS = { won: 'hs-lb-won', lost: 'hs-lb-lost', noshow: 'hs-lb-noshow', adjusting: 'hs-lb-adj', planned: 'hs-lb-plan', missing: 'hs-lb-miss' };
+    const LABEL_CLS = { won: 'hs-lb-won', lost: 'hs-lb-lost', noshow: 'hs-lb-noshow', pending: 'hs-lb-pending', adjusting: 'hs-lb-adj', planned: 'hs-lb-plan', missing: 'hs-lb-miss' };
 
     // ---------- 入口・現在地 ----------
     const SALES_PAGES = window.SALES_PAGES = {
@@ -102,7 +102,33 @@
     }
 
     // ---------- 営業管理(ヒアリングシート一覧・営業成績一覧) ----------
-    const MUI = window.SalesManageUi = window.SalesManageUi || { tab: 'sheets', q: '', when: 'all', showExcluded: false };
+    const MUI = window.SalesManageUi = window.SalesManageUi || { tab: 'sheets', q: '', when: 'all', showExcluded: false, pmode: 'all', pday: '', pmonth: '', pyear: '' };
+    // 表示する期間(商談日で絞る): all / day / month / year
+    function periodRange() {
+        const t = C.jp(Date.now());
+        if (MUI.pmode === 'day') {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(MUI.pday || '')) MUI.pday = C.jstDate(Date.now());
+            const a = C.dateStartMs(MUI.pday); const d = C.jp(a);
+            return { start: a, end: a + C.DAY, label: `${d.y}年${d.m}月${d.d}日(${WD[d.wd]})` };
+        }
+        if (MUI.pmode === 'month') {
+            if (!/^\d{4}-\d{2}$/.test(MUI.pmonth || '')) MUI.pmonth = `${t.y}-${pad(t.m)}`;
+            const [y, m] = MUI.pmonth.split('-').map(Number);
+            return { start: jms(y, m, 1), end: jms(y, m + 1, 1), label: `${y}年${m}月` };
+        }
+        if (MUI.pmode === 'year') {
+            if (!/^\d{4}$/.test(String(MUI.pyear || ''))) MUI.pyear = String(t.y);
+            const y = Number(MUI.pyear);
+            return { start: jms(y, 1, 1), end: jms(y + 1, 1, 1), label: `${y}年`, year: y };
+        }
+        return null;
+    }
+    window.hmShift = (n) => {
+        if (MUI.pmode === 'day') MUI.pday = C.addDays(MUI.pday, n);
+        else if (MUI.pmode === 'month') { const [y, m] = MUI.pmonth.split('-').map(Number); const d = new Date(Date.UTC(y, m - 1 + n, 1)); MUI.pmonth = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}`; }
+        else if (MUI.pmode === 'year') MUI.pyear = String(Number(MUI.pyear) + n);
+        renderManage(true);
+    };
     const M = { recs: [], sheets: [], syncErr: '' };
     let manageTimer = null;
 
@@ -118,10 +144,15 @@
             return;
         }
         M.recs = data.recs; M.sheets = data.sheets;
-        App.mount(`<div id="hm-root"></div>${STYLE}`, () => {
+        App.mount(`<div id="hm-root"></div>${STYLE}${SA.STYLE || ''}`, () => {
             window.hmSet = (patch) => { Object.assign(MUI, patch); renderManage(patch.q === undefined); };
             window.hmOpen = (sheetId) => App.navigate('hearing_sheet', { id: String(sheetId) });
             window.hmOpenSales = (key) => App.navigate('sales_performance', { focus: key });
+            SA.listener = (rec) => {
+                if (!document.getElementById('hm-root')) return;
+                const i = M.recs.findIndex(x => String(x.id) === String(rec.id));
+                if (i >= 0) { M.recs[i] = rec; renderManage(false); }
+            };
             renderManage(true);
             if (manageTimer) clearInterval(manageTimer);
             manageTimer = setInterval(async () => {
@@ -168,8 +199,25 @@
         const q = (MUI.q || '').trim();
         const qn = C.normalizeStore(q);
         const hit = (x) => !q || C.normalizeStore(x.r.storeName).includes(qn) || String(x.r.storeName || '').includes(q);
-        const sheetList = sortRows(vis.filter(hit).filter(x => MUI.when === 'all' || whenOf(x.r, now) === MUI.when || (MUI.when === 'missing' && C.displayLabel(x.r, now).key === 'missing')), now);
-        const salesList = vis.filter(hit).slice().sort((a, b) => toMs(b.r.completedAt) - toMs(a.r.completedAt));
+        const pr = periodRange();
+        const inP = (x) => { if (!pr) return true; const t = toMs(x.r.meetingAt); return Number.isFinite(t) && t >= pr.start && t < pr.end; };
+        const base = vis.filter(hit).filter(inP);
+        const sheetList = sortRows(base.filter(x => MUI.when === 'all' || whenOf(x.r, now) === MUI.when || (['missing', 'pending'].includes(MUI.when) && C.displayLabel(x.r, now).key === MUI.when)), now);
+        const salesList = base.slice().sort((a, b) => pr ? toMs(a.r.meetingAt) - toMs(b.r.meetingAt) : toMs(b.r.completedAt) - toMs(a.r.completedAt));
+        // 期間の件数(商談日が期間内の件数と、その内訳)
+        const summary = (() => {
+            if (!pr) return '';
+            const cnt = {}; base.forEach(x => { const k = C.displayLabel(x.r, now).key; cnt[k] = (cnt[k] || 0) + 1; });
+            const parts = [['won', '成約'], ['lost', '不成約'], ['pending', '返答待ち'], ['noshow', 'ドタキャン'], ['planned', '商談予定'], ['missing', '結果未入力']].filter(([k]) => cnt[k]).map(([k, l]) => `${l} ${cnt[k]}`);
+            let months = '';
+            if (pr.year) {
+                const per = Array.from({ length: 12 }, () => 0);
+                base.forEach(x => { per[C.jp(toMs(x.r.meetingAt)).m - 1]++; });
+                months = `<div class="hm-months">${per.map((n, i) => `<button type="button" class="hm-month ${n ? '' : 'is-zero'}" onclick="hmSet({pmode:'month', pmonth:'${pr.year}-${pad(i + 1)}'})"><span>${i + 1}月</span><b>${n}</b></button>`).join('')}</div>`;
+            }
+            return `<div class="hm-summary"><div><b>${esc(pr.label)}</b>の商談 <b class="hm-big">${base.length}件</b>${parts.length ? `<span class="hm-muted">(${parts.join('・')})</span>` : ''}</div>${months}
+                <div class="kpi-mini">今の商談日で数えています(日程変更前の予定日は数えません。営業成績の画面の「商談予定数」は変更前の予定日も数えるため、数字が違うことがあります)。</div></div>`;
+        })();
         if (full) {
             root.innerHTML = `
                 ${M.syncErr ? `<div class="card hs-warn">${esc(M.syncErr)}</div>` : ''}
@@ -179,15 +227,25 @@
                         <button type="button" class="hm-tab ${MUI.tab === 'sales' ? 'is-on' : ''}" onclick="hmSet({tab:'sales'})" role="tab" aria-selected="${MUI.tab === 'sales'}"><i class="ph ph-chart-bar"></i> 営業成績一覧 <span class="hm-n" id="hm-n-sales"></span></button>
                     </div>
                     <div class="hm-filters">
+                        <div class="hm-period" role="group" aria-label="表示する期間(商談日)">
+                            ${[['all', 'すべて'], ['day', '日'], ['month', '月'], ['year', '年']].map(([v, l]) => `<button type="button" class="hm-pbtn ${MUI.pmode === v ? 'is-on' : ''}" data-pmode="${v}" onclick="hmSet({pmode:'${v}'})">${l}</button>`).join('')}
+                            ${pr ? `<button type="button" class="hm-pnav" onclick="hmShift(-1)" aria-label="前へ">◀</button>
+                                ${MUI.pmode === 'day' ? `<input type="date" class="input-field hm-pick" value="${esc(MUI.pday)}" onchange="if(this.value) hmSet({pday:this.value})">`
+                                : MUI.pmode === 'month' ? `<input type="month" class="input-field hm-pick" value="${esc(MUI.pmonth)}" onchange="if(this.value) hmSet({pmonth:this.value})">`
+                                : `<select class="input-field hm-pick" onchange="hmSet({pyear:this.value})">${Array.from({ length: 6 }, (_, i) => C.jp(Date.now()).y + 1 - i).map(y => `<option ${String(y) === String(MUI.pyear) ? 'selected' : ''}>${y}</option>`).join('')}</select>`}
+                                <button type="button" class="hm-pnav" onclick="hmShift(1)" aria-label="次へ">▶</button>` : ''}
+                        </div>
                         <input type="search" class="input-field hm-q" placeholder="店舗名で探す" value="${esc(MUI.q)}" oninput="hmSet({q:this.value})">
                         ${MUI.tab === 'sheets' ? `<select class="input-field hm-when" onchange="hmSet({when:this.value})">
-                            ${[['all', 'すべての商談日'], ['today', '今日の商談'], ['future', 'これからの商談'], ['missing', '結果未入力'], ['none', '商談日が未入力'], ['past', '過去の商談']].map(([v, l]) => `<option value="${v}" ${MUI.when === v ? 'selected' : ''}>${l}</option>`).join('')}</select>` : ''}
+                            ${[['all', 'すべての状況'], ['today', '今日の商談'], ['future', 'これからの商談'], ['missing', '結果未入力'], ['pending', '返答待ち'], ['none', '商談日が未入力'], ['past', '過去の商談']].map(([v, l]) => `<option value="${v}" ${MUI.when === v ? 'selected' : ''}>${l}</option>`).join('')}</select>` : ''}
                         <label class="hm-check"><input type="checkbox" ${MUI.showExcluded ? 'checked' : ''} onchange="hmSet({showExcluded:this.checked})"> 除外した行も表示</label>
                     </div>
+                    <div id="hm-summary">${summary}</div>
                     <div id="hm-list"></div>
                     <div class="kpi-mini hm-foot">ヒアリングシートは、営業成績に新しい行(分析フォームの完了)が追加されると自動で作られます。店舗名・商談日・成約状況は営業成績のデータをそのまま表示しています。</div>
                 </div>`;
         }
+        if (!full) { const sm = document.getElementById('hm-summary'); if (sm) sm.innerHTML = summary; }
         const ns = document.getElementById('hm-n-sheets'), nr = document.getElementById('hm-n-sales');
         if (ns) ns.textContent = String(vis.filter(x => x.s).length);
         if (nr) nr.textContent = String(vis.length);
@@ -215,19 +273,21 @@
             const rows = salesList.map(({ r, s, repeat }) => {
                 const lb = C.displayLabel(r, now);
                 const extra = r.status === 'won' ? esc(r.plan || '') + (r.wonDate ? ` <span class="hm-muted">(成約日 ${esc(fmtDate(r.wonDate))})</span>` : '')
+                    : r.status === 'pending' ? (r.replyDue ? `返答期限 ${esc(fmtDate(r.replyDue))}` : '<span class="hm-muted">返答期限 未入力</span>')
                     : r.status === 'lost' ? `${r.lostCategory ? `<b>[${esc(r.lostCategory)}]</b> ` : ''}${esc(String(r.lostReason || '').slice(0, 60))}${String(r.lostReason || '').length > 60 ? '…' : ''}` : '';
                 return `<tr class="${r.excluded ? 'hm-ex' : ''}" data-key="${esc(r.key)}">
                     <td class="hm-nowrap">${esc(fmtDT(r.completedAt))}</td>
                     <td>${esc(r.storeName || '(店舗名なし)')}${repeat ? ' <span class="hm-badge">再申込</span>' : ''}${r.excluded ? ' <span class="hm-badge hm-badge-ex">除外中</span>' : ''}</td>
+                    <td>${window.SalesAnalysis.cell(r, 'hm')}</td>
                     <td class="hm-nowrap">${r.meetingAt ? esc(fmtDT(r.meetingAt)) : '<span class="hm-muted">(未入力)</span>'}</td>
                     <td><span class="hs-label ${LABEL_CLS[lb.key]}">${lb.text}</span></td>
                     <td class="hm-extra">${extra}</td>
                     <td class="hm-nowrap">${s ? `<button class="btn-secondary btn-sm" onclick="hmOpen('${s.id}')">シート</button> ` : ''}<button class="btn-secondary btn-sm" onclick="hmOpenSales('${esc(r.key)}')">営業成績で開く</button></td>
                 </tr>`;
             }).join('');
-            el.innerHTML = `<div class="hm-table-wrap"><table class="hm-table"><thead><tr><th>完了日時</th><th>店舗名</th><th>商談日</th><th>成約状況</th><th>成約プラン / 不成約理由</th><th></th></tr></thead>
-                <tbody>${rows || '<tr><td colspan="6" class="hm-empty">該当する行はありません</td></tr>'}</tbody></table></div>
-                <div class="kpi-mini hm-foot">営業成績のデータをそのまま表示しています(ここでは変更できません)。成約状況などの入力は、ヒアリングシートまたは「営業成績」の画面で行ってください。</div>`;
+            el.innerHTML = `<div class="hm-table-wrap"><table class="hm-table"><thead><tr><th>完了日時</th><th>店舗名</th><th>分析データ</th><th>商談日</th><th>成約状況</th><th>成約プラン / 不成約理由 / 返答期限</th><th></th></tr></thead>
+                <tbody>${rows || '<tr><td colspan="7" class="hm-empty">該当する行はありません</td></tr>'}</tbody></table></div>
+                <div class="kpi-mini hm-foot">営業成績のデータをそのまま表示しています。「分析データ」はここでも登録できます。成約状況などの入力は、ヒアリングシートまたは「営業成績」の画面で行ってください。</div>`;
         }
     }
 
@@ -350,6 +410,7 @@
             <option value="won" ${r.status === 'won' && !pend ? 'selected' : ''} ${!r.meetingAt ? 'disabled' : ''}>成約</option>
             <option value="lost" ${r.status === 'lost' && !pend ? 'selected' : ''} ${!r.meetingAt ? 'disabled' : ''}>不成約</option>
             <option value="noshow" ${r.status === 'noshow' && !pend ? 'selected' : ''} ${!r.meetingAt ? 'disabled' : ''}>ドタキャン</option>
+            <option value="pending" ${r.status === 'pending' && !pend ? 'selected' : ''} ${!r.meetingAt ? 'disabled' : ''}>返答待ち</option>
             <option value="reschedule" ${pend ? 'selected' : ''} ${canRes ? '' : 'disabled'}>日程変更</option></select>`;
         const meeting = r.status
             ? `<div class="hs-v">${r.meetingAt ? esc(fmtDT(r.meetingAt)) : '<span class="hm-muted">(未入力)</span>'}</div>`
@@ -359,10 +420,11 @@
             <div class="hs-info-grid">
                 <div class="hs-f hs-f-store"><div class="hs-k">店舗名</div><div class="hs-v hs-store">${esc(r.storeName || '(店舗名なし)')}${r.excluded ? ' <span class="hm-badge hm-badge-ex">除外中</span>' : ''}</div></div>
                 <div class="hs-f"><div class="hs-k">商談日付</div>${meeting}${!r.status && !r.meetingAt ? '<div class="hs-hint">商談日が入ると成約状況を選べます</div>' : ''}${!r.status && r.meetingAt ? '<div class="hs-hint">日程が変わった場合は『日程変更』を選んでください</div>' : ''}</div>
-                <div class="hs-f"><div class="hs-k">成約状況</div>${statusSel}<div><span class="hs-label ${LABEL_CLS[lb.key]}">${lb.text}</span></div></div>
+                <div class="hs-f"><div class="hs-k">成約状況</div>${statusSel}<div><span class="hs-label ${LABEL_CLS[lb.key]}">${lb.text}</span></div>
+                    ${r.status === 'pending' ? `<label class="hs-due">返答期限<input type="date" id="hs-replydue" class="input-field" value="${esc(r.replyDue || '')}" onchange="hsReplyDue(this.value)"></label>${r.replyDue ? '' : '<div class="hs-hint">返答期限を入れると、その日にタスクが出ます</div>'}` : ''}</div>
                 <div class="hs-f"><div class="hs-k">商談担当者</div><input type="text" id="hs-owner" class="input-field" list="hs-owner-list" data-field="owner" value="${esc(val('owner'))}" placeholder="担当者名" autocomplete="off"><datalist id="hs-owner-list">${ownerList.map(n => `<option value="${esc(n)}">`).join('')}</datalist>${H.myName && !val('owner') ? `<button type="button" class="hs-me" onclick="hsOwnerMe()">自分(${esc(H.myName)})にする</button>` : ''}${conflictHtml('owner')}</div>
                 <div class="hs-f"><div class="hs-k">進捗</div><div class="hm-pg hs-pg"><div class="hm-pg-bar"><i style="width:${pg.pct}%"></i></div><b id="hs-pct">${pg.pct}%</b><span class="hm-muted">(${pg.done}/${pg.total})</span></div></div>
-                <div class="hs-f"><div class="hs-k">保存状態</div><div id="hs-save" class="hs-save" aria-live="polite"></div><div class="hs-updated" id="hs-updated">${updatedText()}</div></div>
+                <div class="hs-f"><div class="hs-k">保存状態</div><div class="hs-save-row"><div id="hs-save" class="hs-save" aria-live="polite"></div><button type="button" id="hs-save-btn" class="btn-primary btn-sm hs-save-btn" onclick="hsSaveNow()"><i class="ph ph-floppy-disk"></i> 保存</button></div><div class="hs-updated" id="hs-updated">${updatedText()}</div></div>
             </div>
             ${pend ? `<div class="hs-newdate"><b>${pend === 'readjust' ? '再調整後' : '変更後'}の新しい商談日</b>
                 <input type="datetime-local" id="hs-newdate" class="input-field" style="width:auto;">
@@ -633,6 +695,7 @@
     //   保存直前に最新を読み、その操作に関係する項目をほかの人が先に変えていたら保存しない(最新を表示し直す)
     const GUARD = {
         setStatus: ['status', 'meetingAt'], reschedule: ['status', 'meetingAt'], readjust: ['status', 'meetingAt'], setMeeting: ['status', 'meetingAt'],
+        setReplyDue: ['replyDue', 'status'],
         setPlan: ['plan', 'status'], setWonDate: ['wonDate', 'status'], setLostCategory: ['lostCategory', 'status'], setLostReason: ['lostReason']
     };
     async function recAct(action, payload) {
@@ -822,11 +885,287 @@
     window.hsPlan = (v) => recAct('setPlan', { plan: v });
     window.hsWonDate = (v) => recAct('setWonDate', { date: v });
     window.hsLostCat = (v) => recAct('setLostCategory', { category: v });
+    window.hsReplyDue = (v) => recAct('setReplyDue', { date: v });
+    // 保存ボタン: 待たずにすぐ保存する(自動保存はそのまま)
+    window.hsSaveNow = async () => {
+        if (!H) return;
+        const btn = document.getElementById('hs-save-btn');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> 保存中…'; }
+        clearTimeout(H.timer);
+        // 入力中の欄の内容も取りこぼさない
+        const a = document.activeElement;
+        const f = a && a.getAttribute && a.getAttribute('data-field');
+        if (f && a.type !== 'checkbox' && !same(a.value, val(f)) && !H.conflicts[f]) { H.dirty[f] = a.value; writeDraft(); }
+        let guard = 0;
+        do { await flush(); if (H.saving) await new Promise(r => setTimeout(r, 200)); guard++; } while (H && (H.saving || Object.keys(H.dirty).length) && H.state !== 'error' && guard < 20);
+        const b = document.getElementById('hs-save-btn');
+        if (!b) return;
+        const ok = H.state === 'saved';
+        b.disabled = false;
+        b.innerHTML = ok ? '<i class="ph ph-check"></i> 保存しました' : '<i class="ph ph-floppy-disk"></i> 保存';
+        if (ok) setTimeout(() => { const c = document.getElementById('hs-save-btn'); if (c) c.innerHTML = '<i class="ph ph-floppy-disk"></i> 保存'; }, 2000);
+        else if (H.state === 'error') alert('保存できませんでした。' + (H.err ? `(${H.err})` : '') + ' 入力はこの端末に一時保管しています。通信状態を確認して、もう一度「保存」を押してください。');
+        else if (H.state === 'conflict') alert('ほかの画面で先に更新された欄があります。赤い枠の中で、どちらの内容を残すか選んでください。');
+    };
+
+    // ---------- 分析データ(HTMLリンク・キーワード分析・費用対効果シミュレーション) ----------
+    //   URLとファイルの情報(名前・種類・日時)は営業成績の行(sales_record.analysis)に、
+    //   ファイル本体は別の行(customers.service_type='sales_file'、id は営業成績の行と種類から決まる値)に保存する。
+    //   ※ 営業成績の一覧を開くたびに大きな画像を読み込まないよう、本体は開いたときだけ読む
+    const AKINDS = ['html', 'keyword', 'roi'];
+    const FILE_MAX = 10 * 1024 * 1024;   // 選べる元のファイルの大きさ(10MBまで)
+    const STORE_MAX = 7 * 1024 * 1024;   // 保存する大きさ(文字数。画像は自動で縮小する)
+    const SA = window.SalesAnalysis = window.SalesAnalysis || {};
+    let saRec = null;
+    const saCache = {};   // fileId|at → { type, dataUrl }
+    SA.chips = (r) => {
+        const a = (r && r.analysis) || {};
+        return AKINDS.map(k => `<span class="sa-chip ${a[k] ? 'is-on' : ''}" title="${esc(C.ANALYSIS_KINDS[k])}${a[k] ? '(登録済み)' : '(未登録)'}">${k === 'html' ? 'HTML' : k === 'keyword' ? 'KW' : '費用'}</span>`).join('');
+    };
+    SA.cell = (r) => `<button type="button" class="sa-cell" data-sa="${esc(r.id)}" onclick="SalesAnalysis.open('${esc(r.id)}')"><span class="sa-cell-t"><i class="ph ph-folder-open"></i> 分析データ</span><span class="sa-chips">${SA.chips(r)}</span></button>`;
+    SA.listener = null;   // 表示中のページが「行が変わった」ことを受け取る
+
+    SA.open = async (id) => {
+        try {
+            const row = await Store.salesGetRow('customers', id);
+            if (!row || !row.data) { alert('営業成績の行が見つかりませんでした。再読み込みしてください。'); return; }
+            saRec = { ...row.data, id: row.id };
+        } catch (e) { alert(e.message || '読み込めませんでした。'); return; }
+        saRender();
+    };
+    function saClose() { const o = document.getElementById('sa-modal'); if (o) o.remove(); const v = document.getElementById('sa-viewer'); if (v) v.remove(); saRec = null; }
+    SA.close = saClose;
+    function saMsg(t, err) { const el = document.getElementById('sa-msg'); if (el) { el.textContent = t || ''; el.className = `sa-msg ${err ? 'is-err' : ''}`; } }
+    function saRender() {
+        if (!saRec) return;
+        let ov = document.getElementById('sa-modal');
+        if (!ov) {
+            ov = document.createElement('div');
+            ov.id = 'sa-modal'; ov.className = 'sa-overlay';
+            ov.addEventListener('click', (e) => { if (e.target === ov) saClose(); });
+            // 枠の外にファイルを落としても、ブラウザがそのファイルを開いてしまわないようにする
+            ov.addEventListener('dragover', (e) => e.preventDefault());
+            ov.addEventListener('drop', (e) => e.preventDefault());
+            document.body.appendChild(ov);
+        }
+        const a = saRec.analysis || {};
+        const item = (k) => {
+            const meta = a[k];
+            if (k === 'html') {
+                return `<div class="sa-item" data-kind="html">
+                    <div class="sa-item-head">${meta ? `<a class="sa-name is-on" href="${esc(meta)}" target="_blank" rel="noopener noreferrer"><i class="ph ph-arrow-square-out"></i> HTML</a>` : '<span class="sa-name">HTML</span>'}<span class="sa-sub">${meta ? 'クリックで、登録したページを新しいタブで開きます' : 'まだ登録されていません'}</span></div>
+                    <div class="sa-row"><input type="url" id="sa-url" class="input-field" placeholder="https:// から始まるリンクを貼り付け" value="${esc(meta || '')}">
+                        <button type="button" class="btn-primary btn-sm" onclick="saSaveUrl()">保存</button>${meta ? '<button type="button" class="btn-secondary btn-sm" onclick="saDel(\'html\')">削除</button>' : ''}</div>
+                </div>`;
+            }
+            const label = C.ANALYSIS_KINDS[k];
+            return `<div class="sa-item" data-kind="${k}">
+                <div class="sa-item-head">${meta ? `<button type="button" class="sa-name is-on" onclick="saView('${k}')"><i class="ph ph-image"></i> ${esc(label)}</button>` : `<span class="sa-name">${esc(label)}</span>`}<span class="sa-sub">${meta ? 'クリックで、保存した画像(PDF)を表示します' : 'まだ登録されていません'}</span></div>
+                ${meta ? `<div class="sa-file"><button type="button" class="sa-thumb-btn" onclick="saView('${k}')">${meta.type === 'application/pdf' ? '<span class="sa-pdf">PDF</span>' : `<img class="sa-thumb" id="sa-thumb-${k}" alt="${esc(label)}">`}</button>
+                    <div class="sa-file-info"><b>${esc(meta.name || '')}</b><span>${esc(fmtDT(meta.at))} ・ ${esc(meta.by || '')}</span>
+                    <div class="sa-row"><button type="button" class="btn-secondary btn-sm" onclick="saView('${k}')">表示</button><button type="button" class="btn-secondary btn-sm" onclick="saDel('${k}')">削除</button></div></div></div>` : ''}
+                <div class="sa-drop" data-kind="${k}" tabindex="0" role="button" aria-label="${esc(label)}のファイルを選ぶ">
+                    <i class="ph ph-upload-simple"></i><div>ここに画像・PDFをドラッグ＆ドロップ<br><span>またはクリックしてファイルを選択${meta ? '(差し替え)' : ''}</span></div>
+                    <input type="file" class="sa-file-in" data-kind="${k}" accept="image/png,image/jpeg,image/webp,image/gif,application/pdf" hidden>
+                </div>
+            </div>`;
+        };
+        ov.innerHTML = `<div class="sa-dialog" role="dialog" aria-label="分析データ">
+            <div class="sa-head"><b>分析データ：${esc(saRec.storeName || '(店舗名なし)')}</b><button type="button" class="btn-icon" onclick="SalesAnalysis.close()" aria-label="閉じる"><i class="ph ph-x"></i></button></div>
+            ${AKINDS.map(item).join('')}
+            <div id="sa-msg" class="sa-msg"></div>
+            <div class="sa-foot"><button type="button" class="btn-secondary" onclick="SalesAnalysis.close()">閉じる</button></div>
+        </div>${SA_STYLE}`;
+        ov.querySelectorAll('.sa-drop').forEach(z => {
+            const k = z.getAttribute('data-kind');
+            const inp = z.querySelector('input[type=file]');
+            z.addEventListener('click', (e) => { if (e.target !== inp) inp.click(); });
+            z.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); inp.click(); } });
+            z.addEventListener('dragover', (e) => { e.preventDefault(); z.classList.add('is-over'); });
+            z.addEventListener('dragleave', () => z.classList.remove('is-over'));
+            z.addEventListener('drop', (e) => { e.preventDefault(); z.classList.remove('is-over'); const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (f) saUpload(k, f); });
+            inp.addEventListener('change', () => { const f = inp.files && inp.files[0]; if (f) saUpload(k, f); inp.value = ''; });
+        });
+        // 画像の小さな表示(本体を読む)
+        ['keyword', 'roi'].forEach(async (k) => {
+            const meta = a[k];
+            if (!meta || meta.type === 'application/pdf') return;
+            try { const f = await saLoad(meta); const img = document.getElementById(`sa-thumb-${k}`); if (img && f) img.src = f.dataUrl; } catch (e) { console.error(e); }
+        });
+    }
+    async function saLoad(meta) {
+        const ck = `${meta.fileId}|${meta.at}`;
+        if (saCache[ck]) return saCache[ck];
+        const row = await Store.salesGetRow('customers', meta.fileId);
+        if (!row || !row.data || !row.data.dataUrl) throw new Error('保存したファイルが見つかりませんでした。もう一度アップロードしてください。');
+        saCache[ck] = { type: row.data.type, dataUrl: row.data.dataUrl, name: row.data.name };
+        return saCache[ck];
+    }
+    const readUrl = (file) => new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => rej(new Error('ファイルを読み込めませんでした。')); fr.readAsDataURL(file); });
+    const loadImg = (url) => new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => rej(new Error('画像を読み込めませんでした(壊れているか、対応していない形式です)。')); im.src = url; });
+    // 保存する形にする(大きな画像は長い辺2400pxまで縮小。PDFはそのまま)
+    async function saPrepare(file) {
+        const type = file.type || '';
+        if (file.size > FILE_MAX) throw new Error('ファイルが大きすぎます(10MBまで)。');
+        if (type === 'application/pdf') {
+            const url = await readUrl(file);
+            if (url.length > STORE_MAX) throw new Error('PDFが大きすぎます(約5MBまで)。ページを減らすか、画像にしてからアップロードしてください。');
+            return { type, dataUrl: url };
+        }
+        if (!/^image\/(png|jpeg|webp|gif)$/.test(type)) throw new Error('画像(PNG・JPEG・WebP・GIF)かPDFを選んでください。');
+        let url = await readUrl(file), outType = type;
+        if (type !== 'image/gif') {
+            const im = await loadImg(url);
+            const MAXS = 2400, sc = Math.min(1, MAXS / Math.max(im.naturalWidth || 1, im.naturalHeight || 1));
+            if (sc < 1 || url.length > 1.5 * 1024 * 1024) {
+                const cv = document.createElement('canvas');
+                cv.width = Math.max(1, Math.round(im.naturalWidth * sc)); cv.height = Math.max(1, Math.round(im.naturalHeight * sc));
+                const g = cv.getContext('2d');
+                g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height);   // 透明な部分は白にする
+                g.drawImage(im, 0, 0, cv.width, cv.height);
+                const jpg = cv.toDataURL('image/jpeg', 0.9);
+                if (sc < 1 || jpg.length < url.length) { url = jpg; outType = 'image/jpeg'; }
+            }
+        }
+        if (url.length > STORE_MAX) throw new Error('画像が大きすぎます。');
+        return { type: outType, dataUrl: url };
+    }
+    // 営業成績の行の分析データを保存(保存直前に最新を読み、同じ欄がほかで変わっていたら保存しない)
+    async function saSetMeta(kind, value) {
+        const row = await Store.salesGetRow('customers', saRec.id);
+        if (!row || !row.data) throw new Error('営業成績の行が見つかりませんでした。');
+        const latest = row.data;
+        if (JSON.stringify(((latest.analysis || {})[kind]) || null) !== JSON.stringify(((saRec.analysis || {})[kind]) || null)) {
+            saRec = { ...latest, id: saRec.id }; saRender();
+            throw new Error('この分析データは、ほかの画面で先に更新されていました。最新の内容を表示し直したので、もう一度操作してください。');
+        }
+        const user = Auth.getCurrentUser();
+        const r = C.applyAction(latest, 'setAnalysis', { kind, value }, user && user.email || '', Date.now());
+        if (r.error) throw new Error(r.error);
+        if (JSON.stringify(r.data) !== JSON.stringify(latest)) {
+            await Store.salesUpdateData('customers', saRec.id, r.data);
+            const again = await Store.salesGetRow('customers', saRec.id);
+            if (!again || !again.data || again.data.updatedAt !== r.data.updatedAt) throw new Error('保存した内容を確認できませんでした。通信状態を確認してください。');
+            saRec = { ...again.data, id: saRec.id };
+        }
+        if (typeof SA.listener === 'function') { try { SA.listener({ ...saRec }); } catch (e) { console.error(e); } }
+        saRender();
+    }
+    window.saSaveUrl = async () => {
+        const inp = document.getElementById('sa-url');
+        const v = inp ? inp.value.trim() : '';
+        if (!v) { saMsg('リンクを入力してください。', true); return; }
+        try { saMsg('保存中…'); await saSetMeta('html', v); saMsg('HTMLのリンクを保存しました。'); } catch (e) { saMsg(e.message || '保存できませんでした。', true); }
+    };
+    window.saDel = async (k) => {
+        if (!saRec) return;
+        if (!confirm(`${C.ANALYSIS_KINDS[k]}を削除します。よろしいですか？`)) return;
+        const meta = (saRec.analysis || {})[k];
+        try {
+            saMsg('削除中…');
+            await saSetMeta(k, null);
+            if (k !== 'html' && meta && meta.fileId) { try { await Store.salesDeleteFile(meta.fileId); } catch (e) { console.error(e); } }
+            saMsg(`${C.ANALYSIS_KINDS[k]}を削除しました。`);
+        } catch (e) { saMsg(e.message || '削除できませんでした。', true); }
+    };
+    async function saUpload(k, file) {
+        if (!saRec) return;
+        const zone = document.querySelector(`#sa-modal .sa-drop[data-kind="${k}"]`);
+        if (zone) zone.classList.add('is-busy');
+        try {
+            saMsg(`${C.ANALYSIS_KINDS[k]}をアップロード中…`);
+            const p = await saPrepare(file);
+            const user = Auth.getCurrentUser();
+            const fid = C.fileIdFor(saRec.key, k), at = new Date().toISOString();
+            const name = String(file.name || 'ファイル').slice(0, 200);
+            await Store.salesUpsert('customers', [{ id: fid, service_type: C.SERVICE_FILE, data: { salesKey: saRec.key, salesRecordId: Number(saRec.id), kind: k, name, type: p.type, size: p.dataUrl.length, dataUrl: p.dataUrl, at, by: user && user.email || '' } }]);
+            const back = await Store.salesGetRow('customers', fid);
+            if (!back || !back.data || back.data.at !== at || (back.data.dataUrl || '').length !== p.dataUrl.length) throw new Error('アップロードしたファイルを確認できませんでした。通信状態を確認して、もう一度お試しください。');
+            saCache[`${fid}|${at}`] = { type: p.type, dataUrl: p.dataUrl, name };
+            await saSetMeta(k, { fileId: fid, name, type: p.type, size: p.dataUrl.length, at });
+            saMsg(`${C.ANALYSIS_KINDS[k]}を保存しました。`);
+        } catch (e) {
+            console.error(e);
+            saMsg(e.message || 'アップロードできませんでした。', true);
+            const z = document.querySelector(`#sa-modal .sa-drop[data-kind="${k}"]`); if (z) z.classList.remove('is-busy');
+        }
+    }
+    // 保存した画像・PDFを大きく表示
+    window.saView = async (k) => {
+        const meta = saRec && (saRec.analysis || {})[k];
+        if (!meta) return;
+        let f;
+        try { saMsg('読み込み中…'); f = await saLoad(meta); saMsg(''); } catch (e) { saMsg(e.message, true); return; }
+        const old = document.getElementById('sa-viewer'); if (old) old.remove();
+        const v = document.createElement('div');
+        v.id = 'sa-viewer'; v.className = 'sa-viewer';
+        let src = f.dataUrl;
+        if (f.type === 'application/pdf') {
+            // PDF は blob の URL にして表示(data: のままだとブラウザが表示を止めることがある)
+            const b64 = f.dataUrl.split(',')[1] || '';
+            const bin = atob(b64); const u8 = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+            src = URL.createObjectURL(new Blob([u8], { type: 'application/pdf' }));
+        }
+        v.innerHTML = `<div class="sa-v-head"><b>${esc(C.ANALYSIS_KINDS[k])}：${esc(saRec.storeName || '')}</b><span class="sa-v-name">${esc(meta.name || '')}</span>
+                <a class="btn-secondary btn-sm" href="${esc(src)}" target="_blank" rel="noopener" ${f.type === 'application/pdf' ? '' : `download="${esc(meta.name || 'image')}"`}>${f.type === 'application/pdf' ? '新しいタブで開く' : '画像を保存'}</a>
+                <button type="button" class="btn-primary btn-sm" id="sa-v-close">閉じる</button></div>
+            <div class="sa-v-body">${f.type === 'application/pdf' ? `<iframe src="${esc(src)}" title="${esc(meta.name || 'PDF')}"></iframe>` : `<img src="${esc(src)}" alt="${esc(C.ANALYSIS_KINDS[k])}">`}</div>`;
+        document.body.appendChild(v);
+        const close = () => { v.remove(); if (src.startsWith('blob:')) setTimeout(() => URL.revokeObjectURL(src), 60000); document.removeEventListener('keydown', esc1); };
+        const esc1 = (e) => { if (e.key === 'Escape') close(); };
+        document.addEventListener('keydown', esc1);
+        v.querySelector('#sa-v-close').onclick = close;
+        v.addEventListener('click', (e) => { if (e.target === v || e.target.classList.contains('sa-v-body')) close(); });
+    };
+    const SA_STYLE = `<style>
+        .sa-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1000; display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; }
+        .sa-dialog { background: #fff; border-radius: 14px; width: 100%; max-width: 640px; padding: 18px 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); }
+        .sa-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 1.05rem; }
+        .sa-head .btn-icon { font-size: 1.1rem; }
+        .sa-item { border: 1px solid #E9ECEF; border-radius: 12px; padding: 12px 14px; margin-top: 10px; }
+        .sa-item-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+        .sa-name { font-weight: 800; font-size: 1rem; color: #495057; border: none; background: none; padding: 0; font-family: inherit; }
+        .sa-name.is-on { color: #1C7ED6; cursor: pointer; text-decoration: underline; display: inline-flex; align-items: center; gap: 4px; }
+        .sa-sub { font-size: 0.75rem; color: #868E96; }
+        .sa-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .sa-row .input-field { flex: 1; min-width: 200px; margin: 0; height: 38px; padding: 6px 10px; font-size: 0.9rem; border: 1px solid #CED4DA; border-radius: 8px; box-sizing: border-box; }
+        .sa-foot { display: flex; justify-content: flex-end; margin-top: 10px; }
+        .sa-drop { border: 2px dashed #ADB5BD; border-radius: 10px; padding: 16px; text-align: center; color: #495057; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 0.9rem; background: #F8F9FA; margin-top: 8px; }
+        .sa-drop span { font-size: 0.78rem; color: #868E96; }
+        .sa-drop i { font-size: 1.6rem; }
+        .sa-drop:hover, .sa-drop:focus { border-color: #1C7ED6; outline: none; }
+        .sa-drop.is-over { border-color: #1C7ED6; background: #E7F5FF; }
+        .sa-drop.is-busy { opacity: 0.5; pointer-events: none; }
+        .sa-file { display: flex; gap: 12px; align-items: center; }
+        .sa-thumb-btn { border: 1px solid #DEE2E6; background: #fff; border-radius: 8px; padding: 0; cursor: pointer; width: 120px; height: 84px; overflow: hidden; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+        .sa-thumb { width: 100%; height: 100%; object-fit: cover; }
+        .sa-pdf { font-weight: 800; color: #C92A2A; font-size: 1.1rem; }
+        .sa-file-info { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; min-width: 0; word-break: break-all; }
+        .sa-file-info span { color: #868E96; font-size: 0.75rem; }
+        .sa-msg { margin-top: 10px; font-size: 0.85rem; color: #2B8A3E; min-height: 1.2em; }
+        .sa-msg.is-err { color: #C92A2A; }
+        .sa-viewer { position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 1100; display: flex; flex-direction: column; }
+        .sa-v-head { display: flex; align-items: center; gap: 10px; padding: 10px 16px; background: #fff; flex-wrap: wrap; }
+        .sa-v-name { color: #868E96; font-size: 0.8rem; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .sa-v-body { flex: 1; overflow: auto; display: flex; justify-content: center; align-items: flex-start; padding: 16px; }
+        .sa-v-body img { max-width: 100%; height: auto; background: #fff; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+        .sa-v-body iframe { width: 100%; height: 100%; min-height: 70vh; border: none; background: #fff; }
+        .sa-cell { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 3px; border: 1px solid #DEE2E6; background: #fff; border-radius: 8px; padding: 4px 8px; cursor: pointer; font-family: inherit; white-space: nowrap; }
+        .sa-cell:hover { border-color: #1C7ED6; }
+        .sa-cell-t { font-size: 0.75rem; font-weight: 700; color: #1C7ED6; }
+        .sa-chips { display: inline-flex; gap: 3px; }
+        .sa-chip { font-size: 0.62rem; padding: 0 5px; border-radius: 6px; background: #F1F3F5; color: #ADB5BD; font-weight: 700; }
+        .sa-chip.is-on { background: #D3F9D8; color: #2B8A3E; }
+        @media (max-width: 520px) { .sa-overlay { padding: 12px 8px; } .sa-dialog { padding: 14px; } .sa-file { flex-direction: column; align-items: flex-start; } }
+    </style>`;
+    SA.STYLE = SA_STYLE;
 
     // テスト用に中身を公開(画面の動作には使わない)
     window.HearingInternals = { get H() { return H; }, flush, refreshFromServer, M, MUI, loadAll };
 
     const STYLE = `<style>
+        #hm-root .kpi-mini, #hs-root .kpi-mini { font-size: 0.75rem; color: #868E96; line-height: 1.55; }
         .hs-warn { padding: 12px 16px; margin-bottom: 12px; border-left: 4px solid #F59F00; background: #FFF9DB; border-radius: 8px; font-size: 0.85rem; line-height: 1.7; }
         .hm-card { padding: 16px 18px; }
         .hm-tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--border-light, #e9ecef); margin-bottom: 12px; flex-wrap: wrap; }
@@ -856,7 +1195,20 @@
         .hm-extra { font-size: 0.82rem; max-width: 320px; }
         .hm-foot { margin-top: 10px; }
         .hs-label { display: inline-block; font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 10px; background: #F1F3F5; color: #495057; margin-top: 4px; }
-        .hs-lb-won { background: #D3F9D8; color: #2B8A3E; } .hs-lb-lost { background: #FFE3E3; color: #C92A2A; } .hs-lb-noshow { background: #FFF3BF; color: #8F5B00; }
+        .hs-lb-won { background: #D3F9D8; color: #2B8A3E; } .hs-lb-lost { background: #FFE3E3; color: #C92A2A; } .hs-lb-noshow { background: #FFF3BF; color: #8F5B00; } .hs-lb-pending { background: #F3F0FF; color: #6741D9; }
+        .hs-due { display: flex; flex-direction: column; font-size: 0.72rem; font-weight: 700; color: #6741D9; margin-top: 6px; gap: 2px; }
+        .hs-save-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .hs-save-btn { white-space: nowrap; }
+        .hm-period { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+        .hm-pbtn { border: 1px solid #DEE2E6; background: #fff; padding: 6px 12px; border-radius: 8px; font-size: 0.85rem; font-weight: 700; cursor: pointer; font-family: inherit; }
+        .hm-pbtn.is-on { background: var(--primary, #111); color: #fff; border-color: var(--primary, #111); }
+        .hm-pnav { border: 1px solid #DEE2E6; background: #fff; border-radius: 8px; padding: 6px 8px; cursor: pointer; font-size: 0.75rem; }
+        .hm-filters .hm-pick { min-width: 0; }
+        .hm-summary { background: #F8F9FA; border-radius: 10px; padding: 10px 14px; margin-bottom: 10px; font-size: 0.9rem; }
+        .hm-big { font-size: 1.15rem; margin: 0 4px; }
+        .hm-months { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 4px; margin: 8px 0 4px; }
+        .hm-month { border: 1px solid #DEE2E6; background: #fff; border-radius: 8px; padding: 4px 0; cursor: pointer; font-family: inherit; display: flex; flex-direction: column; align-items: center; font-size: 0.72rem; }
+        .hm-month b { font-size: 1rem; } .hm-month.is-zero { color: #ADB5BD; }
         .hs-lb-plan { background: #E7F5FF; color: #1971C2; } .hs-lb-adj { background: #F1F3F5; color: #495057; } .hs-lb-miss { background: #FFE8CC; color: #D9480F; }
 
         .hs-root { margin-top: -24px; }
@@ -951,6 +1303,8 @@
             .hs-cols[data-tab="input"] .hs-left { display: none; }
             .hs-nav { top: 40px; }
         }
-        @media (max-width: 520px) { .hs-info-grid { gap: 10px 12px; } .hs-info-grid .hs-f:nth-child(2) { grid-column: 1 / -1; } .hm-filters .input-field { min-width: 0; width: 100%; } }
+        @media (max-width: 700px) { .hm-months { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+        @media (max-width: 520px) { .hm-period { width: 100%; flex-wrap: nowrap; } .hm-filters .hm-period .input-field.hm-pick { width: auto; flex: 1; min-width: 0; } .hm-pbtn { padding: 6px 10px; }
+            .hs-info-grid { gap: 10px 12px; } .hs-info-grid .hs-f:nth-child(2) { grid-column: 1 / -1; } .hm-filters .input-field { min-width: 0; width: 100%; } }
     </style>`;
 })();

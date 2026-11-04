@@ -27,7 +27,7 @@
         poor: { icon: '🔴', label: '要改善', cls: 'poor' }, hold: { icon: '⚪', label: '判定保留', cls: 'hold' }, na: { icon: '⚪', label: '算出不可', cls: 'na' }
     };
     const GCOL = { good: '#2F9E44', normal: '#F59F00', poor: '#E03131', hold: '#ADB5BD', na: '#868E96' };   // KPI状況のゲージと同じ色
-    const LABEL_CLS = { won: 'sp-lb-won', lost: 'sp-lb-lost', noshow: 'sp-lb-noshow', adjusting: 'sp-lb-adj', planned: 'sp-lb-plan', missing: 'sp-lb-miss' };
+    const LABEL_CLS = { won: 'sp-lb-won', lost: 'sp-lb-lost', noshow: 'sp-lb-noshow', pending: 'sp-lb-pending', adjusting: 'sp-lb-adj', planned: 'sp-lb-plan', missing: 'sp-lb-miss' };
 
     const UI = window.SalesUiState = window.SalesUiState || { mode: 'monthly', sub: 'this', day: '', month: '', from: '', to: '', basis: 'all', status: 'all', q: '', showExcluded: false };
     const S = { records: [], settings: { rowId: null, data: { months: {} } }, submissions: [], form: null, loadErr: '', syncInfo: null, pending: {}, focusKey: null, newCount: 0 };
@@ -143,7 +143,7 @@
         try { await syncResponses(); } catch (e) { console.error(e); S.loadErr = e.message || '同期に失敗しました。'; }
         try { await syncTasks(S.records); } catch (e) { console.error(e); }
 
-        App.mount(`<div id="sp-root"></div><div id="sp-toast" class="sp-toast"></div>${STYLE}`, () => {
+        App.mount(`<div id="sp-root"></div><div id="sp-toast" class="sp-toast"></div>${STYLE}${(window.SalesAnalysis && window.SalesAnalysis.STYLE) || ''}`, () => {
             bindGlobals();
             render();
             if (S.focusKey) setTimeout(() => {
@@ -210,6 +210,7 @@
         window.spWonDate = (id, v) => act(id, 'setWonDate', { date: v });
         window.spReason = (id, v) => act(id, 'setLostReason', { reason: v });
         window.spLostCat = (id, v) => act(id, 'setLostCategory', { category: v });
+        window.spReplyDue = (id, v) => act(id, 'setReplyDue', { date: v });
         window.spExclude = (id, v) => {
             if (v && !confirm('この行を営業成績から除外します(集計に入れません)。あとで取り消せます。よろしいですか？')) return;
             act(id, 'exclude', { excluded: v });
@@ -219,6 +220,15 @@
         window.spOpenGoals = () => openGoals();
         window.spCsv = () => downloadCsv();
         window.spFilter = (patch) => { Object.assign(UI, patch); renderList(); };
+        // 分析データ(js/pages/sales_hub.js)を保存したら、この一覧の行も最新にする
+        if (window.SalesAnalysis) window.SalesAnalysis.listener = (rec) => {
+            if (!document.getElementById('sp-root')) return;
+            const r = S.records.find(x => String(x.id) === String(rec.id));
+            if (!r) return;
+            Object.keys(r).forEach(k => { if (k !== 'id') delete r[k]; });
+            Object.assign(r, rec, { id: r.id });
+            renderList();
+        };
     }
 
     // ---------- 期間 ----------
@@ -415,14 +425,15 @@
     const CARDS = [
         { key: 'completed', label: '診断完了数', tip: '分析フォームの完了日時が期間内の件数' },
         { key: 'scheduled', label: '商談予定数', tip: '商談の予定日が期間内の件数。日程変更・ドタキャンの前の予定日も、その日の分として数えます(入力の修正は数えません)' },
-        { key: 'held', label: '商談数(実施)', tip: '商談の予定日が期間内で、成約または不成約になった件数' },
+        { key: 'held', label: '商談数(実施)', tip: '商談の予定日が期間内で、成約・不成約・返答待ちになった件数' },
         { key: 'noshow', label: 'ドタキャン数', tip: '予定日が期間内の商談のうちドタキャン' },
         { key: 'reschedule', label: '日程変更数', tip: '予定日が期間内の商談のうち日程変更' },
         { key: 'lost', label: '不成約数', tip: '予定日が期間内の商談のうち不成約' },
+        { key: 'pending', label: '返答待ち数', tip: '予定日が期間内の商談のうち、今「返答待ち」のもの(成約・不成約が決まると移ります)' },
         { key: 'won', label: '成約数', tip: '成約日が期間内の件数' },
         { key: 'heldRate', label: '実施率', rate: ['held', 'scheduled'], tip: '商談数 ÷ 商談予定数' },
         { key: 'noshowRate', label: 'ドタキャン率', rate: ['noshow', 'scheduled'], tip: 'ドタキャン数 ÷ 商談予定数' },
-        { key: 'winRate', label: '成約率', rate: ['wonByMeeting', 'held'], tip: '予定日が期間内の商談のうち、実施した商談(成約+不成約)に占める成約の割合。分子も商談の予定日で数えるので、月をまたいでも100%を超えません' },
+        { key: 'winRate', label: '成約率', rate: ['wonByMeeting', 'decided'], tip: '予定日が期間内の商談のうち、結果が決まった商談(成約+不成約)に占める成約の割合。返答待ちは結果が決まるまで入れません。分子も商談の予定日で数えるので、月をまたいでも100%を超えません' },
         { key: 'completeToWonRate', label: '完了→成約率', rate: ['won', 'completed'], tip: '成約数 ÷ 診断完了数' }
     ];
     function cardsHtml(cur, prev, p, pw) {
@@ -473,7 +484,7 @@
         return `<div class="kpi-sec-title">営業改善のための見方</div>
         <div class="sp-insight">
             <div class="card sp-ins-card"><div class="sp-ins-title">診断完了 → 商談日までの平均日数(商談の予定日が期間内)</div>
-                <div class="sp-avg"><div>ドタキャン ${d(m.avgDays.noshow, m.nDays.noshow)}</div><div>実施(成約+不成約) ${d(m.avgDays.held, m.nDays.held)}</div><div>成約 ${d(m.avgDays.won, m.nDays.won)}</div></div>
+                <div class="sp-avg"><div>ドタキャン ${d(m.avgDays.noshow, m.nDays.noshow)}</div><div>実施(成約+不成約+返答待ち) ${d(m.avgDays.held, m.nDays.held)}</div><div>成約 ${d(m.avgDays.won, m.nDays.won)}</div></div>
                 <div class="kpi-note">日程の空き(完了から商談までの日数)がドタキャンに影響しているかを比べるための数字です。件数が少ないうちは参考程度に見てください。</div></div>
             <div class="card sp-ins-card"><div class="sp-ins-title">不成約理由の一覧(商談の予定日が期間内・${lost.length}件)</div>
                 ${lost.length ? `<div class="sp-reasons">${lost.map(x => `<div class="sp-reason-item"><div class="sp-reason-head"><button class="sp-link" onclick="spOpenDetail('${x.r.id}')">${esc(x.r.storeName || '(店舗名なし)')}</button><span>${fmtD(new Date(x.t).toISOString())}</span></div><div class="sp-reason-text">${x.r.lostCategory ? `<b>[${esc(x.r.lostCategory)}]</b> ` : ''}${esc(x.r.lostReason || (x.r.lostCategory ? '' : '(理由未入力)'))}</div></div>`).join('')}</div>` : '<div class="kpi-note">この期間の不成約はありません。</div>'}
@@ -493,7 +504,7 @@
             if (q && !(r.storeKey || '').includes(q)) return false;
             const lb = C.displayLabel(r, now).key;
             if (UI.status === 'unset' && r.status) return false;
-            if (['adjusting', 'planned', 'missing', 'won', 'lost', 'noshow'].includes(UI.status) && lb !== UI.status) return false;
+            if (['adjusting', 'planned', 'missing', 'won', 'lost', 'noshow', 'pending'].includes(UI.status) && lb !== UI.status) return false;
             if (UI.status === 'trouble' && !(r.meetings || []).some(m => m.outcome === 'noshow' || m.outcome === 'reschedule')) return false;
             return true;
         }).map(r => ({ r, repeat: rep.has(r.key) })).sort((a, b) => toMs(b.r.completedAt) - toMs(a.r.completedAt));
@@ -503,7 +514,7 @@
         const opt = (v, l, cur) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${l}</option>`;
         return `<div class="sp-filters">
             <label>期間 <select onchange="spFilter({ basis: this.value })">${opt('all', 'すべての期間', UI.basis)}${opt('completed', '完了日時が表示中の期間', UI.basis)}${opt('meeting', '商談日が表示中の期間', UI.basis)}</select></label>
-            <label>成約状況 <select onchange="spFilter({ status: this.value })">${opt('all', 'すべて', UI.status)}${opt('unset', '未設定(すべて)', UI.status)}${opt('adjusting', '└ 日程調整中', UI.status)}${opt('planned', '└ 商談予定', UI.status)}${opt('missing', '└ 結果未入力', UI.status)}${opt('won', '成約', UI.status)}${opt('lost', '不成約', UI.status)}${opt('noshow', 'ドタキャン', UI.status)}${opt('trouble', 'ドタキャン・日程変更が起きた行', UI.status)}</select></label>
+            <label>成約状況 <select onchange="spFilter({ status: this.value })">${opt('all', 'すべて', UI.status)}${opt('unset', '未設定(すべて)', UI.status)}${opt('adjusting', '└ 日程調整中', UI.status)}${opt('planned', '└ 商談予定', UI.status)}${opt('missing', '└ 結果未入力', UI.status)}${opt('won', '成約', UI.status)}${opt('lost', '不成約', UI.status)}${opt('noshow', 'ドタキャン', UI.status)}${opt('pending', '返答待ち', UI.status)}${opt('trouble', 'ドタキャン・日程変更が起きた行', UI.status)}</select></label>
             <label>店舗名 <input type="search" value="${esc(UI.q)}" placeholder="店舗名で検索" oninput="spFilter({ q: this.value })" id="sp-q"></label>
             <label class="sp-chk"><input type="checkbox" ${UI.showExcluded ? 'checked' : ''} onchange="spFilter({ showExcluded: this.checked })"> 除外した行も表示</label>
             <button class="btn-secondary btn-sm" onclick="spCsv()"><i class="ph ph-download-simple"></i> CSV出力</button>
@@ -519,8 +530,8 @@
         if (cnt) cnt.textContent = `${list.length}件`;
         const rows = list.map(({ r, repeat }) => rowHtml(r, repeat, now)).join('');
         el.innerHTML = `<div class="sp-table-wrap"><table class="sp-table"><thead><tr>
-            <th>完了日時</th><th>店舗名</th><th title="診断完了から今の商談日までの日数">完了→商談</th><th>商談日</th><th>成約状況</th><th>成約プラン / 不成約理由</th><th></th></tr></thead>
-            <tbody>${rows || '<tr><td colspan="7" class="sp-empty">該当する行はありません</td></tr>'}</tbody></table></div>`;
+            <th>完了日時</th><th>店舗名</th><th>分析データ</th><th title="診断完了から今の商談日までの日数">完了→商談</th><th>商談日</th><th>成約状況</th><th>成約プラン / 不成約理由</th><th></th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="8" class="sp-empty">該当する行はありません</td></tr>'}</tbody></table></div>`;
     }
     function rowHtml(r, repeat, now) {
         const id = String(r.id);
@@ -532,6 +543,7 @@
             <option value="won" ${r.status === 'won' ? 'selected' : ''}>成約</option>
             <option value="lost" ${r.status === 'lost' ? 'selected' : ''}>不成約</option>
             <option value="noshow" ${r.status === 'noshow' ? 'selected' : ''}>ドタキャン</option>
+            <option value="pending" ${r.status === 'pending' ? 'selected' : ''}>返答待ち</option>
             <option value="reschedule" ${pend === 'reschedule' ? 'selected' : ''} ${r.status || !r.meetingAt ? 'disabled' : ''}>日程変更</option></select>`;
         let extra = '';
         if (pend) {
@@ -546,6 +558,9 @@
             extra = `<select class="sp-plan sp-lostcat" onchange="spLostCat('${id}', this.value)"><option value="">理由の分類を選択</option>${C.LOST_CATEGORIES.map(c => `<option ${r.lostCategory === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
                 <textarea class="sp-reason" rows="2" placeholder="不成約理由を入力" onchange="spReason('${id}', this.value)">${esc(r.lostReason)}</textarea>
                 <button class="btn-secondary btn-sm sp-full" onclick="spOpenReason('${id}')"><i class="ph ph-arrows-out-simple"></i> 全文</button>`;
+        } else if (r.status === 'pending') {
+            extra = `<label class="sp-mini-label">返答期限 <input type="date" class="sp-replydue" value="${esc(r.replyDue || '')}" onchange="spReplyDue('${id}', this.value)"></label>
+                ${r.replyDue ? '' : '<div class="sp-hint">返答期限を入れると、その日にタスクが出ます</div>'}`;
         } else if (r.status === 'noshow') {
             extra = `<button class="btn-primary btn-sm" onclick="spStartReadjust('${id}')"><i class="ph ph-calendar-plus"></i> 再調整</button>`;
         }
@@ -556,6 +571,7 @@
             <td class="sp-nowrap">${esc(fmtDT(r.completedAt).replace(' ', '\n'))}</td>
             <td><button class="sp-link sp-store" onclick="spOpenDetail('${id}')">${esc(r.storeName || '(店舗名なし)')}</button>
                 ${repeat ? '<span class="sp-badge sp-badge-repeat">再申込</span>' : ''}${r.excluded ? '<span class="sp-badge sp-badge-ex">除外中</span>' : ''}${!r.excluded && C.looksLikeTest(r.storeName) ? '<span class="sp-badge sp-badge-test" title="店舗名に「てすと」「テスト」などが含まれています">テスト?</span>' : ''}</td>
+            <td>${window.SalesAnalysis && window.SalesAnalysis.cell ? window.SalesAnalysis.cell(r) : ''}</td>
             <td class="sp-nowrap">${dd == null ? '-' : fmt1(dd) + '日'}</td>
             <td class="sp-meet-td">${meetingCell}${r.status ? '' : '<div class="sp-hint">日程が変わった場合は『日程変更』を選んでください</div>'}</td>
             <td>${statusSel}<div><span class="sp-label ${LABEL_CLS[lb.key]}" data-label="${lb.key}">${lb.text}</span></div></td>
@@ -590,7 +606,7 @@
         const rep = C.repeatKeys(S.records).has(r.key);
         const lb = C.displayLabel(r, Date.now());
         const VIA = { initial: '初回の入力', reschedule: '日程変更', readjust: '再調整(ドタキャン後)' };
-        const OUT = { won: '成約', lost: '不成約', noshow: 'ドタキャン', reschedule: '日程変更' };
+        const OUT = { won: '成約', lost: '不成約', noshow: 'ドタキャン', reschedule: '日程変更', pending: '返答待ち' };
         const meetings = (r.meetings || []).map((m, i) => `<tr><td>${i + 1}</td><td>${esc(fmtDT(m.at))}</td><td>${VIA[m.via] || ''}</td><td>${m.outcome ? OUT[m.outcome] : '(結果なし)'}</td><td>${esc(m.setBy || '')}</td></tr>`).join('');
         const hist = (r.history || []).slice().reverse().map(h => `<tr><td class="sp-nowrap">${esc(fmtDT(h.at))}</td><td>${esc(h.by === 'system' ? '自動' : h.by)}</td><td>${esc(h.detail)}</td></tr>`).join('');
         modal(`<div class="sp-panel" role="dialog" aria-label="詳細">
@@ -603,6 +619,7 @@
                     <div class="kpi-mini">回答日時 ${esc(fmtDT(r.completedAt))}(回答内容は営業成績に追加した時点の写しです。分析フォームのデータをリセットしても残ります)</div></div>
                 <div class="sp-sec"><div class="sp-sec-title">成約プラン・不成約理由</div>
                     <div>成約プラン: ${esc(r.plan) || '-'} ・ 成約日: ${esc(r.wonDate) || '-'}</div>
+                    ${r.status === 'pending' ? `<div style="margin-top:6px;">返答期限: ${esc(r.replyDue) || '-'}</div>` : ''}
                     <div class="sp-reason-text" style="margin-top:6px;">不成約理由: ${r.lostCategory ? `[${esc(r.lostCategory)}] ` : ''}${esc(r.lostReason) || (r.lostCategory ? '' : '-')}</div></div>
                 <div class="sp-sec"><div class="sp-sec-title">商談日の履歴</div>
                     ${meetings ? `<table class="sp-mini-table"><thead><tr><th>#</th><th>商談日</th><th>入力のきっかけ</th><th>結果</th><th>入力者</th></tr></thead><tbody>${meetings}</tbody></table>` : '<div class="kpi-note">まだ商談日はありません。</div>'}</div>
@@ -659,13 +676,13 @@
     function downloadCsv() {
         const now = Date.now();
         const cell = (v) => { let s = String(v == null ? '' : v); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return `"${s.replace(/"/g, '""')}"`; };
-        const head = ['完了日時', '店舗名', '再申込', '除外', '完了→商談(日)', '商談日', '成約状況', '表示ラベル', '成約プラン', '成約日', '不成約理由', '商談回数', 'ドタキャン回数', '日程変更回数', '不成約理由の分類'];
+        const head = ['完了日時', '店舗名', '再申込', '除外', '完了→商談(日)', '商談日', '成約状況', '表示ラベル', '成約プラン', '成約日', '不成約理由', '商談回数', 'ドタキャン回数', '日程変更回数', '不成約理由の分類', '返答期限'];
         const lines = [head.map(cell).join(',')];
         filtered().forEach(({ r, repeat }) => {
             const ms = r.meetings || [];
             const dd = C.daysToMeeting(r);
             lines.push([fmtDT(r.completedAt), r.storeName, repeat ? '再申込' : '', r.excluded ? '除外' : '', dd == null ? '' : fmt1(dd), fmtDT(r.meetingAt), C.STATUS_LABEL[r.status || ''], C.displayLabel(r, now).text, r.plan, r.wonDate, r.lostReason,
-                ms.length, ms.filter(m => m.outcome === 'noshow').length, ms.filter(m => m.outcome === 'reschedule').length, r.lostCategory || ''].map(cell).join(','));
+                ms.length, ms.filter(m => m.outcome === 'noshow').length, ms.filter(m => m.outcome === 'reschedule').length, r.lostCategory || '', r.status === 'pending' ? (r.replyDue || '') : ''].map(cell).join(','));
         });
         const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
         const a = document.createElement('a');
@@ -882,7 +899,7 @@
         .sp-badge { display: inline-block; font-size: 0.68rem; font-weight: 700; padding: 1px 7px; border-radius: 999px; margin-left: 6px; vertical-align: middle; }
         .sp-badge-repeat { background: #F3F0FF; color: #6741D9; } .sp-badge-ex { background: #E9ECEF; color: #495057; } .sp-badge-test { background: #FFF4E5; color: #C25E00; }
         .sp-label { display: inline-block; margin-top: 4px; font-size: 0.72rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
-        .sp-lb-won { background: #EBFBEE; color: #2B8A3E; } .sp-lb-lost { background: #F1F3F5; color: #495057; } .sp-lb-noshow { background: #FFF0F0; color: #C92A2A; }
+        .sp-lb-won { background: #EBFBEE; color: #2B8A3E; } .sp-lb-lost { background: #F1F3F5; color: #495057; } .sp-lb-noshow { background: #FFF0F0; color: #C92A2A; } .sp-lb-pending { background: #F3F0FF; color: #6741D9; }
         .sp-lb-adj { background: #F8F9FA; color: #868E96; } .sp-lb-plan { background: #E7F5FF; color: #1864AB; } .sp-lb-miss { background: #E03131; color: #fff; }
         .sp-hint { font-size: 0.68rem; color: var(--text-secondary); margin-top: 3px; line-height: 1.4; white-space: normal; }
         .sp-meet-td { width: 210px; min-width: 210px; }
