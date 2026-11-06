@@ -91,8 +91,12 @@ body::after {
 /* 余白があるときは上下中央(従来どおり)、足りないときは0になって上から順に読める */
 /* 縦に並べた中身が画面より高いとき、入力欄などが押しつぶされて小さくならないようにする(長文欄が広がらない原因だった) */
 .slide:not(.scrollable) > * { flex-shrink: 0; }
-.slide:not(.scrollable) > :first-child { margin-top: auto; }
-.slide:not(.scrollable) > :last-child { margin-bottom: auto; }
+/* ※先頭/末尾の子要素にautoマージンを付ける方式だと、末尾が非表示の要素(終了画面の案内文など)のとき
+   中身が下に寄ってしまうため、見えない疑似要素を上下に置いて余白を等分する */
+.slide:not(.scrollable)::before,
+.slide:not(.scrollable)::after { content: ''; display: block; flex: 0 0 0; }
+.slide:not(.scrollable)::before { margin-bottom: auto; }
+.slide:not(.scrollable)::after { margin-top: auto; }
 
 .slide.active {
     opacity: 1;
