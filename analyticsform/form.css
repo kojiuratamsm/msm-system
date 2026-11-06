@@ -18,6 +18,7 @@ body {
     color: var(--text-primary);
     overflow: hidden;
     height: 100vh;
+    height: var(--app-h, 100vh); /* キーボード表示中は「見えている高さ」に合わせる(form.js の setupViewportFit) */
     width: 100vw;
     display: flex;
     justify-content: center;
@@ -73,12 +74,25 @@ body::after {
     padding: 60px 40px;
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    justify-content: flex-start; /* 中央寄せは下の auto マージンで行う(はみ出したときに上が切れないようにするため) */
     opacity: 0;
     pointer-events: none;
     transform: translateY(40px);
     transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    /* スマホでキーボードが出ると見える高さが小さくなり、質問文や入力欄が画面の外に出てしまうので、
+       はみ出したときはスライドの中をスクロールできるようにする(2026-11-06 コージさん指示) */
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
 }
+.slide::-webkit-scrollbar { display: none; }
+/* 余白があるときは上下中央(従来どおり)、足りないときは0になって上から順に読める */
+/* 縦に並べた中身が画面より高いとき、入力欄などが押しつぶされて小さくならないようにする(長文欄が広がらない原因だった) */
+.slide:not(.scrollable) > * { flex-shrink: 0; }
+.slide:not(.scrollable) > :first-child { margin-top: auto; }
+.slide:not(.scrollable) > :last-child { margin-bottom: auto; }
 
 .slide.active {
     opacity: 1;

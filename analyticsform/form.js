@@ -108,6 +108,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         renderForm();
         setupCloseConfirm();
+        setupViewportFit();
 
         // カレンダー日程調整設問の初期読み込み
         document.querySelectorAll('.booking-widget-container').forEach(container => {
@@ -666,6 +667,77 @@ function renderReviewContent() {
     container.innerHTML = html;
 }
 
+// ============================================================================
+// スマホでキーボードが出たときに「入力している文字が見えない」問題の対策(2026-11-06 コージさん指示)
+// 原因(1): キーボードで画面の見える高さが小さくなり、質問文+説明+入力欄が収まらず、
+//          上下中央寄せの副作用で「上側」が画面の外に出てしまい(スクロールもできず)入力欄が隠れていた。
+// 原因(2): 長文の入力欄は、フォーカスした瞬間にだけ高さを決めていたので、入力して行が増えても
+//          高さが広がらず、2行目以降が見えなかった。
+// 対策: ・スライドの中をスクロールできるようにし(CSS)、入力欄を必ず見える位置へスクロールする
+//       ・入力のたびに長文欄の高さを広げる(画面の4割まで。それ以上は欄の中でスクロール)
+//       ・iPhoneのSafariのようにキーボードで「見える高さ」だけが縮む環境では、その高さに合わせる
+// ============================================================================
+function autoGrowTextarea(el) {
+    if (!el || el.tagName !== 'TEXTAREA') return;
+    const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight || 600;
+    const maxH = Math.max(96, Math.round(vh * 0.4));
+    el.style.height = 'auto';
+    const full = el.scrollHeight;
+    el.style.height = Math.min(full, maxH) + 'px';
+    el.style.overflowY = full > maxH ? 'auto' : 'hidden';
+    if (full > maxH && document.activeElement === el) el.scrollTop = el.scrollHeight; // 打っている最後の行が見えるように
+}
+
+// 入力欄(と、その下の「OK」ボタンまで)が、見える範囲に入るよう、スライドをスクロールする
+function ensureInputVisible() {
+    const el = document.activeElement;
+    if (!el || !el.classList || !el.classList.contains('q-input')) return;
+    const slide = el.closest('.slide');
+    if (!slide) return;
+    const vv = window.visualViewport;
+    const viewTop = vv ? vv.offsetTop : 0;
+    const viewBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+    const r = el.getBoundingClientRect();
+    const margin = 12;
+    let delta = 0;
+    if (r.bottom > viewBottom - margin) delta = r.bottom - (viewBottom - margin);   // 下に隠れている → 上へ
+    if (r.top - delta < viewTop + margin) delta = r.top - (viewTop + margin);       // 上に隠れている → 下へ
+    if (delta) slide.scrollTop += delta;
+}
+
+function setupViewportFit() {
+    const vv = window.visualViewport;
+    const root = document.documentElement;
+    const apply = () => {
+        if (vv) {
+            // キーボードなどで「見えている高さ」が実際の画面より小さいときだけ、その高さに合わせる
+            if (window.innerHeight - vv.height > 80) root.style.setProperty('--app-h', Math.round(vv.height) + 'px');
+            else root.style.removeProperty('--app-h');
+            // iOSはキーボード表示時にページ全体を上へずらすことがあるので戻す
+            if (vv.offsetTop > 0) window.scrollTo(0, 0);
+        }
+        const el = document.activeElement;
+        if (el && el.tagName === 'TEXTAREA' && el.classList.contains('q-input')) autoGrowTextarea(el);
+        ensureInputVisible();
+    };
+    if (vv) { vv.addEventListener('resize', apply); vv.addEventListener('scroll', apply); }
+    window.addEventListener('resize', apply);
+    document.addEventListener('focusin', (e) => {
+        if (e.target && e.target.classList && e.target.classList.contains('q-input')) {
+            // キーボードが出きるのを待ってから、見える位置へ
+            setTimeout(apply, 120); setTimeout(apply, 400);
+        }
+    });
+    document.addEventListener('input', (e) => {
+        const t = e.target;
+        if (t && t.classList && t.classList.contains('q-input')) {
+            if (t.tagName === 'TEXTAREA') autoGrowTextarea(t);
+            ensureInputVisible();
+        }
+    });
+    apply();
+}
+
 function updateView() {
     for (let i = 0; i < slidesCount; i++) {
         const slide = document.getElementById(`slide-${i}`);
@@ -706,10 +778,8 @@ function updateView() {
             if (input) {
                 setTimeout(() => {
                     input.focus();
-                    if (input.tagName === 'TEXTAREA') {
-                        input.style.height = 'auto';
-                        input.style.height = input.scrollHeight + 'px';
-                    }
+                    if (input.tagName === 'TEXTAREA') autoGrowTextarea(input);
+                    ensureInputVisible();
                 }, 600);
             }
         } else {
