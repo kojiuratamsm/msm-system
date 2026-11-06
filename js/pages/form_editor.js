@@ -297,6 +297,67 @@ App.Pages.form_editor = async function() {
 
     let activePageId = 'op';
 
+    // ========================================================================
+    // 画像の軽量化(2026-11-06 コージさん指示「分析フォームがすぐ表示されない」対応)
+    // 背景: 画像は「data URL(文字列)」としてフォームのデータにそのまま入る。縮小せずに保存すると
+    //       スマホの写真(数MB)がそのままフォームのデータに入り、お客様が開くたびにそれを全部
+    //       ダウンロードするため、表示が遅くなる。
+    // 方針: フォームの表示幅は最大800px。スマホの高精細画面(2倍)でも1600pxあれば十分なので、
+    //       長辺1600px以内に縮小して再圧縮する(それより大きい画像は見た目が変わらない)。
+    //       GIF(動く画像)とSVG(ベクター)は壊れるので触らない。縮小して逆に大きくなる場合は元のまま。
+    // ========================================================================
+    const IMG_MAX_SIDE = 1600;
+    const dataUrlBytes = (u) => {
+        if (typeof u !== 'string') return 0;
+        const i = u.indexOf(',');
+        return i < 0 ? 0 : Math.round((u.length - i - 1) * 3 / 4);
+    };
+    const fmtBytes = (n) => n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+    const loadImageEl = (src) => new Promise((resolve, reject) => {
+        const im = new Image();
+        im.onload = () => resolve(im);
+        im.onerror = () => reject(new Error('画像を読み込めませんでした'));
+        im.src = src;
+    });
+    const shrinkDataUrl = async (src) => {
+        const m = /^data:(image\/[a-z0-9.+-]+)/i.exec(src || '');
+        if (!m) return src;                                   // data URLでない(外部URLなど)ものは触らない
+        const type = m[1].toLowerCase();
+        if (type === 'image/gif' || type === 'image/svg+xml') return src;
+        const im = await loadImageEl(src);
+        const w = im.naturalWidth, h = im.naturalHeight;
+        if (!w || !h) return src;
+        const scale = Math.min(1, IMG_MAX_SIDE / Math.max(w, h));
+        const cw = Math.max(1, Math.round(w * scale)), ch = Math.max(1, Math.round(h * scale));
+        const c = document.createElement('canvas');
+        c.width = cw; c.height = ch;
+        c.getContext('2d').drawImage(im, 0, 0, cw, ch);
+        let out = c.toDataURL('image/webp', 0.85);            // 透明部分も保てて軽い。非対応ブラウザではPNGが返る
+        if (!out.startsWith('data:image/webp')) {
+            out = (type === 'image/png') ? c.toDataURL('image/png') : c.toDataURL('image/jpeg', 0.85);
+        }
+        return dataUrlBytes(out) < dataUrlBytes(src) ? out : src;
+    };
+    const collectImageHolders = () => {
+        const list = [];
+        if (formData.op) list.push({ name: 'OP画面', obj: formData.op });
+        (formData.questions || []).forEach((q, i) => list.push({ name: `質問${i + 1}`, obj: q }));
+        if (formData.ed) list.push({ name: 'ED画面', obj: formData.ed });
+        return list.filter(x => x.obj && typeof x.obj.imageUrl === 'string' && x.obj.imageUrl.startsWith('data:'));
+    };
+    const imageSizeInfoHtml = (obj) => {
+        const holders = collectImageHolders();
+        const total = holders.reduce((a, x) => a + dataUrlBytes(x.obj.imageUrl), 0);
+        const own = (obj && typeof obj.imageUrl === 'string' && obj.imageUrl.startsWith('data:')) ? dataUrlBytes(obj.imageUrl) : 0;
+        let html = '<div style="margin-top:10px; font-size:0.8rem; color:#666; line-height:1.6;">';
+        if (own) html += `この画像のサイズ: <b>約${fmtBytes(own)}</b><br>`;
+        html += `フォーム全体の画像サイズ合計: <b>約${fmtBytes(total)}</b>(${holders.length}枚)<br>`;
+        html += '<span style="color:#888;">画像が大きいほど、お客様がフォームを開いたときの表示が遅くなります。</span>';
+        if (holders.length) html += '<div style="margin-top:6px;"><button class="btn btn-secondary btn-sm" id="shrink-all-imgs-btn"><i class="ph ph-arrows-in"></i> すべての画像を軽量化する</button></div>';
+        html += '</div>';
+        return html;
+    };
+
     const render = () => {
         let leftNavHtml = `
             <div class="editor-section-title" style="margin-bottom:16px; font-weight:600; color:var(--text-secondary);">Pages</div>
@@ -536,15 +597,39 @@ App.Pages.form_editor = async function() {
             const fileInput = document.getElementById('img-file-input');
             if (imgUploadBtn && fileInput) {
                 imgUploadBtn.addEventListener('click', () => fileInput.click());
+            }
+            if (fileInput) {
                 fileInput.addEventListener('change', (e) => {
                     const file = e.target.files[0];
                     if (!file) return;
                     const reader = new FileReader();
-                    reader.onload = (event) => {
-                        activeObj.imageUrl = event.target.result;
+                    reader.onload = async (event) => {
+                        let url = event.target.result;
+                        try { url = await shrinkDataUrl(url); }   // 縮小に失敗したら元の画像のまま使う
+                        catch (err) { console.warn('画像の軽量化に失敗(元の画像を使用):', err); }
+                        activeObj.imageUrl = url;
                         render();
                     };
                     reader.readAsDataURL(file);
+                });
+            }
+
+            const shrinkAllBtn = document.getElementById('shrink-all-imgs-btn');
+            if (shrinkAllBtn) {
+                shrinkAllBtn.addEventListener('click', async () => {
+                    const holders = collectImageHolders();
+                    const before = holders.reduce((a, x) => a + dataUrlBytes(x.obj.imageUrl), 0);
+                    if (!confirm(`フォーム内の画像 ${holders.length}枚(合計 約${fmtBytes(before)})を、見た目が変わらない大きさ(長辺${IMG_MAX_SIDE}px以内)に縮小して再圧縮します。\n元の画質には戻せません。「フォームを保存」を押すまで、お客様の画面には反映されません。\n実行しますか？`)) return;
+                    shrinkAllBtn.disabled = true;
+                    shrinkAllBtn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> 軽量化中...';
+                    let failed = 0;
+                    for (const h of holders) {
+                        try { h.obj.imageUrl = await shrinkDataUrl(h.obj.imageUrl); }
+                        catch (err) { failed++; console.warn('軽量化に失敗:', h.name, err); }
+                    }
+                    const after = collectImageHolders().reduce((a, x) => a + dataUrlBytes(x.obj.imageUrl), 0);
+                    render();
+                    alert(`軽量化しました: 約${fmtBytes(before)} → 約${fmtBytes(after)}` + (failed ? `\n(${failed}枚は処理できず、そのままです)` : '') + '\n反映するには「フォームを保存」を押してください。');
                 });
             }
 
@@ -682,7 +767,7 @@ App.Pages.form_editor = async function() {
             } else {
                 html += '<button class="btn btn-secondary btn-sm" id="img-upload-btn"><i class="ph ph-image"></i> 画像をアップロード</button>';
             }
-            html += '<input type="file" id="img-file-input" accept="image/*" style="display:none;"></div>';
+            html += '<input type="file" id="img-file-input" accept="image/*" style="display:none;">' + imageSizeInfoHtml(obj) + '</div>';
         }
 
         if (type === 'question') {

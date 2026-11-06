@@ -28,16 +28,52 @@ let currentSlideIndex = 0;
 const answers = {};
 let slidesCount = 0;
 
+// ============================================================================
+// 表示速度の改善(2026-11-06 コージさん指示「すぐ表示されるように」)
+// 以前: 外部CDN(アイコン・Supabaseライブラリ)の読み込みが終わってから、はじめてフォームの中身を
+//       取りに行っていた。CDNが遅いと、その間ずっと何も表示されなかった(体感10秒)。
+// 今回: ① フォームの中身の取得は index.html で画面の読み込みと同時に開始(window.__meoFormPromise)
+//       ② CDN は async にして、書き込み(閲覧ログ・回答保存)が必要になった時だけ準備を待つ
+//       ③ データが届いたら、待ち時間を入れずにすぐ表示する
+// ============================================================================
+// Supabaseライブラリ(CDN)の準備を待って、クライアントを返す。maxWaitMs 待っても無ければ null。
+function getSupabaseClient(maxWaitMs = 10000) {
+    if (supabaseClient) return Promise.resolve(supabaseClient);
+    return new Promise(resolve => {
+        const t0 = Date.now();
+        const tick = () => {
+            if (window.supabase) {
+                supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
+                return resolve(supabaseClient);
+            }
+            if (Date.now() - t0 >= maxWaitMs) return resolve(null);
+            setTimeout(tick, 50);
+        };
+        tick();
+    });
+}
+
+// フォームの行を取得する。①index.htmlで先に始めた取得 → ②失敗したら従来の方法(Supabaseライブラリ)で取り直す
+async function fetchFormRows() {
+    if (window.__meoFormPromise) {
+        try {
+            const rows = await window.__meoFormPromise;
+            if (Array.isArray(rows)) return rows;
+        } catch (e) {
+            console.warn('先行取得に失敗したため、取り直します:', e);
+        }
+    }
+    const client = await getSupabaseClient(15000);
+    if (!client) throw new Error("Supabaseライブラリの読み込みに失敗しました。ネット環境を確認してください。");
+    const { data, error } = await client.from('customers').select('*').eq('service_type', 'meo_form');
+    if (error) throw error;
+    return data;
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     try {
-        if (!window.supabase) {
-            throw new Error("Supabaseライブラリの読み込みに失敗しました。ネット環境を確認してください。");
-        }
-        supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
+        const data = await fetchFormRows();
 
-        const { data, error } = await supabaseClient.from('customers').select('*').eq('service_type', 'meo_form');
-        if (error) throw error;
-        
         if (!data || data.length === 0) {
             showError("現在利用できるフォームがありません。管理画面で「保存」を実行してください。");
             return;
@@ -80,23 +116,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             loadCalendarBookingSlots(q, container);
         });
 
-        // 0.5秒で高速フェードイン表示
-        setTimeout(() => {
+        // データが届いたらすぐ表示する(以前は 0.1秒 + 0.5秒 の待ちを入れてからフェードインしていた)
+        {
             const loader = document.getElementById('loading');
-            if (loader) loader.style.opacity = '0';
-            setTimeout(() => {
-                if (loader) loader.style.display = 'none';
-                const container = document.getElementById('form-container');
-                if (container) {
-                    container.style.display = 'block';
-                    void container.offsetWidth;
-                    container.style.opacity = '1';
-                }
-                const nav = document.getElementById('nav-controls');
-                if (nav) nav.style.display = 'flex';
-                updateView();
-            }, 500);
-        }, 100);
+            if (loader) loader.style.display = 'none';
+            const container = document.getElementById('form-container');
+            if (container) {
+                container.style.display = 'block';
+                void container.offsetWidth;
+                container.style.opacity = '1';
+            }
+            const nav = document.getElementById('nav-controls');
+            if (nav) nav.style.display = 'flex';
+            updateView();
+        }
 
     } catch (err) {
         console.error(err);
@@ -410,7 +443,7 @@ function renderForm() {
     // OP Slide (Index 0)
     html += `
         <div class="slide ${getAlignClass(formData.op)}" id="slide-0" data-type="op">
-            ${formData.op.imageUrl ? `<div class="slide-img-container"><img src="${formData.op.imageUrl}" class="slide-img"></div>` : ''}
+            ${formData.op.imageUrl ? `<div class="slide-img-container"><img src="${formData.op.imageUrl}" class="slide-img" decoding="async"></div>` : ''}
             <div class="slide-title" style="${applyThemeStyle(true, formData.op)}">${formData.op.title || ''}</div>
             <div class="slide-desc" style="${applyThemeStyle(false, formData.op)}">${richDescHtml(formData.op)}</div>
             <button class="btn-primary" onclick="handleOpStart()">${formData.op.buttonText || 'スタート'}</button>
@@ -425,7 +458,7 @@ function renderForm() {
         html += `<div class="slide ${alignClass}" id="slide-${slideIdx}" data-type="question" data-id="${q.id}" data-required="${q.required}">`;
         
         if (q.imageUrl) {
-            html += `<div class="slide-img-container"><img src="${q.imageUrl}" class="slide-img"></div>`;
+            html += `<div class="slide-img-container"><img src="${q.imageUrl}" class="slide-img" decoding="async"></div>`;
         }
         const reqMark = q.required ? '<span class="required-mark">*</span>' : '';
         html += `<div class="slide-title" style="${applyThemeStyle(true, q)}">${idx + 1}. ${q.title || ''}${reqMark}</div>`;
@@ -493,7 +526,7 @@ function renderForm() {
     const edIdx = formData.questions.length + 2;
     html += `
         <div class="slide ${getAlignClass(formData.ed)}" id="slide-${edIdx}" data-type="ed">
-            ${formData.ed.imageUrl ? `<div class="slide-img-container"><img src="${formData.ed.imageUrl}" class="slide-img"></div>` : ''}
+            ${formData.ed.imageUrl ? `<div class="slide-img-container"><img src="${formData.ed.imageUrl}" class="slide-img" decoding="async"></div>` : ''}
             <div class="slide-title" style="${applyThemeStyle(true, formData.ed)}">${formData.ed.title || ''}</div>
             <div class="slide-desc" style="${applyThemeStyle(false, formData.ed)}">${richDescHtml(formData.ed)}</div>
             <button class="btn-primary" onclick="closeFormWindow()">${formData.ed.buttonText || '終了する'}</button>
@@ -760,7 +793,9 @@ async function submitForm() {
 // 途中経過または完了時の回答データをリアルタイムで上書き保存・更新するメソッド
 async function saveResponseProgress(status = 'abandoned') {
     try {
-        if (!supabaseClient) return false;
+        // 離脱時(abandoned)は閉じるのを待たせないよう短く、それ以外は最大10秒ライブラリを待つ
+        const client = await getSupabaseClient(status === 'abandoned' ? 3000 : 10000);
+        if (!client) return false;
 
         // セッションごとのユニークIDの永続化
         let responseId = sessionStorage.getItem('meo_form_response_id');
@@ -779,7 +814,7 @@ async function saveResponseProgress(status = 'abandoned') {
         };
 
         // UPSERT (idをキーにして上書き)
-        const { error } = await supabaseClient.from('customers').upsert([{ 
+        const { error } = await client.from('customers').upsert([{ 
             id: parseInt(responseId), 
             service_type: 'meo_form_response', 
             data: responseData 
@@ -795,10 +830,11 @@ async function saveResponseProgress(status = 'abandoned') {
 
 async function logStat(type, detailId = null) {
     try {
-        if (!supabaseClient) return false;
+        const client = await getSupabaseClient(10000);
+        if (!client) return false;
         const id = Date.now() + Math.floor(Math.random() * 1000);
         const statData = { type: type, detail: detailId, timestamp: new Date().toISOString(), session: getSessionId() };
-        const { error } = await supabaseClient.from('customers').insert([{ id, service_type: 'meo_form_stats', data: statData }]);
+        const { error } = await client.from('customers').insert([{ id, service_type: 'meo_form_stats', data: statData }]);
         if (error) { console.error("logStat error:", error); return false; }
         return true;
     } catch (e) {

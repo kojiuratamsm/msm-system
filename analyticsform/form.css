@@ -55,7 +55,7 @@ body::after {
     max-width: 800px;
     margin: 0 auto;
     opacity: 0;
-    transition: opacity 0.5s;
+    transition: opacity 0.2s; /* 表示速度改善(2026-11-06): 0.5s→0.2s */
 }
 
 .slide-container {
