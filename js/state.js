@@ -37,19 +37,33 @@ const Store = {
         const { data } = await supabase.from('tasks').select('*');
         return (data || []).map(row => ({ id: row.id, ...row.data }));
     },
+    // タスクを追加する。失敗したときは例外を投げる(以前は失敗しても何も言わなかったため、画面が追加できたように見えた)。追加したタスクのidを返す。
     async addTask(data) {
         const id = Date.now();
-        await supabase.from('tasks').insert([{ id, data: { ...data, done: false } }]);
+        const { error } = await supabase.from('tasks').insert([{ id, data: { ...data, done: false } }]);
+        if (error) throw error;
+        return id;
+    },
+    // タスクの内容(text/date/memo など)を一部だけ更新する。他の項目(done・自動タスクの印など)はそのまま残す。
+    async updateTask(id, patch) {
+        const { data: current, error: e1 } = await supabase.from('tasks').select('data').eq('id', id).single();
+        if (e1 || !current) throw (e1 || new Error('タスクが見つかりません'));
+        const { error } = await supabase.from('tasks').update({ data: { ...current.data, ...patch } }).eq('id', id);
+        if (error) throw error;
     },
     async toggleTask(id) {
-        const { data: current } = await supabase.from('tasks').select('data').eq('id', id).single();
+        const { data: current, error: e1 } = await supabase.from('tasks').select('data').eq('id', id).single();
+        if (e1) throw e1;
         if (current) {
             current.data.done = !current.data.done;
-            await supabase.from('tasks').update({ data: current.data }).eq('id', id);
+            current.data.doneAt = current.data.done ? new Date().toISOString() : null;
+            const { error } = await supabase.from('tasks').update({ data: current.data }).eq('id', id);
+            if (error) throw error;
         }
     },
     async deleteTask(id) {
-        await supabase.from('tasks').delete().eq('id', id);
+        const { error } = await supabase.from('tasks').delete().eq('id', id);
+        if (error) throw error;
     },
     
     async getExpenses() {

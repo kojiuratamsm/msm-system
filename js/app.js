@@ -375,14 +375,14 @@ App.Pages.dashboard = async function(selectedYearText = null) {
                         <div class="dash-task-item${ti >= 10 ? ' dash-task-more' : ''}" style="display: ${ti >= 10 ? 'none' : 'flex'}; align-items: center; gap: 12px; padding: 12px; border-radius: 8px; background: ${t.done ? '#f8f9fa' : 'var(--bg-color)'}; margin-bottom: 8px; border-left: 4px solid ${colors[t.service] || 'var(--border)'}; opacity: ${t.done ? '0.6' : '1'};">
                             <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleTaskStatus(${t.id})" style="width: 20px; height: 20px; cursor: pointer; accent-color: var(--success);" />
                             <div style="flex: 1;">
-                                <div style="font-weight: 600; margin-bottom: 4px; text-decoration: ${t.done ? 'line-through' : 'none'};">${t.auto === 'sales' ? dashEsc(t.text) : t.text}</div>
+                                <div style="font-weight: 600; margin-bottom: 4px; text-decoration: ${t.done ? 'line-through' : 'none'};">${dashEsc(t.text)}</div>
                                 <div style="font-size: 0.85rem; color: var(--text-secondary); display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-                                    <span><i class="ph ph-buildings"></i> ${t.auto === 'sales' ? dashEsc(t.customer) : t.customer}</span>
+                                    ${t.customer && t.customer !== '指定なし' ? `<span><i class="ph ph-buildings"></i> ${dashEsc(t.customer)}</span>` : ''}
                                     ${t.auto === 'sales' ? `<button type="button" class="btn-secondary btn-sm" style="padding:2px 8px; font-size:0.75rem;" onclick="dashOpenSales(${t.id})"><i class="ph ph-arrow-square-out"></i> 営業成績へ</button>` : ''}
                                     ${t.date === todayStr ? '<span style="color:var(--error); font-weight:bold;">本日</span>' : `<span>${t.date ? new Date(t.date).toLocaleDateString('ja-JP', {month:'short', day:'numeric'}) : ''}</span>`}
                                 </div>
                             </div>
-                            <span class="badge" style="background: ${colors[t.service] || '#ccc'}; color: #fff;">${t.service}</span>
+                            ${t.service && t.service !== 'その他' ? `<span class="badge" style="background: ${colors[t.service] || '#ccc'}; color: #fff;">${dashEsc(t.service)}</span>` : ''}
                         </div>
                     `).join('')}
                 </div>
